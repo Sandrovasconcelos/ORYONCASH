@@ -13,7 +13,7 @@ const geistMono = Geist_Mono({
 });
 
 export const metadata: Metadata = {
-  title: "ObraCash",
+  title: "OryonCash",
   description: "Controle de obras via WhatsApp",
 };
 
