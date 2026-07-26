@@ -14,11 +14,14 @@ export default function DashboardLayout({
   children: React.ReactNode;
 }) {
   return (
-    <div className="flex flex-1 flex-col bg-zinc-50 dark:bg-black">
-      <header className="border-b border-zinc-200 dark:border-zinc-800 bg-white dark:bg-zinc-950">
+    <div className="flex flex-1 flex-col bg-gradient-to-b from-blue-50 via-zinc-50 to-zinc-50 dark:from-zinc-950 dark:via-black dark:to-black">
+      <header className="border-b border-zinc-200 dark:border-zinc-800 bg-white/80 dark:bg-zinc-950/80 backdrop-blur supports-backdrop-blur:bg-white/60">
         <div className="mx-auto flex max-w-6xl items-center justify-between px-6 py-4">
           <div className="flex items-center gap-8">
-            <span className="text-lg font-semibold text-zinc-900 dark:text-zinc-50">
+            <span className="flex items-center gap-2 text-lg font-semibold text-zinc-900 dark:text-zinc-50">
+              <span className="flex h-7 w-7 items-center justify-center rounded-lg bg-blue-600 text-sm text-white">
+                O
+              </span>
               OryonCash
             </span>
             <nav className="flex gap-5 text-sm text-zinc-600 dark:text-zinc-400">
@@ -26,7 +29,7 @@ export default function DashboardLayout({
                 <Link
                   key={item.href}
                   href={item.href}
-                  className="hover:text-zinc-900 dark:hover:text-zinc-100"
+                  className="transition-colors hover:text-zinc-900 dark:hover:text-zinc-100"
                 >
                   {item.label}
                 </Link>
