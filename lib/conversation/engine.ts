@@ -29,7 +29,6 @@ import {
   createFornecedor,
   createDespesa,
   getObraResumo,
-  findCategoriaMaterial,
   findOrCreateMaterial,
   findOrCreateFornecedorPorNota,
   upsertEtapasDeObra,
@@ -51,6 +50,13 @@ const MIME_TYPES_PLANILHA = [
   "application/vnd.ms-excel",
 ];
 
+type ItemNotaClassificado = InvoiceItem & {
+  categoriaId: string;
+  categoriaNome: string;
+  etapaId: string;
+  etapaNome: string;
+};
+
 type Dados = {
   valor?: number;
   obraId?: string;
@@ -66,6 +72,10 @@ type Dados = {
   fornecedorNome?: string;
   notaItens?: InvoiceItem[];
   notaValorTotal?: number | null;
+  notaItemIndiceAtual?: number;
+  notaItensClassificados?: ItemNotaClassificado[];
+  itemCategoriaIdTemp?: string;
+  itemCategoriaNomeTemp?: string;
 
   orcamentoEtapas?: OrcamentoEtapa[];
   orcamentoValorTotal?: number | null;
@@ -150,8 +160,10 @@ export async function handleIncomingMessage(message: IncomingMessage) {
 
     case ESTADOS.NOTA_AGUARDANDO_OBRA:
       return handleNotaAguardandoObra(from, message, session);
-    case ESTADOS.NOTA_AGUARDANDO_ETAPA:
-      return handleNotaAguardandoEtapa(from, message, session);
+    case ESTADOS.NOTA_ITEM_CATEGORIA:
+      return handleNotaItemCategoria(from, message, session);
+    case ESTADOS.NOTA_ITEM_ETAPA:
+      return handleNotaItemEtapa(from, message, session);
     case ESTADOS.NOTA_CONFIRMACAO:
       return handleNotaConfirmacao(from, message, session);
 
@@ -810,12 +822,52 @@ async function handleNotaAguardandoObra(
     ...session.dados_coletados,
     obraId: obra.id,
     obraNome: obra.nome,
+    notaItemIndiceAtual: 0,
+    notaItensClassificados: [],
   };
-  await saveSession(from, ESTADOS.NOTA_AGUARDANDO_ETAPA, dados);
+  await perguntarClassificacaoItemAtual(from, dados);
+}
+
+/**
+ * Nota fiscal com varios itens: cada item pode ser de uma etapa (e ate
+ * categoria) diferente, entao classificamos um item por vez em vez de
+ * aplicar uma unica categoria/etapa pra nota inteira.
+ */
+async function perguntarClassificacaoItemAtual(from: string, dados: Dados) {
+  const itens = dados.notaItens ?? [];
+  const indice = dados.notaItemIndiceAtual ?? 0;
+  const item = itens[indice];
+
+  await saveSession(from, ESTADOS.NOTA_ITEM_CATEGORIA, dados);
+  await sendText(
+    from,
+    `Item ${indice + 1}/${itens.length}: *${item.descricao}* — ${formatBRL(item.valorTotal)}\nQual a categoria desse item?`
+  );
+  await sendListCategorias(from);
+}
+
+async function handleNotaItemCategoria(
+  from: string,
+  message: IncomingMessage,
+  session: Session
+) {
+  const categoriaId = idSemPrefixo(message.replyId, "categoria:");
+  const categoria = categoriaId ? await findCategoriaById(categoriaId) : null;
+  if (!categoria) {
+    await sendListCategorias(from);
+    return;
+  }
+
+  const dados: Dados = {
+    ...session.dados_coletados,
+    itemCategoriaIdTemp: categoria.id,
+    itemCategoriaNomeTemp: categoria.nome,
+  };
+  await saveSession(from, ESTADOS.NOTA_ITEM_ETAPA, dados);
   await sendListEtapas(from, dados.obraId!);
 }
 
-async function handleNotaAguardandoEtapa(
+async function handleNotaItemEtapa(
   from: string,
   message: IncomingMessage,
   session: Session
@@ -827,27 +879,49 @@ async function handleNotaAguardandoEtapa(
     return;
   }
 
-  const dados: Dados = {
-    ...session.dados_coletados,
+  const dados = session.dados_coletados as Dados;
+  const indice = dados.notaItemIndiceAtual ?? 0;
+  const item = (dados.notaItens ?? [])[indice];
+
+  const itemClassificado: ItemNotaClassificado = {
+    ...item,
+    categoriaId: dados.itemCategoriaIdTemp!,
+    categoriaNome: dados.itemCategoriaNomeTemp!,
     etapaId: etapa.id,
     etapaNome: etapa.nome,
   };
-  await saveSession(from, ESTADOS.NOTA_CONFIRMACAO, dados);
-  await enviarConfirmacaoNota(from, dados);
+
+  const novosDados: Dados = {
+    ...dados,
+    notaItensClassificados: [...(dados.notaItensClassificados ?? []), itemClassificado],
+    notaItemIndiceAtual: indice + 1,
+    itemCategoriaIdTemp: undefined,
+    itemCategoriaNomeTemp: undefined,
+  };
+
+  if (novosDados.notaItemIndiceAtual! < (dados.notaItens ?? []).length) {
+    await perguntarClassificacaoItemAtual(from, novosDados);
+    return;
+  }
+
+  await saveSession(from, ESTADOS.NOTA_CONFIRMACAO, novosDados);
+  await enviarConfirmacaoNota(from, novosDados);
 }
 
 async function enviarConfirmacaoNota(from: string, dados: Dados) {
-  const itens = dados.notaItens ?? [];
+  const itens = dados.notaItensClassificados ?? [];
   const linhasItens = itens
-    .map((item, i) => `${i + 1}. ${item.descricao} — ${formatBRL(item.valorTotal)}`)
+    .map(
+      (item, i) =>
+        `${i + 1}. ${item.descricao} — ${formatBRL(item.valorTotal)}\n   📁 ${item.categoriaNome} · 📐 ${item.etapaNome}`
+    )
     .join("\n");
   const somaItens = itens.reduce((soma, item) => soma + item.valorTotal, 0);
 
   const texto =
     `*Confirme os dados da nota:*\n` +
     `🏢 Fornecedor: ${dados.fornecedorNome}\n` +
-    `🏗️ Obra: ${dados.obraNome}\n` +
-    `📐 Etapa: ${dados.etapaNome}\n\n` +
+    `🏗️ Obra: ${dados.obraNome}\n\n` +
     `*Itens:*\n${linhasItens}\n\n` +
     `💰 Total: ${formatBRL(dados.notaValorTotal ?? somaItens)}`;
 
@@ -875,34 +949,27 @@ async function handleNotaConfirmacao(
   }
 
   const dados = session.dados_coletados as Dados;
-  const categoriaMaterial = await findCategoriaMaterial();
 
-  if (!categoriaMaterial) {
-    await sendText(
-      from,
-      "Não encontrei a categoria 'Material' cadastrada. Cadastre-a no dashboard e tente novamente."
-    );
-    await resetSession(from);
-    await sendMenuPrincipal(from);
-    return;
-  }
+  for (const item of dados.notaItensClassificados ?? []) {
+    const ehMaterial = item.categoriaNome.toLowerCase() === "material";
+    const material = ehMaterial
+      ? await findOrCreateMaterial(item.descricao, item.categoriaId)
+      : null;
 
-  for (const item of dados.notaItens ?? []) {
-    const material = await findOrCreateMaterial(item.descricao, categoriaMaterial.id);
     await createDespesa({
       obraId: dados.obraId!,
-      categoriaId: categoriaMaterial.id,
-      etapaId: dados.etapaId!,
+      categoriaId: item.categoriaId,
+      etapaId: item.etapaId,
       valor: item.valorTotal,
       descricao: `${item.descricao} (${item.quantidade}x)`,
-      materialId: material.id,
+      materialId: material?.id ?? null,
       fornecedorId: dados.fornecedorId ?? null,
     });
   }
 
   await sendText(
     from,
-    `✅ Nota registrada! ${dados.notaItens?.length ?? 0} itens lançados na obra "${dados.obraNome}".`
+    `✅ Nota registrada! ${dados.notaItensClassificados?.length ?? 0} itens lançados na obra "${dados.obraNome}".`
   );
   await resetSession(from);
   await sendMenuPrincipal(from);
