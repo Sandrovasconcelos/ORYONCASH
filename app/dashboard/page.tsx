@@ -4,6 +4,9 @@ import { formatBRL } from "@/lib/conversation/format";
 import { getCategoriaIcon, getEtapaIcon } from "@/lib/dashboard/icons";
 import { ObraSelector } from "./obra-selector";
 import { BreakdownList } from "./breakdown-list";
+import { GastoPorCategoriaChart } from "./charts/gasto-por-categoria-chart";
+import { OrcadoExecutadoChart } from "./charts/orcado-executado-chart";
+import { TendenciaMensalChart } from "./charts/tendencia-mensal-chart";
 
 export default async function DashboardPage({
   searchParams,
@@ -64,6 +67,19 @@ export default async function DashboardPage({
       </div>
 
       <div className="grid grid-cols-1 gap-6 lg:grid-cols-2">
+        <ChartCard titulo="Gasto por Categoria">
+          <GastoPorCategoriaChart itens={data.categorias} />
+        </ChartCard>
+        <ChartCard titulo="Orçado x Executado por Etapa">
+          <OrcadoExecutadoChart itens={data.etapas} />
+        </ChartCard>
+      </div>
+
+      <ChartCard titulo="Gasto ao Longo do Tempo">
+        <TendenciaMensalChart pontos={data.tendenciaMensal} />
+      </ChartCard>
+
+      <div className="grid grid-cols-1 gap-6 lg:grid-cols-2">
         <BreakdownList
           titulo="Categorias"
           itens={data.categorias}
@@ -99,6 +115,23 @@ function Card({
       </div>
       <p className="mt-3 text-xs font-medium text-white/85">{label}</p>
       <p className="mt-1 text-2xl font-semibold tracking-tight">{valor}</p>
+    </div>
+  );
+}
+
+function ChartCard({
+  titulo,
+  children,
+}: {
+  titulo: string;
+  children: React.ReactNode;
+}) {
+  return (
+    <div className="rounded-2xl border border-zinc-200 dark:border-zinc-800 bg-white dark:bg-zinc-950 p-5 shadow-sm">
+      <p className="text-sm font-semibold text-zinc-900 dark:text-zinc-50 mb-4">
+        {titulo}
+      </p>
+      {children}
     </div>
   );
 }

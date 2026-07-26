@@ -48,6 +48,44 @@ export async function createFornecedorAction(formData: FormData) {
   revalidatePath("/dashboard/fornecedores");
 }
 
+export async function updateDespesaAction(formData: FormData) {
+  const id = String(formData.get("id") ?? "");
+  if (!id) return;
+
+  const valor = parseValorBR(String(formData.get("valor") ?? "0")) ?? 0;
+  const etapaId = String(formData.get("etapa_id") ?? "") || null;
+  const fornecedorId = String(formData.get("fornecedor_id") ?? "") || null;
+
+  const supabase = await createClient();
+  await supabase
+    .from("despesas")
+    .update({
+      obra_id: String(formData.get("obra_id") ?? ""),
+      categoria_id: String(formData.get("categoria_id") ?? ""),
+      etapa_id: etapaId,
+      fornecedor_id: fornecedorId,
+      valor,
+      data: String(formData.get("data") ?? ""),
+      descricao: String(formData.get("descricao") ?? "").trim() || null,
+    })
+    .eq("id", id);
+
+  revalidatePath("/dashboard/despesas");
+  revalidatePath("/dashboard");
+  redirect("/dashboard/despesas");
+}
+
+export async function deleteDespesaAction(formData: FormData) {
+  const id = String(formData.get("id") ?? "");
+  if (!id) return;
+
+  const supabase = await createClient();
+  await supabase.from("despesas").delete().eq("id", id);
+
+  revalidatePath("/dashboard/despesas");
+  revalidatePath("/dashboard");
+}
+
 export type ImportarOrcamentoResultado =
   | { ok: true; etapas: number }
   | { ok: false; erro: string };
