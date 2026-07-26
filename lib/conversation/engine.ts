@@ -1,6 +1,8 @@
-import type { IncomingMessage } from "@/lib/whatsapp/parse";
+import type { IncomingMessage, IncomingMedia } from "@/lib/whatsapp/parse";
 import { sendText, sendButtons } from "@/lib/whatsapp/messages";
 import { getSession, saveSession, resetSession, type Session } from "@/lib/whatsapp/session";
+import { downloadWhatsAppMedia } from "@/lib/whatsapp/media";
+import { extractInvoiceData, type InvoiceItem } from "@/lib/gemini/extractInvoice";
 import { formatBRL, parseValorBR } from "./format";
 import { ESTADOS, MENU_IDS, COMANDOS_CANCELAR } from "./states";
 import { sendMenuPrincipal } from "./menu";
@@ -15,6 +17,9 @@ import {
   createFornecedor,
   createDespesa,
   getObraResumo,
+  findCategoriaMaterial,
+  findOrCreateMaterial,
+  findOrCreateFornecedorPorNota,
 } from "./queries";
 
 type Dados = {
@@ -27,6 +32,11 @@ type Dados = {
   etapaNome?: string;
   descricao?: string | null;
   nome?: string;
+
+  fornecedorId?: string;
+  fornecedorNome?: string;
+  notaItens?: InvoiceItem[];
+  notaValorTotal?: number | null;
 };
 
 function idSemPrefixo(replyId: string | null, prefixo: string): string | null {
@@ -36,6 +46,11 @@ function idSemPrefixo(replyId: string | null, prefixo: string): string | null {
 
 export async function handleIncomingMessage(message: IncomingMessage) {
   const { from } = message;
+
+  if (message.media) {
+    return handleNotaFiscalRecebida(from, message.media);
+  }
+
   const textoNormalizado = message.text?.trim().toLowerCase();
 
   if (textoNormalizado && COMANDOS_CANCELAR.includes(textoNormalizado)) {
@@ -83,6 +98,13 @@ export async function handleIncomingMessage(message: IncomingMessage) {
 
     case ESTADOS.RESUMO_OBRA:
       return handleResumoObra(from, message);
+
+    case ESTADOS.NOTA_AGUARDANDO_OBRA:
+      return handleNotaAguardandoObra(from, message, session);
+    case ESTADOS.NOTA_AGUARDANDO_ETAPA:
+      return handleNotaAguardandoEtapa(from, message, session);
+    case ESTADOS.NOTA_CONFIRMACAO:
+      return handleNotaConfirmacao(from, message, session);
 
     default:
       await resetSession(from);
@@ -469,6 +491,177 @@ async function handleCadastroFornecedorContato(
   const nome = session.dados_coletados.nome as string;
   await createFornecedor(nome, contato);
   await sendText(from, `✅ Fornecedor "${nome}" cadastrado.`);
+  await resetSession(from);
+  await sendMenuPrincipal(from);
+}
+
+// ---------- Nota Fiscal / Comprovante ----------
+
+async function handleNotaFiscalRecebida(from: string, media: IncomingMedia) {
+  await sendText(from, "📄 Recebi sua nota fiscal, analisando...");
+
+  let invoice;
+  try {
+    const { buffer, mimeType } = await downloadWhatsAppMedia(media.id);
+    invoice = await extractInvoiceData(buffer, mimeType);
+  } catch (error) {
+    console.error("Erro ao processar nota fiscal:", error);
+    invoice = null;
+  }
+
+  if (!invoice || invoice.itens.length === 0) {
+    await sendText(
+      from,
+      "Não consegui ler os dados dessa nota. Tente enviar uma foto mais nítida, ou registre a despesa manualmente pelo menu."
+    );
+    await resetSession(from);
+    await sendMenuPrincipal(from);
+    return;
+  }
+
+  const obras = await listObrasAtivas();
+  if (obras.length === 0) {
+    await sendText(
+      from,
+      "Você ainda não tem nenhuma obra cadastrada. Cadastre uma obra antes de registrar despesas."
+    );
+    await resetSession(from);
+    await sendMenuPrincipal(from);
+    return;
+  }
+
+  const fornecedor = await findOrCreateFornecedorPorNota(
+    invoice.fornecedorNome,
+    invoice.fornecedorCnpj
+  );
+
+  const dados: Dados = {
+    fornecedorId: fornecedor.id,
+    fornecedorNome: fornecedor.nome,
+    notaItens: invoice.itens,
+    notaValorTotal: invoice.valorTotalNota,
+  };
+
+  await saveSession(from, ESTADOS.NOTA_AGUARDANDO_OBRA, dados);
+  await sendText(
+    from,
+    `Encontrei ${invoice.itens.length} ${
+      invoice.itens.length === 1 ? "item" : "itens"
+    } do fornecedor *${fornecedor.nome}*. Em qual obra isso deve ser lançado?`
+  );
+  await sendListObras(from);
+}
+
+async function handleNotaAguardandoObra(
+  from: string,
+  message: IncomingMessage,
+  session: Session
+) {
+  const obraId = idSemPrefixo(message.replyId, "obra:");
+  const obra = obraId ? await findObraById(obraId) : null;
+  if (!obra) {
+    await sendListObras(from);
+    return;
+  }
+
+  const dados: Dados = {
+    ...session.dados_coletados,
+    obraId: obra.id,
+    obraNome: obra.nome,
+  };
+  await saveSession(from, ESTADOS.NOTA_AGUARDANDO_ETAPA, dados);
+  await sendListEtapas(from);
+}
+
+async function handleNotaAguardandoEtapa(
+  from: string,
+  message: IncomingMessage,
+  session: Session
+) {
+  const etapaId = idSemPrefixo(message.replyId, "etapa:");
+  const etapa = etapaId ? await findEtapaById(etapaId) : null;
+  if (!etapa) {
+    await sendListEtapas(from);
+    return;
+  }
+
+  const dados: Dados = {
+    ...session.dados_coletados,
+    etapaId: etapa.id,
+    etapaNome: etapa.nome,
+  };
+  await saveSession(from, ESTADOS.NOTA_CONFIRMACAO, dados);
+  await enviarConfirmacaoNota(from, dados);
+}
+
+async function enviarConfirmacaoNota(from: string, dados: Dados) {
+  const itens = dados.notaItens ?? [];
+  const linhasItens = itens
+    .map((item, i) => `${i + 1}. ${item.descricao} — ${formatBRL(item.valorTotal)}`)
+    .join("\n");
+  const somaItens = itens.reduce((soma, item) => soma + item.valorTotal, 0);
+
+  const texto =
+    `*Confirme os dados da nota:*\n` +
+    `🏢 Fornecedor: ${dados.fornecedorNome}\n` +
+    `🏗️ Obra: ${dados.obraNome}\n` +
+    `📐 Etapa: ${dados.etapaNome}\n\n` +
+    `*Itens:*\n${linhasItens}\n\n` +
+    `💰 Total: ${formatBRL(dados.notaValorTotal ?? somaItens)}`;
+
+  await sendButtons(from, texto, [
+    { id: "confirm:sim", title: "Confirmar" },
+    { id: "confirm:nao", title: "Cancelar" },
+  ]);
+}
+
+async function handleNotaConfirmacao(
+  from: string,
+  message: IncomingMessage,
+  session: Session
+) {
+  if (message.replyId === "confirm:nao") {
+    await sendText(from, "Registro da nota cancelado.");
+    await resetSession(from);
+    await sendMenuPrincipal(from);
+    return;
+  }
+
+  if (message.replyId !== "confirm:sim") {
+    await enviarConfirmacaoNota(from, session.dados_coletados as Dados);
+    return;
+  }
+
+  const dados = session.dados_coletados as Dados;
+  const categoriaMaterial = await findCategoriaMaterial();
+
+  if (!categoriaMaterial) {
+    await sendText(
+      from,
+      "Não encontrei a categoria 'Material' cadastrada. Cadastre-a no dashboard e tente novamente."
+    );
+    await resetSession(from);
+    await sendMenuPrincipal(from);
+    return;
+  }
+
+  for (const item of dados.notaItens ?? []) {
+    const material = await findOrCreateMaterial(item.descricao, categoriaMaterial.id);
+    await createDespesa({
+      obraId: dados.obraId!,
+      categoriaId: categoriaMaterial.id,
+      etapaId: dados.etapaId!,
+      valor: item.valorTotal,
+      descricao: `${item.descricao} (${item.quantidade}x)`,
+      materialId: material.id,
+      fornecedorId: dados.fornecedorId ?? null,
+    });
+  }
+
+  await sendText(
+    from,
+    `✅ Nota registrada! ${dados.notaItens?.length ?? 0} itens lançados na obra "${dados.obraNome}".`
+  );
   await resetSession(from);
   await sendMenuPrincipal(from);
 }

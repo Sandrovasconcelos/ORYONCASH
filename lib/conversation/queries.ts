@@ -83,15 +83,61 @@ export async function createMaterial(nome: string, categoriaId: string) {
   return data;
 }
 
-export async function createFornecedor(nome: string, contato: string | null) {
+export async function findCategoriaMaterial() {
+  const supabase = createAdminClient();
+  const { data } = await supabase
+    .from("categorias")
+    .select("id, nome")
+    .ilike("nome", "material")
+    .maybeSingle();
+  return data;
+}
+
+export async function findOrCreateMaterial(nome: string, categoriaId: string) {
+  const supabase = createAdminClient();
+  const { data: existente } = await supabase
+    .from("materiais")
+    .select("id, nome")
+    .ilike("nome", nome)
+    .maybeSingle();
+  if (existente) return existente;
+  return createMaterial(nome, categoriaId);
+}
+
+export async function createFornecedor(
+  nome: string,
+  contato: string | null,
+  cnpj: string | null = null
+) {
   const supabase = createAdminClient();
   const { data, error } = await supabase
     .from("fornecedores")
-    .insert({ nome, contato })
+    .insert({ nome, contato, cnpj })
     .select("id, nome")
     .single();
   if (error) throw error;
   return data;
+}
+
+export async function findFornecedorByCnpj(cnpj: string) {
+  const supabase = createAdminClient();
+  const { data } = await supabase
+    .from("fornecedores")
+    .select("id, nome")
+    .eq("cnpj", cnpj)
+    .maybeSingle();
+  return data;
+}
+
+export async function findOrCreateFornecedorPorNota(
+  nome: string,
+  cnpj: string | null
+) {
+  if (cnpj) {
+    const existente = await findFornecedorByCnpj(cnpj);
+    if (existente) return existente;
+  }
+  return createFornecedor(nome, null, cnpj);
 }
 
 export async function createDespesa(input: {
@@ -100,6 +146,8 @@ export async function createDespesa(input: {
   etapaId: string;
   valor: number;
   descricao: string | null;
+  materialId?: string | null;
+  fornecedorId?: string | null;
 }) {
   const supabase = createAdminClient();
   const { error } = await supabase.from("despesas").insert({
@@ -108,6 +156,8 @@ export async function createDespesa(input: {
     etapa_id: input.etapaId,
     valor: input.valor,
     descricao: input.descricao,
+    material_id: input.materialId ?? null,
+    fornecedor_id: input.fornecedorId ?? null,
     origem: "whatsapp",
   });
   if (error) throw error;

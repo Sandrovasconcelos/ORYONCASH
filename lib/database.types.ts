@@ -75,12 +75,14 @@ export interface Database {
           id: string;
           nome: string;
           contato: string | null;
+          cnpj: string | null;
           created_at: string;
         };
         Insert: {
           id?: string;
           nome: string;
           contato?: string | null;
+          cnpj?: string | null;
           created_at?: string;
         };
         Update: Partial<

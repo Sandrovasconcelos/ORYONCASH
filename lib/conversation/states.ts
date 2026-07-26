@@ -19,6 +19,10 @@ export const ESTADOS = {
   CADASTRO_FORNECEDOR_CONTATO: "cadastro_fornecedor_contato",
 
   RESUMO_OBRA: "resumo_obra",
+
+  NOTA_AGUARDANDO_OBRA: "nota_aguardando_obra",
+  NOTA_AGUARDANDO_ETAPA: "nota_aguardando_etapa",
+  NOTA_CONFIRMACAO: "nota_confirmacao",
 } as const;
 
 export const MENU_IDS = {
