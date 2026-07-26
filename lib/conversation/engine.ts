@@ -261,6 +261,16 @@ async function handleDespesaEtapa(
     etapaId: etapa.id,
     etapaNome: etapa.nome,
   };
+
+  if (dados.categoriaNome?.toLowerCase() === "material") {
+    await saveSession(from, ESTADOS.DESPESA_DESCRICAO_TEXTO, dados);
+    await sendText(
+      from,
+      "Qual o tipo de material? (ex: Cabo elétrico 2,5mm, Cimento CP-II 50kg, Areia média)"
+    );
+    return;
+  }
+
   await saveSession(from, ESTADOS.DESPESA_DESCRICAO_PROMPT, dados);
   await sendButtons(from, "Deseja adicionar uma descrição para esta despesa?", [
     { id: "desc:add", title: "Adicionar" },
