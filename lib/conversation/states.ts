@@ -35,6 +35,10 @@ export const ESTADOS = {
   CORRIGIR_ETAPA_NOVA: "corrigir_etapa_nova",
   CORRIGIR_FORNECEDOR_NOVO: "corrigir_fornecedor_novo",
   CORRIGIR_CONFIRMAR_EXCLUSAO: "corrigir_confirmar_exclusao",
+
+  REMOVER_TIPO: "remover_tipo",
+  REMOVER_SELECIONANDO_ITEM: "remover_selecionando_item",
+  REMOVER_CONFIRMACAO: "remover_confirmacao",
 } as const;
 
 export const MENU_IDS = {
@@ -44,6 +48,13 @@ export const MENU_IDS = {
   CADASTRAR_FORNECEDOR: "menu:cadastrar_fornecedor",
   VER_RESUMO: "menu:ver_resumo",
   CORRIGIR_LANCAMENTO: "menu:corrigir_lancamento",
+  REMOVER_CADASTRO: "menu:remover_cadastro",
+} as const;
+
+export const TIPO_REMOVER_IDS = {
+  OBRA: "tipo:obra",
+  MATERIAL: "tipo:material",
+  FORNECEDOR: "tipo:fornecedor",
 } as const;
 
 export const CAMPO_IDS = {

@@ -39,6 +39,11 @@ export async function sendMenuPrincipal(to: string) {
             title: "Corrigir Lançamento",
             description: "Editar ou excluir uma despesa registrada",
           },
+          {
+            id: MENU_IDS.REMOVER_CADASTRO,
+            title: "Remover Cadastro",
+            description: "Excluir uma obra, material ou fornecedor",
+          },
         ],
       },
     ],

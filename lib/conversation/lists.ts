@@ -5,6 +5,7 @@ import {
   listEtapasParaObra,
   listFornecedores,
   listDespesasRecentes,
+  listMateriais,
 } from "./queries";
 import { formatBRL } from "./format";
 import { CAMPO_IDS } from "./states";
@@ -56,6 +57,20 @@ export async function sendListFornecedores(to: string) {
     sections: [
       {
         rows: fornecedores.map((f) => ({ id: `fornecedor:${f.id}`, title: f.nome })),
+      },
+    ],
+  });
+}
+
+export async function sendListMateriais(to: string) {
+  const materiais = await listMateriais();
+  await sendList(to, {
+    headerText: "Seleção de Material",
+    bodyText: "Selecione o material. Toque em uma opção.",
+    buttonText: "Ver Materiais",
+    sections: [
+      {
+        rows: materiais.map((m) => ({ id: `material:${m.id}`, title: m.nome })),
       },
     ],
   });

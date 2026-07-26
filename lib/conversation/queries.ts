@@ -239,6 +239,44 @@ export async function findFornecedorById(id: string) {
   return data;
 }
 
+export async function listMateriais() {
+  const supabase = createAdminClient();
+  const { data } = await supabase
+    .from("materiais")
+    .select("id, nome")
+    .order("nome")
+    .limit(10);
+  return data ?? [];
+}
+
+export async function findMaterialById(id: string) {
+  const supabase = createAdminClient();
+  const { data } = await supabase
+    .from("materiais")
+    .select("id, nome")
+    .eq("id", id)
+    .maybeSingle();
+  return data;
+}
+
+export async function deleteObraPorId(id: string) {
+  const supabase = createAdminClient();
+  const { error } = await supabase.from("obras").delete().eq("id", id);
+  if (error) throw error;
+}
+
+export async function deleteMaterialPorId(id: string) {
+  const supabase = createAdminClient();
+  const { error } = await supabase.from("materiais").delete().eq("id", id);
+  if (error) throw error;
+}
+
+export async function deleteFornecedorPorId(id: string) {
+  const supabase = createAdminClient();
+  const { error } = await supabase.from("fornecedores").delete().eq("id", id);
+  if (error) throw error;
+}
+
 export async function listDespesasRecentes(limite = 10) {
   const supabase = createAdminClient();
   const { data } = await supabase

@@ -7,7 +7,7 @@ import { extractOrcamentoData, type OrcamentoEtapa } from "@/lib/gemini/extractO
 import { extractDespesaDeAudio } from "@/lib/gemini/extractDespesaAudio";
 import { extractSpreadsheetAsText } from "@/lib/orcamento/parseSpreadsheet";
 import { formatBRL, parseValorBR } from "./format";
-import { ESTADOS, MENU_IDS, CAMPO_IDS, COMANDOS_CANCELAR } from "./states";
+import { ESTADOS, MENU_IDS, CAMPO_IDS, TIPO_REMOVER_IDS, COMANDOS_CANCELAR } from "./states";
 import { sendMenuPrincipal } from "./menu";
 import {
   sendListObras,
@@ -16,6 +16,7 @@ import {
   sendListFornecedores,
   sendListDespesasRecentes,
   sendListCamposParaCorrigir,
+  sendListMateriais,
 } from "./lists";
 import {
   findObraById,
@@ -36,6 +37,12 @@ import {
   updateDespesaCampo,
   deleteDespesaPorId,
   listDespesasRecentes,
+  listMateriais,
+  findMaterialById,
+  deleteObraPorId,
+  deleteMaterialPorId,
+  deleteFornecedorPorId,
+  listFornecedores,
 } from "./queries";
 
 const MIME_TYPES_PLANILHA = [
@@ -63,6 +70,10 @@ type Dados = {
   orcamentoValorTotal?: number | null;
 
   despesaId?: string;
+
+  tipoRemover?: "obra" | "material" | "fornecedor";
+  itemRemoverId?: string;
+  itemRemoverNome?: string;
 };
 
 function idSemPrefixo(replyId: string | null, prefixo: string): string | null {
@@ -160,6 +171,13 @@ export async function handleIncomingMessage(message: IncomingMessage) {
     case ESTADOS.CORRIGIR_CONFIRMAR_EXCLUSAO:
       return handleCorrigirConfirmarExclusao(from, message, session);
 
+    case ESTADOS.REMOVER_TIPO:
+      return handleRemoverTipo(from, message);
+    case ESTADOS.REMOVER_SELECIONANDO_ITEM:
+      return handleRemoverSelecionandoItem(from, message, session);
+    case ESTADOS.REMOVER_CONFIRMACAO:
+      return handleRemoverConfirmacao(from, message, session);
+
     default:
       await resetSession(from);
       await sendMenuPrincipal(from);
@@ -191,6 +209,9 @@ async function handleMenu(from: string, message: IncomingMessage) {
       return;
     case MENU_IDS.CORRIGIR_LANCAMENTO:
       await iniciarCorrecaoLancamento(from);
+      return;
+    case MENU_IDS.REMOVER_CADASTRO:
+      await iniciarRemoverCadastro(from);
       return;
     default:
       await sendMenuPrincipal(from);
@@ -1157,4 +1178,152 @@ async function handleCorrigirConfirmarExclusao(
     { id: "confirm:sim", title: "Excluir" },
     { id: "confirm:nao", title: "Cancelar" },
   ]);
+}
+
+// ---------- Remover Cadastro (Obra / Material / Fornecedor) ----------
+
+const TIPO_REMOVER_LABEL: Record<NonNullable<Dados["tipoRemover"]>, string> = {
+  obra: "obra",
+  material: "material",
+  fornecedor: "fornecedor",
+};
+
+async function iniciarRemoverCadastro(from: string) {
+  await saveSession(from, ESTADOS.REMOVER_TIPO, {});
+  await sendButtons(from, "O que você deseja remover?", [
+    { id: TIPO_REMOVER_IDS.OBRA, title: "Obra" },
+    { id: TIPO_REMOVER_IDS.MATERIAL, title: "Material" },
+    { id: TIPO_REMOVER_IDS.FORNECEDOR, title: "Fornecedor" },
+  ]);
+}
+
+async function enviarListaParaRemover(
+  from: string,
+  tipo: NonNullable<Dados["tipoRemover"]>
+) {
+  if (tipo === "obra") await sendListObras(from);
+  if (tipo === "material") await sendListMateriais(from);
+  if (tipo === "fornecedor") await sendListFornecedores(from);
+}
+
+async function handleRemoverTipo(from: string, message: IncomingMessage) {
+  let tipo: Dados["tipoRemover"];
+  if (message.replyId === TIPO_REMOVER_IDS.OBRA) tipo = "obra";
+  else if (message.replyId === TIPO_REMOVER_IDS.MATERIAL) tipo = "material";
+  else if (message.replyId === TIPO_REMOVER_IDS.FORNECEDOR) tipo = "fornecedor";
+
+  if (!tipo) {
+    await iniciarRemoverCadastro(from);
+    return;
+  }
+
+  const [obras, materiais, fornecedores] = await Promise.all([
+    tipo === "obra" ? listObrasAtivas() : Promise.resolve([]),
+    tipo === "material" ? listMateriais() : Promise.resolve([]),
+    tipo === "fornecedor" ? listFornecedores() : Promise.resolve([]),
+  ]);
+  const itens =
+    tipo === "obra" ? obras : tipo === "material" ? materiais : fornecedores;
+
+  if (itens.length === 0) {
+    await sendText(from, `Nenhum(a) ${TIPO_REMOVER_LABEL[tipo]} cadastrado(a) ainda.`);
+    await resetSession(from);
+    await sendMenuPrincipal(from);
+    return;
+  }
+
+  await saveSession(from, ESTADOS.REMOVER_SELECIONANDO_ITEM, { tipoRemover: tipo });
+  await enviarListaParaRemover(from, tipo);
+}
+
+async function handleRemoverSelecionandoItem(
+  from: string,
+  message: IncomingMessage,
+  session: Session
+) {
+  const dados = session.dados_coletados as Dados;
+  const tipo = dados.tipoRemover!;
+  const prefixo = `${tipo}:`;
+  const itemId = idSemPrefixo(message.replyId, prefixo);
+
+  const item = !itemId
+    ? null
+    : tipo === "obra"
+      ? await findObraById(itemId)
+      : tipo === "material"
+        ? await findMaterialById(itemId)
+        : await findFornecedorById(itemId);
+
+  if (!item) {
+    await enviarListaParaRemover(from, tipo);
+    return;
+  }
+
+  const novosDados: Dados = {
+    tipoRemover: tipo,
+    itemRemoverId: item.id,
+    itemRemoverNome: item.nome,
+  };
+  await saveSession(from, ESTADOS.REMOVER_CONFIRMACAO, novosDados);
+
+  const aviso =
+    tipo === "obra"
+      ? "⚠️ Isso vai apagar a obra e TODAS as despesas e etapas registradas nela. Essa ação não pode ser desfeita."
+      : "Essa ação não pode ser desfeita.";
+
+  await sendButtons(
+    from,
+    `Remover ${TIPO_REMOVER_LABEL[tipo]} "${item.nome}"?\n${aviso}`,
+    [
+      { id: "confirm:sim", title: "Remover" },
+      { id: "confirm:nao", title: "Cancelar" },
+    ]
+  );
+}
+
+async function handleRemoverConfirmacao(
+  from: string,
+  message: IncomingMessage,
+  session: Session
+) {
+  const dados = session.dados_coletados as Dados;
+
+  if (message.replyId === "confirm:nao") {
+    await sendText(from, "Ok, nada foi removido.");
+    await resetSession(from);
+    await sendMenuPrincipal(from);
+    return;
+  }
+
+  if (message.replyId !== "confirm:sim") {
+    await sendButtons(
+      from,
+      `Remover ${TIPO_REMOVER_LABEL[dados.tipoRemover!]} "${dados.itemRemoverNome}"?`,
+      [
+        { id: "confirm:sim", title: "Remover" },
+        { id: "confirm:nao", title: "Cancelar" },
+      ]
+    );
+    return;
+  }
+
+  try {
+    if (dados.tipoRemover === "obra") await deleteObraPorId(dados.itemRemoverId!);
+    if (dados.tipoRemover === "material") await deleteMaterialPorId(dados.itemRemoverId!);
+    if (dados.tipoRemover === "fornecedor") await deleteFornecedorPorId(dados.itemRemoverId!);
+
+    await sendText(
+      from,
+      `🗑️ ${TIPO_REMOVER_LABEL[dados.tipoRemover!]} "${dados.itemRemoverNome}" removido(a) com sucesso.`
+    );
+  } catch (error) {
+    console.error("Erro ao remover cadastro:", error);
+    await sendText(
+      from,
+      `Não consegui remover "${dados.itemRemoverNome}". Provavelmente existem despesas vinculadas a esse cadastro — corrija ou remova essas despesas primeiro (menu "Corrigir Lançamento").`
+    );
+  }
+
+  await resetSession(from);
+  await sendMenuPrincipal(from);
 }
