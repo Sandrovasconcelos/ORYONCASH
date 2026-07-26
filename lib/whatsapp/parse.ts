@@ -25,6 +25,7 @@ type WebhookPayload = {
           };
           image?: { id: string; mime_type: string };
           document?: { id: string; mime_type: string };
+          audio?: { id: string; mime_type: string };
         }[];
       };
     }[];
@@ -87,6 +88,15 @@ export function parseIncomingMessage(payload: unknown): IncomingMessage | null {
       text: null,
       replyId: null,
       media: { id: message.document.id, mimeType: message.document.mime_type },
+    };
+  }
+
+  if (message.type === "audio" && message.audio) {
+    return {
+      from,
+      text: null,
+      replyId: null,
+      media: { id: message.audio.id, mimeType: message.audio.mime_type },
     };
   }
 

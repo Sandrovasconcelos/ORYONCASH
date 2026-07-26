@@ -26,6 +26,15 @@ export const ESTADOS = {
 
   ORCAMENTO_AGUARDANDO_OBRA: "orcamento_aguardando_obra",
   ORCAMENTO_CONFIRMACAO: "orcamento_confirmacao",
+
+  CORRIGIR_SELECIONANDO_LANCAMENTO: "corrigir_selecionando_lancamento",
+  CORRIGIR_SELECIONANDO_CAMPO: "corrigir_selecionando_campo",
+  CORRIGIR_VALOR_NOVO: "corrigir_valor_novo",
+  CORRIGIR_DESCRICAO_NOVA: "corrigir_descricao_nova",
+  CORRIGIR_CATEGORIA_NOVA: "corrigir_categoria_nova",
+  CORRIGIR_ETAPA_NOVA: "corrigir_etapa_nova",
+  CORRIGIR_FORNECEDOR_NOVO: "corrigir_fornecedor_novo",
+  CORRIGIR_CONFIRMAR_EXCLUSAO: "corrigir_confirmar_exclusao",
 } as const;
 
 export const MENU_IDS = {
@@ -34,6 +43,16 @@ export const MENU_IDS = {
   CADASTRAR_MATERIAL: "menu:cadastrar_material",
   CADASTRAR_FORNECEDOR: "menu:cadastrar_fornecedor",
   VER_RESUMO: "menu:ver_resumo",
+  CORRIGIR_LANCAMENTO: "menu:corrigir_lancamento",
+} as const;
+
+export const CAMPO_IDS = {
+  VALOR: "campo:valor",
+  CATEGORIA: "campo:categoria",
+  ETAPA: "campo:etapa",
+  FORNECEDOR: "campo:fornecedor",
+  DESCRICAO: "campo:descricao",
+  EXCLUIR: "campo:excluir",
 } as const;
 
 export const COMANDOS_CANCELAR = ["menu", "cancelar", "sair"];

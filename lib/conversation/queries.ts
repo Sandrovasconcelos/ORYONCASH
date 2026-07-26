@@ -219,6 +219,90 @@ export async function createDespesa(input: {
   if (error) throw error;
 }
 
+export async function listFornecedores() {
+  const supabase = createAdminClient();
+  const { data } = await supabase
+    .from("fornecedores")
+    .select("id, nome")
+    .order("nome")
+    .limit(10);
+  return data ?? [];
+}
+
+export async function findFornecedorById(id: string) {
+  const supabase = createAdminClient();
+  const { data } = await supabase
+    .from("fornecedores")
+    .select("id, nome")
+    .eq("id", id)
+    .maybeSingle();
+  return data;
+}
+
+export async function listDespesasRecentes(limite = 10) {
+  const supabase = createAdminClient();
+  const { data } = await supabase
+    .from("despesas")
+    .select("id, valor, descricao, data, categorias(nome)")
+    .order("created_at", { ascending: false })
+    .limit(limite);
+
+  return (data ?? []).map((d) => ({
+    id: d.id,
+    valor: d.valor,
+    descricao: d.descricao,
+    data: d.data,
+    categoriaNome: (d.categorias as unknown as { nome: string } | null)?.nome ?? "—",
+  }));
+}
+
+export async function findDespesaCompletaById(id: string) {
+  const supabase = createAdminClient();
+  const { data } = await supabase
+    .from("despesas")
+    .select(
+      "id, obra_id, categoria_id, etapa_id, fornecedor_id, valor, descricao, data, obras(nome), categorias(nome), etapas(nome), fornecedores(nome)"
+    )
+    .eq("id", id)
+    .maybeSingle();
+  if (!data) return null;
+
+  return {
+    id: data.id,
+    obraId: data.obra_id,
+    obraNome: (data.obras as unknown as { nome: string } | null)?.nome ?? "—",
+    categoriaId: data.categoria_id,
+    categoriaNome: (data.categorias as unknown as { nome: string } | null)?.nome ?? "—",
+    etapaId: data.etapa_id,
+    etapaNome: (data.etapas as unknown as { nome: string } | null)?.nome ?? "—",
+    fornecedorId: data.fornecedor_id,
+    fornecedorNome: (data.fornecedores as unknown as { nome: string } | null)?.nome ?? null,
+    valor: data.valor,
+    descricao: data.descricao,
+  };
+}
+
+export async function updateDespesaCampo(
+  id: string,
+  patch: Partial<{
+    valor: number;
+    descricao: string | null;
+    categoria_id: string;
+    etapa_id: string;
+    fornecedor_id: string;
+  }>
+) {
+  const supabase = createAdminClient();
+  const { error } = await supabase.from("despesas").update(patch).eq("id", id);
+  if (error) throw error;
+}
+
+export async function deleteDespesaPorId(id: string) {
+  const supabase = createAdminClient();
+  const { error } = await supabase.from("despesas").delete().eq("id", id);
+  if (error) throw error;
+}
+
 export async function getObraResumo(obraId: string) {
   const supabase = createAdminClient();
   const [{ data: obra }, { data: despesas }] = await Promise.all([

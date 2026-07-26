@@ -34,6 +34,11 @@ export async function sendMenuPrincipal(to: string) {
             title: "Ver Resumo",
             description: "Orçamento x gasto de uma obra",
           },
+          {
+            id: MENU_IDS.CORRIGIR_LANCAMENTO,
+            title: "Corrigir Lançamento",
+            description: "Editar ou excluir uma despesa registrada",
+          },
         ],
       },
     ],
