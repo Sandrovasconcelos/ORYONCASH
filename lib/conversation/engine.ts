@@ -17,6 +17,7 @@ import {
   sendListDespesasRecentes,
   sendListCamposParaCorrigir,
   sendListMateriais,
+  sendListMateriaisParaDespesa,
 } from "./lists";
 import {
   findObraById,
@@ -70,6 +71,7 @@ type Dados = {
   orcamentoValorTotal?: number | null;
 
   despesaId?: string;
+  materialId?: string;
 
   tipoRemover?: "obra" | "material" | "fornecedor";
   itemRemoverId?: string;
@@ -117,6 +119,10 @@ export async function handleIncomingMessage(message: IncomingMessage) {
       return handleDespesaCategoria(from, message, session);
     case ESTADOS.DESPESA_ETAPA:
       return handleDespesaEtapa(from, message, session);
+    case ESTADOS.DESPESA_MATERIAL:
+      return handleDespesaMaterial(from, message, session);
+    case ESTADOS.DESPESA_MATERIAL_NOVO:
+      return handleDespesaMaterialNovo(from, message, session);
     case ESTADOS.DESPESA_DESCRICAO_PROMPT:
       return handleDespesaDescricaoPrompt(from, message, session);
     case ESTADOS.DESPESA_DESCRICAO_TEXTO:
@@ -371,11 +377,8 @@ async function handleDespesaEtapa(
   }
 
   if (dados.categoriaNome?.toLowerCase() === "material") {
-    await saveSession(from, ESTADOS.DESPESA_DESCRICAO_TEXTO, dados);
-    await sendText(
-      from,
-      "Qual o tipo de material? (ex: Cabo elétrico 2,5mm, Cimento CP-II 50kg, Areia média)"
-    );
+    await saveSession(from, ESTADOS.DESPESA_MATERIAL, dados);
+    await sendListMateriaisParaDespesa(from);
     return;
   }
 
@@ -384,6 +387,60 @@ async function handleDespesaEtapa(
     { id: "desc:add", title: "Adicionar" },
     { id: "desc:skip", title: "Pular" },
   ]);
+}
+
+async function handleDespesaMaterial(
+  from: string,
+  message: IncomingMessage,
+  session: Session
+) {
+  const dados = session.dados_coletados as Dados;
+
+  if (message.replyId === "material:novo") {
+    await saveSession(from, ESTADOS.DESPESA_MATERIAL_NOVO, dados);
+    await sendText(
+      from,
+      "Qual o material? Seja específico (ex: Cano PVC água fria 50mm, Cano PVC esgoto 100mm, Cabo elétrico 2,5mm, Cimento CP-II 50kg):"
+    );
+    return;
+  }
+
+  const materialId = idSemPrefixo(message.replyId, "material:");
+  const material = materialId ? await findMaterialById(materialId) : null;
+  if (!material) {
+    await sendListMateriaisParaDespesa(from);
+    return;
+  }
+
+  const novosDados: Dados = {
+    ...dados,
+    materialId: material.id,
+    descricao: material.nome,
+  };
+  await saveSession(from, ESTADOS.DESPESA_CONFIRMACAO, novosDados);
+  await enviarConfirmacao(from, novosDados);
+}
+
+async function handleDespesaMaterialNovo(
+  from: string,
+  message: IncomingMessage,
+  session: Session
+) {
+  if (!message.text) {
+    await sendText(from, "Digite o nome do material.");
+    return;
+  }
+
+  const dados = session.dados_coletados as Dados;
+  const material = await findOrCreateMaterial(message.text, dados.categoriaId!);
+
+  const novosDados: Dados = {
+    ...dados,
+    materialId: material.id,
+    descricao: material.nome,
+  };
+  await saveSession(from, ESTADOS.DESPESA_CONFIRMACAO, novosDados);
+  await enviarConfirmacao(from, novosDados);
 }
 
 async function handleDespesaDescricaoPrompt(
@@ -463,6 +520,7 @@ async function handleDespesaConfirmacao(
       valor: dados.valor!,
       descricao: dados.descricao ?? null,
       fornecedorId: dados.fornecedorId ?? null,
+      materialId: dados.materialId ?? null,
     });
     await sendText(from, "✅ Despesa registrada com sucesso!");
     await resetSession(from);

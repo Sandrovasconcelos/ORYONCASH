@@ -5,6 +5,8 @@ export const ESTADOS = {
   DESPESA_OBRA: "despesa_obra",
   DESPESA_CATEGORIA: "despesa_categoria",
   DESPESA_ETAPA: "despesa_etapa",
+  DESPESA_MATERIAL: "despesa_material",
+  DESPESA_MATERIAL_NOVO: "despesa_material_novo",
   DESPESA_DESCRICAO_PROMPT: "despesa_descricao_prompt",
   DESPESA_DESCRICAO_TEXTO: "despesa_descricao_texto",
   DESPESA_CONFIRMACAO: "despesa_confirmacao",

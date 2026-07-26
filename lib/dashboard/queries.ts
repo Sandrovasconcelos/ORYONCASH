@@ -15,6 +15,8 @@ export type EtapaBreakdown = CategoriaBreakdown & {
   estourado: boolean;
 };
 
+export type PontoTendencia = { mes: string; valor: number };
+
 export type DashboardData = {
   obras: ObraResumida[];
   obraAtual: {
@@ -27,7 +29,40 @@ export type DashboardData = {
   } | null;
   categorias: CategoriaBreakdown[];
   etapas: EtapaBreakdown[];
+  materiais: CategoriaBreakdown[];
+  tendenciaMensal: PontoTendencia[];
 };
+
+const NOMES_MES = [
+  "Jan",
+  "Fev",
+  "Mar",
+  "Abr",
+  "Mai",
+  "Jun",
+  "Jul",
+  "Ago",
+  "Set",
+  "Out",
+  "Nov",
+  "Dez",
+];
+
+function agruparPorMes(despesas: { valor: number; data: string }[]): PontoTendencia[] {
+  const totais = new Map<string, number>();
+  for (const d of despesas) {
+    const [ano, mes] = d.data.split("-");
+    const chave = `${ano}-${mes}`;
+    totais.set(chave, (totais.get(chave) ?? 0) + d.valor);
+  }
+
+  return Array.from(totais.entries())
+    .sort(([a], [b]) => a.localeCompare(b))
+    .map(([chave, valor]) => {
+      const [ano, mes] = chave.split("-");
+      return { mes: `${NOMES_MES[Number(mes) - 1]}/${ano.slice(2)}`, valor };
+    });
+}
 
 function agruparPorId(
   despesas: { valor: number; ref_id: string | null }[],
@@ -72,6 +107,32 @@ function agruparEtapas(
   });
 }
 
+function agruparMateriais(
+  despesas: { valor: number; material_id: string | null }[],
+  materiaisCatalogo: { id: string; nome: string }[],
+  gastoTotal: number
+): CategoriaBreakdown[] {
+  const totais = new Map<string, number>();
+  for (const d of despesas) {
+    if (!d.material_id) continue;
+    totais.set(d.material_id, (totais.get(d.material_id) ?? 0) + d.valor);
+  }
+  if (totais.size === 0) return [];
+
+  const nomesPorId = new Map(materiaisCatalogo.map((m) => [m.id, m.nome]));
+  const maiorTotal = Math.max(0, ...Array.from(totais.values()));
+
+  return Array.from(totais.entries())
+    .map(([id, total]) => ({
+      id,
+      nome: nomesPorId.get(id) ?? "Material removido",
+      total,
+      percentual: gastoTotal > 0 ? (total / gastoTotal) * 100 : 0,
+      maiorGasto: total > 0 && total === maiorTotal,
+    }))
+    .sort((a, b) => b.total - a.total);
+}
+
 export async function getDashboardData(
   obraIdSolicitada: string | null
 ): Promise<DashboardData> {
@@ -87,27 +148,40 @@ export async function getDashboardData(
     listaObras.find((o) => o.id === obraIdSolicitada) ?? listaObras[0] ?? null;
 
   if (!obraSelecionada) {
-    return { obras: listaObras, obraAtual: null, categorias: [], etapas: [] };
+    return {
+      obras: listaObras,
+      obraAtual: null,
+      categorias: [],
+      etapas: [],
+      materiais: [],
+      tendenciaMensal: [],
+    };
   }
 
-  const [{ data: obra }, { data: despesas }, { data: categorias }, { data: etapasProprias }] =
-    await Promise.all([
-      supabase
-        .from("obras")
-        .select("id, nome, orcamento_total")
-        .eq("id", obraSelecionada.id)
-        .single(),
-      supabase
-        .from("despesas")
-        .select("valor, categoria_id, etapa_id")
-        .eq("obra_id", obraSelecionada.id),
-      supabase.from("categorias").select("id, nome").order("nome"),
-      supabase
-        .from("etapas")
-        .select("id, nome, valor_orcado")
-        .eq("obra_id", obraSelecionada.id)
-        .order("ordem"),
-    ]);
+  const [
+    { data: obra },
+    { data: despesas },
+    { data: categorias },
+    { data: etapasProprias },
+    { data: materiaisCatalogo },
+  ] = await Promise.all([
+    supabase
+      .from("obras")
+      .select("id, nome, orcamento_total")
+      .eq("id", obraSelecionada.id)
+      .single(),
+    supabase
+      .from("despesas")
+      .select("valor, categoria_id, etapa_id, material_id, data")
+      .eq("obra_id", obraSelecionada.id),
+    supabase.from("categorias").select("id, nome").order("nome"),
+    supabase
+      .from("etapas")
+      .select("id, nome, valor_orcado")
+      .eq("obra_id", obraSelecionada.id)
+      .order("ordem"),
+    supabase.from("materiais").select("id, nome"),
+  ]);
 
   let etapasCatalogo = etapasProprias ?? [];
   if (etapasCatalogo.length === 0) {
@@ -134,6 +208,16 @@ export async function getDashboardData(
     gastoTotal
   );
 
+  const materialBreakdown = agruparMateriais(
+    (despesas ?? []).map((d) => ({ valor: d.valor, material_id: d.material_id })),
+    materiaisCatalogo ?? [],
+    gastoTotal
+  );
+
+  const tendenciaMensal = agruparPorMes(
+    (despesas ?? []).map((d) => ({ valor: d.valor, data: d.data }))
+  );
+
   return {
     obras: listaObras,
     obraAtual: {
@@ -147,5 +231,7 @@ export async function getDashboardData(
     },
     categorias: categoriaBreakdown,
     etapas: etapaBreakdown,
+    materiais: materialBreakdown,
+    tendenciaMensal,
   };
 }

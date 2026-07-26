@@ -1,7 +1,7 @@
 import Link from "next/link";
 import { getDashboardData } from "@/lib/dashboard/queries";
 import { formatBRL } from "@/lib/conversation/format";
-import { getCategoriaIcon, getEtapaIcon } from "@/lib/dashboard/icons";
+import { getCategoriaIcon, getEtapaIcon, getMaterialIcon } from "@/lib/dashboard/icons";
 import { ObraSelector } from "./obra-selector";
 import { BreakdownList } from "./breakdown-list";
 import { GastoPorCategoriaChart } from "./charts/gasto-por-categoria-chart";
@@ -79,7 +79,11 @@ export default async function DashboardPage({
         <TendenciaMensalChart pontos={data.tendenciaMensal} />
       </ChartCard>
 
-      <div className="grid grid-cols-1 gap-6 lg:grid-cols-2">
+      <ChartCard titulo="Gasto por Material">
+        <GastoPorCategoriaChart itens={data.materiais} />
+      </ChartCard>
+
+      <div className="grid grid-cols-1 gap-6 lg:grid-cols-3">
         <BreakdownList
           titulo="Categorias"
           itens={data.categorias}
@@ -89,6 +93,11 @@ export default async function DashboardPage({
           titulo="Etapas"
           itens={data.etapas}
           getIcon={getEtapaIcon}
+        />
+        <BreakdownList
+          titulo="Materiais"
+          itens={data.materiais}
+          getIcon={getMaterialIcon}
         />
       </div>
     </div>

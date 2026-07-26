@@ -76,6 +76,24 @@ export async function sendListMateriais(to: string) {
   });
 }
 
+export async function sendListMateriaisParaDespesa(to: string) {
+  const materiais = (await listMateriais()).slice(0, 9);
+  await sendList(to, {
+    headerText: "Qual material?",
+    bodyText:
+      "Escolha o material já cadastrado, ou toque em '+ Novo Material' pra cadastrar um novo (seja específico: tipo, diâmetro, etc.)",
+    buttonText: "Ver Materiais",
+    sections: [
+      {
+        rows: [
+          ...materiais.map((m) => ({ id: `material:${m.id}`, title: m.nome })),
+          { id: "material:novo", title: "+ Novo Material" },
+        ],
+      },
+    ],
+  });
+}
+
 export async function sendListDespesasRecentes(to: string) {
   const despesas = await listDespesasRecentes(10);
   await sendList(to, {
