@@ -3,6 +3,8 @@ import { sendText, sendButtons } from "@/lib/whatsapp/messages";
 import { getSession, saveSession, resetSession, type Session } from "@/lib/whatsapp/session";
 import { downloadWhatsAppMedia } from "@/lib/whatsapp/media";
 import { extractInvoiceData, type InvoiceItem } from "@/lib/gemini/extractInvoice";
+import { extractOrcamentoData, type OrcamentoEtapa } from "@/lib/gemini/extractOrcamento";
+import { extractSpreadsheetAsText } from "@/lib/orcamento/parseSpreadsheet";
 import { formatBRL, parseValorBR } from "./format";
 import { ESTADOS, MENU_IDS, COMANDOS_CANCELAR } from "./states";
 import { sendMenuPrincipal } from "./menu";
@@ -20,7 +22,13 @@ import {
   findCategoriaMaterial,
   findOrCreateMaterial,
   findOrCreateFornecedorPorNota,
+  upsertEtapasDeObra,
 } from "./queries";
+
+const MIME_TYPES_PLANILHA = [
+  "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+  "application/vnd.ms-excel",
+];
 
 type Dados = {
   valor?: number;
@@ -37,6 +45,9 @@ type Dados = {
   fornecedorNome?: string;
   notaItens?: InvoiceItem[];
   notaValorTotal?: number | null;
+
+  orcamentoEtapas?: OrcamentoEtapa[];
+  orcamentoValorTotal?: number | null;
 };
 
 function idSemPrefixo(replyId: string | null, prefixo: string): string | null {
@@ -48,6 +59,9 @@ export async function handleIncomingMessage(message: IncomingMessage) {
   const { from } = message;
 
   if (message.media) {
+    if (MIME_TYPES_PLANILHA.includes(message.media.mimeType)) {
+      return handleOrcamentoRecebido(from, message.media);
+    }
     return handleNotaFiscalRecebida(from, message.media);
   }
 
@@ -105,6 +119,11 @@ export async function handleIncomingMessage(message: IncomingMessage) {
       return handleNotaAguardandoEtapa(from, message, session);
     case ESTADOS.NOTA_CONFIRMACAO:
       return handleNotaConfirmacao(from, message, session);
+
+    case ESTADOS.ORCAMENTO_AGUARDANDO_OBRA:
+      return handleOrcamentoAguardandoObra(from, message, session);
+    case ESTADOS.ORCAMENTO_CONFIRMACAO:
+      return handleOrcamentoConfirmacao(from, message, session);
 
     default:
       await resetSession(from);
@@ -263,7 +282,7 @@ async function handleDespesaCategoria(
     categoriaNome: categoria.nome,
   };
   await saveSession(from, ESTADOS.DESPESA_ETAPA, dados);
-  await sendListEtapas(from);
+  await sendListEtapas(from, dados.obraId!);
 }
 
 async function handleDespesaEtapa(
@@ -274,7 +293,7 @@ async function handleDespesaEtapa(
   const etapaId = idSemPrefixo(message.replyId, "etapa:");
   const etapa = etapaId ? await findEtapaById(etapaId) : null;
   if (!etapa) {
-    await sendListEtapas(from);
+    await sendListEtapas(from, (session.dados_coletados as Dados).obraId!);
     return;
   }
 
@@ -570,7 +589,7 @@ async function handleNotaAguardandoObra(
     obraNome: obra.nome,
   };
   await saveSession(from, ESTADOS.NOTA_AGUARDANDO_ETAPA, dados);
-  await sendListEtapas(from);
+  await sendListEtapas(from, dados.obraId!);
 }
 
 async function handleNotaAguardandoEtapa(
@@ -581,7 +600,7 @@ async function handleNotaAguardandoEtapa(
   const etapaId = idSemPrefixo(message.replyId, "etapa:");
   const etapa = etapaId ? await findEtapaById(etapaId) : null;
   if (!etapa) {
-    await sendListEtapas(from);
+    await sendListEtapas(from, (session.dados_coletados as Dados).obraId!);
     return;
   }
 
@@ -661,6 +680,126 @@ async function handleNotaConfirmacao(
   await sendText(
     from,
     `✅ Nota registrada! ${dados.notaItens?.length ?? 0} itens lançados na obra "${dados.obraNome}".`
+  );
+  await resetSession(from);
+  await sendMenuPrincipal(from);
+}
+
+// ---------- Orçamento (planilha) ----------
+
+async function handleOrcamentoRecebido(from: string, media: IncomingMedia) {
+  await sendText(from, "📊 Recebi a planilha de orçamento, analisando...");
+
+  let orcamento;
+  try {
+    const { buffer } = await downloadWhatsAppMedia(media.id);
+    const texto = extractSpreadsheetAsText(buffer);
+    orcamento = await extractOrcamentoData(texto);
+  } catch (error) {
+    console.error("Erro ao processar orçamento:", error);
+    orcamento = null;
+  }
+
+  if (!orcamento || orcamento.etapas.length === 0) {
+    await sendText(
+      from,
+      "Não consegui identificar as etapas nessa planilha. Confira se ela tem um resumo por etapa com os valores totais."
+    );
+    await resetSession(from);
+    await sendMenuPrincipal(from);
+    return;
+  }
+
+  const obras = await listObrasAtivas();
+  if (obras.length === 0) {
+    await sendText(
+      from,
+      "Você ainda não tem nenhuma obra cadastrada. Cadastre uma obra antes de importar um orçamento."
+    );
+    await resetSession(from);
+    await sendMenuPrincipal(from);
+    return;
+  }
+
+  const dados: Dados = {
+    orcamentoEtapas: orcamento.etapas,
+    orcamentoValorTotal: orcamento.valorTotal,
+  };
+
+  await saveSession(from, ESTADOS.ORCAMENTO_AGUARDANDO_OBRA, dados);
+  await sendText(
+    from,
+    `Encontrei ${orcamento.etapas.length} etapas nesse orçamento. Para qual obra devo importar?`
+  );
+  await sendListObras(from);
+}
+
+async function handleOrcamentoAguardandoObra(
+  from: string,
+  message: IncomingMessage,
+  session: Session
+) {
+  const obraId = idSemPrefixo(message.replyId, "obra:");
+  const obra = obraId ? await findObraById(obraId) : null;
+  if (!obra) {
+    await sendListObras(from);
+    return;
+  }
+
+  const dados: Dados = {
+    ...session.dados_coletados,
+    obraId: obra.id,
+    obraNome: obra.nome,
+  };
+  await saveSession(from, ESTADOS.ORCAMENTO_CONFIRMACAO, dados);
+  await enviarConfirmacaoOrcamento(from, dados);
+}
+
+async function enviarConfirmacaoOrcamento(from: string, dados: Dados) {
+  const etapas = dados.orcamentoEtapas ?? [];
+  const linhasEtapas = etapas
+    .slice(0, 10)
+    .map((e) => `• ${e.nome} — ${formatBRL(e.valorOrcado)}`)
+    .join("\n");
+  const somaEtapas = etapas.reduce((soma, e) => soma + e.valorOrcado, 0);
+  const extra = etapas.length > 10 ? `\n... e mais ${etapas.length - 10} etapas` : "";
+
+  const texto =
+    `*Confirme a importação do orçamento:*\n` +
+    `🏗️ Obra: ${dados.obraNome}\n\n` +
+    `*Etapas:*\n${linhasEtapas}${extra}\n\n` +
+    `💰 Orçamento Total: ${formatBRL(dados.orcamentoValorTotal ?? somaEtapas)}\n\n` +
+    `⚠️ Isso substitui o orçamento e as etapas atuais dessa obra.`;
+
+  await sendButtons(from, texto, [
+    { id: "confirm:sim", title: "Confirmar" },
+    { id: "confirm:nao", title: "Cancelar" },
+  ]);
+}
+
+async function handleOrcamentoConfirmacao(
+  from: string,
+  message: IncomingMessage,
+  session: Session
+) {
+  if (message.replyId === "confirm:nao") {
+    await sendText(from, "Importação do orçamento cancelada.");
+    await resetSession(from);
+    await sendMenuPrincipal(from);
+    return;
+  }
+
+  if (message.replyId !== "confirm:sim") {
+    await enviarConfirmacaoOrcamento(from, session.dados_coletados as Dados);
+    return;
+  }
+
+  const dados = session.dados_coletados as Dados;
+  await upsertEtapasDeObra(dados.obraId!, dados.orcamentoEtapas ?? []);
+
+  await sendText(
+    from,
+    `✅ Orçamento importado! ${dados.orcamentoEtapas?.length ?? 0} etapas cadastradas na obra "${dados.obraNome}".`
   );
   await resetSession(from);
   await sendMenuPrincipal(from);

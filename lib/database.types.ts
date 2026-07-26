@@ -36,15 +36,32 @@ export interface Database {
         Relationships: [];
       };
       etapas: {
-        Row: { id: string; nome: string; ordem: number; created_at: string };
+        Row: {
+          id: string;
+          nome: string;
+          ordem: number;
+          obra_id: string | null;
+          valor_orcado: number | null;
+          created_at: string;
+        };
         Insert: {
           id?: string;
           nome: string;
           ordem?: number;
+          obra_id?: string | null;
+          valor_orcado?: number | null;
           created_at?: string;
         };
         Update: Partial<Database["public"]["Tables"]["etapas"]["Insert"]>;
-        Relationships: [];
+        Relationships: [
+          {
+            foreignKeyName: "etapas_obra_id_fkey";
+            columns: ["obra_id"];
+            isOneToOne: false;
+            referencedRelation: "obras";
+            referencedColumns: ["id"];
+          },
+        ];
       };
       materiais: {
         Row: {

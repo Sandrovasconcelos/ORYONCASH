@@ -31,6 +31,62 @@ export async function listEtapas() {
   return data ?? [];
 }
 
+/**
+ * Etapas especificas da obra (importadas de um orcamento), com fallback
+ * para o catalogo generico (obra_id nulo) quando a obra nao tem etapas
+ * proprias cadastradas.
+ */
+export async function listEtapasParaObra(obraId: string) {
+  const supabase = createAdminClient();
+  const { data: proprias } = await supabase
+    .from("etapas")
+    .select("id, nome")
+    .eq("obra_id", obraId)
+    .order("ordem")
+    .limit(10);
+
+  if (proprias && proprias.length > 0) return proprias;
+
+  const { data: genericas } = await supabase
+    .from("etapas")
+    .select("id, nome")
+    .is("obra_id", null)
+    .order("ordem")
+    .limit(10);
+  return genericas ?? [];
+}
+
+/**
+ * Grava as etapas extraidas de um orcamento importado (dashboard ou
+ * WhatsApp) para uma obra especifica, e atualiza o orcamento_total da
+ * obra com a soma dos valores orcados.
+ */
+export async function upsertEtapasDeObra(
+  obraId: string,
+  etapas: { nome: string; valorOrcado: number }[]
+) {
+  const supabase = createAdminClient();
+
+  for (let i = 0; i < etapas.length; i++) {
+    const etapa = etapas[i];
+    await supabase.from("etapas").upsert(
+      {
+        obra_id: obraId,
+        nome: etapa.nome,
+        ordem: i + 1,
+        valor_orcado: etapa.valorOrcado,
+      },
+      { onConflict: "obra_id,nome" }
+    );
+  }
+
+  const valorTotal = etapas.reduce((soma, e) => soma + e.valorOrcado, 0);
+  await supabase
+    .from("obras")
+    .update({ orcamento_total: valorTotal })
+    .eq("id", obraId);
+}
+
 export async function findObraById(id: string) {
   const supabase = createAdminClient();
   const { data } = await supabase

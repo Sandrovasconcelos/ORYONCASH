@@ -1,5 +1,5 @@
 import { sendList } from "@/lib/whatsapp/messages";
-import { listObrasAtivas, listCategorias, listEtapas } from "./queries";
+import { listObrasAtivas, listCategorias, listEtapasParaObra } from "./queries";
 
 export async function sendListObras(to: string) {
   const obras = await listObrasAtivas();
@@ -27,8 +27,8 @@ export async function sendListCategorias(to: string) {
   });
 }
 
-export async function sendListEtapas(to: string) {
-  const etapas = await listEtapas();
+export async function sendListEtapas(to: string, obraId: string) {
+  const etapas = await listEtapasParaObra(obraId);
   await sendList(to, {
     headerText: "Etapa da Obra",
     bodyText: "Em qual etapa da construção ocorreu esta despesa? Escolha uma opção.",

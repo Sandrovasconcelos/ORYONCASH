@@ -23,6 +23,9 @@ export const ESTADOS = {
   NOTA_AGUARDANDO_OBRA: "nota_aguardando_obra",
   NOTA_AGUARDANDO_ETAPA: "nota_aguardando_etapa",
   NOTA_CONFIRMACAO: "nota_confirmacao",
+
+  ORCAMENTO_AGUARDANDO_OBRA: "orcamento_aguardando_obra",
+  ORCAMENTO_CONFIRMACAO: "orcamento_confirmacao",
 } as const;
 
 export const MENU_IDS = {

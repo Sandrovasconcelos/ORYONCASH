@@ -1,6 +1,7 @@
 import { createClient } from "@/lib/supabase/server";
 import { formatBRL } from "@/lib/conversation/format";
 import { createObraAction } from "../actions";
+import { ImportarOrcamentoForm } from "./importar-orcamento-form";
 
 export default async function ObrasPage() {
   const supabase = await createClient();
@@ -59,37 +60,41 @@ export default async function ObrasPage() {
         </table>
       </div>
 
-      <form
-        action={createObraAction}
-        className="rounded-2xl border border-zinc-200 dark:border-zinc-800 bg-white dark:bg-zinc-950 p-5 flex flex-col gap-4 max-w-md"
-      >
-        <p className="text-sm font-medium text-zinc-900 dark:text-zinc-50">
-          Nova Obra
-        </p>
-        <label className="flex flex-col gap-1 text-sm text-zinc-700 dark:text-zinc-300">
-          Nome
-          <input
-            name="nome"
-            required
-            className="rounded-lg border border-zinc-300 dark:border-zinc-700 bg-transparent px-3 py-2 text-sm outline-none focus:border-blue-500"
-          />
-        </label>
-        <label className="flex flex-col gap-1 text-sm text-zinc-700 dark:text-zinc-300">
-          Orçamento Total
-          <input
-            name="orcamento"
-            placeholder="Ex: 500000,00"
-            required
-            className="rounded-lg border border-zinc-300 dark:border-zinc-700 bg-transparent px-3 py-2 text-sm outline-none focus:border-blue-500"
-          />
-        </label>
-        <button
-          type="submit"
-          className="rounded-lg bg-blue-600 px-4 py-2 text-sm font-medium text-white hover:bg-blue-700"
+      <div className="flex flex-col gap-6 sm:flex-row sm:flex-wrap">
+        <form
+          action={createObraAction}
+          className="rounded-2xl border border-zinc-200 dark:border-zinc-800 bg-white dark:bg-zinc-950 p-5 flex flex-col gap-4 max-w-md"
         >
-          Cadastrar
-        </button>
-      </form>
+          <p className="text-sm font-medium text-zinc-900 dark:text-zinc-50">
+            Nova Obra
+          </p>
+          <label className="flex flex-col gap-1 text-sm text-zinc-700 dark:text-zinc-300">
+            Nome
+            <input
+              name="nome"
+              required
+              className="rounded-lg border border-zinc-300 dark:border-zinc-700 bg-transparent px-3 py-2 text-sm outline-none focus:border-blue-500"
+            />
+          </label>
+          <label className="flex flex-col gap-1 text-sm text-zinc-700 dark:text-zinc-300">
+            Orçamento Total
+            <input
+              name="orcamento"
+              placeholder="Ex: 500000,00"
+              required
+              className="rounded-lg border border-zinc-300 dark:border-zinc-700 bg-transparent px-3 py-2 text-sm outline-none focus:border-blue-500"
+            />
+          </label>
+          <button
+            type="submit"
+            className="rounded-lg bg-blue-600 px-4 py-2 text-sm font-medium text-white hover:bg-blue-700"
+          >
+            Cadastrar
+          </button>
+        </form>
+
+        <ImportarOrcamentoForm obras={obras ?? []} />
+      </div>
     </div>
   );
 }

@@ -10,7 +10,10 @@ export type CategoriaBreakdown = {
   maiorGasto: boolean;
 };
 
-export type EtapaBreakdown = CategoriaBreakdown;
+export type EtapaBreakdown = CategoriaBreakdown & {
+  valorOrcado: number | null;
+  estourado: boolean;
+};
 
 export type DashboardData = {
   obras: ObraResumida[];
@@ -51,6 +54,24 @@ function agruparPorId(
   });
 }
 
+function agruparEtapas(
+  despesas: { valor: number; ref_id: string | null }[],
+  catalogo: { id: string; nome: string; valor_orcado: number | null }[],
+  gastoTotal: number
+): EtapaBreakdown[] {
+  const base = agruparPorId(despesas, catalogo, gastoTotal);
+  const orcadoPorId = new Map(catalogo.map((c) => [c.id, c.valor_orcado]));
+
+  return base.map((item) => {
+    const valorOrcado = orcadoPorId.get(item.id) ?? null;
+    return {
+      ...item,
+      valorOrcado,
+      estourado: valorOrcado !== null && valorOrcado > 0 && item.total > valorOrcado,
+    };
+  });
+}
+
 export async function getDashboardData(
   obraIdSolicitada: string | null
 ): Promise<DashboardData> {
@@ -69,7 +90,7 @@ export async function getDashboardData(
     return { obras: listaObras, obraAtual: null, categorias: [], etapas: [] };
   }
 
-  const [{ data: obra }, { data: despesas }, { data: categorias }, { data: etapas }] =
+  const [{ data: obra }, { data: despesas }, { data: categorias }, { data: etapasProprias }] =
     await Promise.all([
       supabase
         .from("obras")
@@ -81,8 +102,22 @@ export async function getDashboardData(
         .select("valor, categoria_id, etapa_id")
         .eq("obra_id", obraSelecionada.id),
       supabase.from("categorias").select("id, nome").order("nome"),
-      supabase.from("etapas").select("id, nome").order("ordem"),
+      supabase
+        .from("etapas")
+        .select("id, nome, valor_orcado")
+        .eq("obra_id", obraSelecionada.id)
+        .order("ordem"),
     ]);
+
+  let etapasCatalogo = etapasProprias ?? [];
+  if (etapasCatalogo.length === 0) {
+    const { data: etapasGenericas } = await supabase
+      .from("etapas")
+      .select("id, nome, valor_orcado")
+      .is("obra_id", null)
+      .order("ordem");
+    etapasCatalogo = etapasGenericas ?? [];
+  }
 
   const gastoTotal = (despesas ?? []).reduce((sum, d) => sum + d.valor, 0);
   const orcamentoTotal = obra?.orcamento_total ?? 0;
@@ -93,9 +128,9 @@ export async function getDashboardData(
     gastoTotal
   );
 
-  const etapaBreakdown = agruparPorId(
+  const etapaBreakdown = agruparEtapas(
     (despesas ?? []).map((d) => ({ valor: d.valor, ref_id: d.etapa_id })),
-    etapas ?? [],
+    etapasCatalogo,
     gastoTotal
   );
 
