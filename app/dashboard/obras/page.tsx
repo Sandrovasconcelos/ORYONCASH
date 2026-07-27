@@ -205,10 +205,18 @@ export default async function ObrasPage() {
                   return (
                     <tr key={obra.id} className="align-middle hover:bg-brand-gray-100/55">
                       <td className="px-5 py-4">
-                        <p className="font-semibold text-brand-black">{obra.nome}</p>
-                        <p className="mt-1 text-xs text-brand-gray-500">
-                          Criada em {new Date(obra.created_at).toLocaleDateString("pt-BR")}
-                        </p>
+                        <Link
+                          href={`/dashboard/despesas?obra=${obra.id}`}
+                          className="group inline-block"
+                          title="Ver lançamentos desta obra"
+                        >
+                          <p className="font-semibold text-brand-black group-hover:text-brand-red group-hover:underline">
+                            {obra.nome}
+                          </p>
+                          <p className="mt-1 text-xs text-brand-gray-500">
+                            Criada em {new Date(obra.created_at).toLocaleDateString("pt-BR")}
+                          </p>
+                        </Link>
                       </td>
                       <td className="px-5 py-4 text-brand-gray-700">
                         {formatBRL(obra.orcamento_total)}
@@ -387,14 +395,6 @@ export default async function ObrasPage() {
                               </div>
                             </div>
                           </CadastroModal>
-                          <Link
-                            href={`/dashboard/despesas?obra=${obra.id}`}
-                            aria-label="Ver lançamentos"
-                            title="Ver lançamentos"
-                            className="inline-flex h-10 w-10 items-center justify-center rounded-brand-sm border border-brand-gray-300 bg-white text-brand-gray-700 hover:border-brand-red/40 hover:text-brand-red"
-                          >
-                            <ActionIcon name="receipt" />
-                          </Link>
                           {lixeiraIndisponivel ? (
                             <span className="rounded-brand-sm border border-brand-gray-300 bg-brand-gray-100 px-4 py-2 text-xs font-extrabold text-brand-gray-500">
                               Lixeira pendente

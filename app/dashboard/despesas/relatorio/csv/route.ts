@@ -25,11 +25,13 @@ export async function GET(request: NextRequest) {
   const categoria = params.get("categoria");
   const etapa = params.get("etapa");
   const material = params.get("material");
+  const fornecedor = params.get("fornecedor");
 
   if (obra) query = query.eq("obra_id", obra);
   if (categoria) query = query.eq("categoria_id", categoria);
   if (etapa) query = query.eq("etapa_id", etapa);
   if (material) query = query.eq("material_id", material);
+  if (fornecedor) query = query.eq("fornecedor_id", fornecedor);
 
   const { data, error } = await query;
   if (error) {

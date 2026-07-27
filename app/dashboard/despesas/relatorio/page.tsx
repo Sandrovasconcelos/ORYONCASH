@@ -13,6 +13,7 @@ type Filtros = {
   categoria?: string;
   etapa?: string;
   material?: string;
+  fornecedor?: string;
 };
 
 function nomeDe(relacao: unknown): string {
@@ -131,23 +132,28 @@ export default async function RelatorioDespesasPage({
   if (params.categoria) query = query.eq("categoria_id", params.categoria);
   if (params.etapa) query = query.eq("etapa_id", params.etapa);
   if (params.material) query = query.eq("material_id", params.material);
+  if (params.fornecedor) query = query.eq("fornecedor_id", params.fornecedor);
 
   const { data } = await query;
 
-  const [obraFiltro, categoriaFiltro, etapaFiltro, materialFiltro] = await Promise.all([
-    params.obra
-      ? supabase.from("obras").select("nome").eq("id", params.obra).maybeSingle()
-      : Promise.resolve({ data: null }),
-    params.categoria
-      ? supabase.from("categorias").select("nome").eq("id", params.categoria).maybeSingle()
-      : Promise.resolve({ data: null }),
-    params.etapa
-      ? supabase.from("etapas").select("nome").eq("id", params.etapa).maybeSingle()
-      : Promise.resolve({ data: null }),
-    params.material
-      ? supabase.from("materiais").select("nome").eq("id", params.material).maybeSingle()
-      : Promise.resolve({ data: null }),
-  ]);
+  const [obraFiltro, categoriaFiltro, etapaFiltro, materialFiltro, fornecedorFiltro] =
+    await Promise.all([
+      params.obra
+        ? supabase.from("obras").select("nome").eq("id", params.obra).maybeSingle()
+        : Promise.resolve({ data: null }),
+      params.categoria
+        ? supabase.from("categorias").select("nome").eq("id", params.categoria).maybeSingle()
+        : Promise.resolve({ data: null }),
+      params.etapa
+        ? supabase.from("etapas").select("nome").eq("id", params.etapa).maybeSingle()
+        : Promise.resolve({ data: null }),
+      params.material
+        ? supabase.from("materiais").select("nome").eq("id", params.material).maybeSingle()
+        : Promise.resolve({ data: null }),
+      params.fornecedor
+        ? supabase.from("fornecedores").select("nome").eq("id", params.fornecedor).maybeSingle()
+        : Promise.resolve({ data: null }),
+    ]);
 
   const despesas = data ?? [];
   const totalGasto = despesas.reduce((soma, d) => soma + d.valor, 0);
@@ -187,6 +193,12 @@ export default async function RelatorioDespesasPage({
       ? {
           rotulo: "Material",
           valor: (materialFiltro.data as { nome: string } | null)?.nome ?? "-",
+        }
+      : null,
+    params.fornecedor
+      ? {
+          rotulo: "Fornecedor",
+          valor: (fornecedorFiltro.data as { nome: string } | null)?.nome ?? "-",
         }
       : null,
   ].filter(Boolean) as { rotulo: string; valor: string }[];

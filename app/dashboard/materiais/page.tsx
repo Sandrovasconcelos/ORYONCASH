@@ -141,7 +141,13 @@ export default async function MateriaisPage() {
                       </span>
                     </td>
                     <td className="px-5 py-4">
-                      <p className="font-semibold text-brand-black">{material.nome}</p>
+                      <Link
+                        href={`/dashboard/despesas?material=${material.id}`}
+                        className="font-semibold text-brand-black hover:text-brand-red hover:underline"
+                        title="Ver lançamentos deste material"
+                      >
+                        {material.nome}
+                      </Link>
                     </td>
                     <td className="px-5 py-4">
                       <span className="text-brand-gray-700">

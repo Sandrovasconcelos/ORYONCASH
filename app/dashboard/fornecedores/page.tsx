@@ -1,4 +1,5 @@
-﻿import { createAdminClient } from "@/lib/supabase/admin";
+﻿import Link from "next/link";
+import { createAdminClient } from "@/lib/supabase/admin";
 import {
   createFornecedorAction,
   deleteFornecedorAction,
@@ -102,7 +103,13 @@ export default async function FornecedoresPage() {
                 return (
                   <tr key={fornecedor.id} className="align-middle hover:bg-brand-gray-100/55">
                     <td className="px-5 py-4">
-                      <p className="font-semibold text-brand-black">{fornecedor.nome}</p>
+                      <Link
+                        href={`/dashboard/despesas?fornecedor=${fornecedor.id}`}
+                        className="font-semibold text-brand-black hover:text-brand-red hover:underline"
+                        title="Ver lançamentos deste fornecedor"
+                      >
+                        {fornecedor.nome}
+                      </Link>
                     </td>
                     <td className="px-5 py-4 text-brand-gray-700">
                       {fornecedor.contato || "—"}

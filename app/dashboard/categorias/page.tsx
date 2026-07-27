@@ -1,4 +1,5 @@
-﻿import { createAdminClient } from "@/lib/supabase/admin";
+﻿import Link from "next/link";
+import { createAdminClient } from "@/lib/supabase/admin";
 import {
   createCategoriaAction,
   deleteCategoriaAction,
@@ -105,7 +106,13 @@ export default async function CategoriasPage() {
               {lista.map((categoria) => (
                 <tr key={categoria.id} className="align-middle hover:bg-brand-gray-100/55">
                   <td className="px-5 py-4">
-                    <p className="font-semibold text-brand-black">{categoria.nome}</p>
+                    <Link
+                      href={`/dashboard/despesas?categoria=${categoria.id}`}
+                      className="font-semibold text-brand-black hover:text-brand-red hover:underline"
+                      title="Ver lançamentos desta categoria"
+                    >
+                      {categoria.nome}
+                    </Link>
                   </td>
                   <td className="px-5 py-4">
                     <Badge>{materiaisPorCategoria.get(categoria.id) ?? 0}</Badge>

@@ -45,6 +45,7 @@ export default async function DespesasPage({
     categoria?: string;
     etapa?: string;
     material?: string;
+    fornecedor?: string;
     busca?: string;
   }>;
 }) {
@@ -78,6 +79,7 @@ export default async function DespesasPage({
       if (params.categoria) query = query.eq("categoria_id", params.categoria);
       if (params.etapa) query = query.eq("etapa_id", params.etapa);
       if (params.material) query = query.eq("material_id", params.material);
+      if (params.fornecedor) query = query.eq("fornecedor_id", params.fornecedor);
       return query;
     })(),
   ]);
