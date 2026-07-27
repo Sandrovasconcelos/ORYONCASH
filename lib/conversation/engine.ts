@@ -38,12 +38,16 @@ import {
   deleteDespesaPorId,
   listDespesasRecentes,
   listMateriais,
+  listMateriaisSemelhantes,
   findMaterialById,
   deleteObraPorId,
   deleteMaterialPorId,
   deleteFornecedorPorId,
   listFornecedores,
+  uploadComprovanteWhatsApp,
+  vincularComprovanteDespesa,
 } from "./queries";
+import { registrarAtividade, getNomePorTelefone } from "@/lib/atividades";
 
 const MIME_TYPES_PLANILHA = [
   "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
@@ -79,13 +83,43 @@ type Dados = {
 
   orcamentoEtapas?: OrcamentoEtapa[];
   orcamentoValorTotal?: number | null;
+  comprovante?: {
+    bucket: string;
+    path: string;
+    mimeType: string;
+    tipoDocumento?: "documento_cobranca" | "comprovante_pagamento" | "outro";
+    mediaId?: string | null;
+    nomeArquivo?: string | null;
+    contaOrigemBanco?: string | null;
+    contaOrigemTitular?: string | null;
+    contaOrigemDocumento?: string | null;
+    contaOrigemAgencia?: string | null;
+    contaOrigemNumero?: string | null;
+    metodoPagamento?: string | null;
+  };
 
   despesaId?: string;
+  despesaIdsPagamento?: string[];
   materialId?: string;
+  materialNomePendente?: string;
 
   tipoRemover?: "obra" | "material" | "fornecedor";
   itemRemoverId?: string;
   itemRemoverNome?: string;
+
+  despesaAntes?: {
+    id: string;
+    obraId: string;
+    obraNome: string;
+    categoriaId: string;
+    categoriaNome: string;
+    etapaId: string | null;
+    etapaNome: string;
+    fornecedorId: string | null;
+    fornecedorNome: string | null;
+    valor: number;
+    descricao: string | null;
+  };
 };
 
 function idSemPrefixo(replyId: string | null, prefixo: string): string | null {
@@ -93,29 +127,77 @@ function idSemPrefixo(replyId: string | null, prefixo: string): string | null {
   return replyId.slice(prefixo.length);
 }
 
+const MODELOS_MATERIAL: Record<string, string> = {
+  cabo25: "Cabo eletrico 2,5mm",
+  cabo40: "Cabo eletrico 4mm",
+  cabo60: "Cabo eletrico 6mm",
+  canoAgua50: "Cano PVC agua fria 50mm",
+  canoEsgoto100: "Cano PVC esgoto 100mm",
+  canoEsgoto75: "Cano PVC esgoto 75mm",
+};
+
+function modelosPorTexto(texto: string) {
+  const normalizado = texto
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .toLowerCase();
+
+  if (normalizado.includes("cabo")) {
+    return ["cabo25", "cabo40", "cabo60"];
+  }
+  if (normalizado.includes("cano") || normalizado.includes("tubo")) {
+    return ["canoAgua50", "canoEsgoto100", "canoEsgoto75"];
+  }
+  return [];
+}
+
+function isMenuReply(replyId: string | null): boolean {
+  return Boolean(
+    replyId && (Object.values(MENU_IDS) as string[]).includes(replyId)
+  );
+}
+
 export async function handleIncomingMessage(message: IncomingMessage) {
   const { from } = message;
+  const session = await getSession(from);
 
   if (message.media) {
+    if (session.estado_atual === ESTADOS.ANEXAR_PAGAMENTO_ARQUIVO) {
+      return handleAnexarPagamentoArquivo(from, message.media, session);
+    }
     if (MIME_TYPES_PLANILHA.includes(message.media.mimeType)) {
       return handleOrcamentoRecebido(from, message.media);
     }
     if (message.media.mimeType.startsWith("audio/")) {
       return handleAudioRecebido(from, message.media);
     }
-    return handleNotaFiscalRecebida(from, message.media);
+    return handleNotaFiscalRecebida(from, message.media, {
+      forcarNovaDespesa: true,
+    });
   }
 
   const textoNormalizado = message.text?.trim().toLowerCase();
 
   if (textoNormalizado && COMANDOS_CANCELAR.includes(textoNormalizado)) {
     await resetSession(from);
-    await sendText(from, "Ok, voltando ao menu principal.");
+    await sendText(from, "🏠 Ok, voltando ao menu principal.");
     await sendMenuPrincipal(from);
     return;
   }
 
-  const session = await getSession(from);
+  if (isMenuReply(message.replyId)) {
+    return handleMenu(from, message);
+  }
+
+  if (
+    session.estado_atual === ESTADOS.MENU &&
+    textoNormalizado &&
+    (textoNormalizado.includes("anexar pagamento") ||
+      textoNormalizado.includes("comprovante de pagamento") ||
+      textoNormalizado === "pagamento")
+  ) {
+    return iniciarAnexoPagamento(from);
+  }
 
   switch (session.estado_atual) {
     case ESTADOS.MENU:
@@ -139,6 +221,10 @@ export async function handleIncomingMessage(message: IncomingMessage) {
       return handleDespesaDescricaoTexto(from, message, session);
     case ESTADOS.DESPESA_CONFIRMACAO:
       return handleDespesaConfirmacao(from, message, session);
+    case ESTADOS.ANEXAR_PAGAMENTO_ARQUIVO:
+      return handleAnexarPagamentoTexto(from, message, session);
+    case ESTADOS.ANEXAR_PAGAMENTO_SELECIONANDO_LANCAMENTO:
+      return handleAnexarPagamentoSelecionandoLancamento(from, message, session);
 
     case ESTADOS.CADASTRO_OBRA_NOME:
       return handleCadastroObraNome(from, message);
@@ -184,6 +270,8 @@ export async function handleIncomingMessage(message: IncomingMessage) {
       return handleCorrigirCategoriaNova(from, message, session);
     case ESTADOS.CORRIGIR_ETAPA_NOVA:
       return handleCorrigirEtapaNova(from, message, session);
+    case ESTADOS.CORRIGIR_MATERIAL_NOVO:
+      return handleCorrigirMaterialNovo(from, message, session);
     case ESTADOS.CORRIGIR_FORNECEDOR_NOVO:
       return handleCorrigirFornecedorNovo(from, message, session);
     case ESTADOS.CORRIGIR_CONFIRMAR_EXCLUSAO:
@@ -208,19 +296,19 @@ async function handleMenu(from: string, message: IncomingMessage) {
   switch (message.replyId) {
     case MENU_IDS.REGISTRAR_DESPESA:
       await saveSession(from, ESTADOS.DESPESA_VALOR, {});
-      await sendText(from, "Qual o valor da despesa? (ex: 150,00)");
+      await sendText(from, "💰 Qual o valor da despesa? (ex: 150,00)");
       return;
     case MENU_IDS.CADASTRAR_OBRA:
       await saveSession(from, ESTADOS.CADASTRO_OBRA_NOME, {});
-      await sendText(from, "Qual o nome da obra?");
+      await sendText(from, "🏗️ Qual o nome da obra?");
       return;
     case MENU_IDS.CADASTRAR_MATERIAL:
       await saveSession(from, ESTADOS.CADASTRO_MATERIAL_NOME, {});
-      await sendText(from, "Qual o nome do material? (Ex: Cimento CP-II 50kg)");
+      await sendText(from, "📦 Qual o nome do material? (Ex: Cimento CP-II 50kg)");
       return;
     case MENU_IDS.CADASTRAR_FORNECEDOR:
       await saveSession(from, ESTADOS.CADASTRO_FORNECEDOR_NOME, {});
-      await sendText(from, "Qual o nome do fornecedor?");
+      await sendText(from, "🏢 Qual o nome do fornecedor?");
       return;
     case MENU_IDS.VER_RESUMO:
       await iniciarVerResumo(from);
@@ -242,7 +330,7 @@ async function iniciarVerResumo(from: string) {
   if (obras.length === 0) {
     await sendText(
       from,
-      "Você ainda não tem nenhuma obra cadastrada. Cadastre uma obra primeiro."
+      "📭 Você ainda não tem nenhuma obra cadastrada. Cadastre uma obra primeiro."
     );
     await resetSession(from);
     await sendMenuPrincipal(from);
@@ -263,7 +351,7 @@ async function iniciarVerResumo(from: string) {
 async function enviarResumoObra(from: string, obraId: string) {
   const resumo = await getObraResumo(obraId);
   if (!resumo) {
-    await sendText(from, "Não encontrei essa obra.");
+    await sendText(from, "🏗️ Não encontrei essa obra.");
     return;
   }
 
@@ -292,7 +380,7 @@ async function handleResumoObra(from: string, message: IncomingMessage) {
 
 async function handleDespesaValor(from: string, message: IncomingMessage) {
   if (!message.text) {
-    await sendText(from, "Por favor, digite o valor da despesa (ex: 150,00).");
+    await sendText(from, "💰 Por favor, digite o valor da despesa (ex: 150,00).");
     return;
   }
 
@@ -300,7 +388,7 @@ async function handleDespesaValor(from: string, message: IncomingMessage) {
   if (valor === null) {
     await sendText(
       from,
-      "Não entendi o valor. Digite apenas o número, ex: 150,00"
+      "💰 Não entendi o valor. Digite apenas o número, ex: 150,00"
     );
     return;
   }
@@ -309,7 +397,7 @@ async function handleDespesaValor(from: string, message: IncomingMessage) {
   if (obras.length === 0) {
     await sendText(
       from,
-      "Você ainda não tem nenhuma obra cadastrada. Cadastre uma obra antes de registrar despesas."
+      "📭 Você ainda não tem nenhuma obra cadastrada. Cadastre uma obra antes de registrar despesas."
     );
     await resetSession(from);
     await sendMenuPrincipal(from);
@@ -395,7 +483,7 @@ async function handleDespesaEtapa(
   }
 
   await saveSession(from, ESTADOS.DESPESA_DESCRICAO_PROMPT, dados);
-  await sendButtons(from, "Deseja adicionar uma descrição para esta despesa?", [
+  await sendButtons(from, "💸 Deseja adicionar uma descrição para esta despesa?", [
     { id: "desc:add", title: "Adicionar" },
     { id: "desc:skip", title: "Pular" },
   ]);
@@ -408,11 +496,44 @@ async function handleDespesaMaterial(
 ) {
   const dados = session.dados_coletados as Dados;
 
+  if (message.replyId === "material:novo_confirm" && dados.materialNomePendente) {
+    const material = await findOrCreateMaterial(
+      dados.materialNomePendente,
+      dados.categoriaId!
+    );
+    const novosDados: Dados = {
+      ...dados,
+      materialId: material.id,
+      descricao: material.nome,
+      materialNomePendente: undefined,
+    };
+    await saveSession(from, ESTADOS.DESPESA_CONFIRMACAO, novosDados);
+    await enviarConfirmacao(from, novosDados);
+    return;
+  }
+
+  const modeloId = idSemPrefixo(message.replyId, "material:modelo:");
+  if (modeloId && MODELOS_MATERIAL[modeloId]) {
+    const material = await findOrCreateMaterial(
+      MODELOS_MATERIAL[modeloId],
+      dados.categoriaId!
+    );
+    const novosDados: Dados = {
+      ...dados,
+      materialId: material.id,
+      descricao: material.nome,
+      materialNomePendente: undefined,
+    };
+    await saveSession(from, ESTADOS.DESPESA_CONFIRMACAO, novosDados);
+    await enviarConfirmacao(from, novosDados);
+    return;
+  }
+
   if (message.replyId === "material:novo") {
     await saveSession(from, ESTADOS.DESPESA_MATERIAL_NOVO, dados);
     await sendText(
       from,
-      "Qual o material? Seja específico (ex: Cano PVC água fria 50mm, Cano PVC esgoto 100mm, Cabo elétrico 2,5mm, Cimento CP-II 50kg):"
+      "📦 Qual o material? Seja específico (ex: Cano PVC água fria 50mm, Cano PVC esgoto 100mm, Cabo elétrico 2,5mm, Cimento CP-II 50kg):"
     );
     return;
   }
@@ -439,12 +560,51 @@ async function handleDespesaMaterialNovo(
   session: Session
 ) {
   if (!message.text) {
-    await sendText(from, "Digite o nome do material.");
+    await sendText(from, "📦 Digite o nome do material.");
     return;
   }
 
   const dados = session.dados_coletados as Dados;
-  const material = await findOrCreateMaterial(message.text, dados.categoriaId!);
+  const nome = message.text.trim();
+  const sugestoes = await listMateriaisSemelhantes(nome, 2);
+
+  if (sugestoes.length > 0) {
+    await saveSession(from, ESTADOS.DESPESA_MATERIAL, {
+      ...dados,
+      materialNomePendente: nome,
+    });
+    await sendButtons(
+      from,
+      `📦 Encontrei material parecido com "${nome}". Quer usar um existente ou cadastrar esse novo?`,
+      [
+        ...sugestoes.map((m) => ({ id: `material:${m.id}`, title: m.nome.slice(0, 20) })),
+        { id: "material:novo_confirm", title: "Cadastrar novo" },
+      ]
+    );
+    return;
+  }
+
+  const modelos = modelosPorTexto(nome);
+  if (modelos.length > 0) {
+    await saveSession(from, ESTADOS.DESPESA_MATERIAL, {
+      ...dados,
+      materialNomePendente: nome,
+    });
+    await sendButtons(
+      from,
+      `👉 Escolha um tipo comum para "${nome}" ou cadastre exatamente como voce digitou.`,
+      [
+        ...modelos.slice(0, 2).map((id) => ({
+          id: `material:modelo:${id}`,
+          title: MODELOS_MATERIAL[id].slice(0, 20),
+        })),
+        { id: "material:novo_confirm", title: "Cadastrar texto" },
+      ]
+    );
+    return;
+  }
+
+  const material = await findOrCreateMaterial(nome, dados.categoriaId!);
 
   const novosDados: Dados = {
     ...dados,
@@ -464,7 +624,7 @@ async function handleDespesaDescricaoPrompt(
     await saveSession(from, ESTADOS.DESPESA_DESCRICAO_TEXTO, session.dados_coletados);
     await sendText(
       from,
-      "Digite a descrição da despesa:\n(Ex: Compra de cimento, Pagamento pedreiro, etc.)"
+      "💳 Digite a descrição da despesa:\n(Ex: Compra de cimento, Pagamento pedreiro, etc.)"
     );
     return;
   }
@@ -476,7 +636,7 @@ async function handleDespesaDescricaoPrompt(
     return;
   }
 
-  await sendButtons(from, "Deseja adicionar uma descrição para esta despesa?", [
+  await sendButtons(from, "💸 Deseja adicionar uma descrição para esta despesa?", [
     { id: "desc:add", title: "Adicionar" },
     { id: "desc:skip", title: "Pular" },
   ]);
@@ -488,7 +648,7 @@ async function handleDespesaDescricaoTexto(
   session: Session
 ) {
   if (!message.text) {
-    await sendText(from, "Digite a descrição da despesa.");
+    await sendText(from, "💸 Digite a descrição da despesa.");
     return;
   }
 
@@ -500,16 +660,21 @@ async function handleDespesaDescricaoTexto(
 async function enviarConfirmacao(from: string, dados: Dados) {
   let texto =
     `*Confirme os dados:*\n` +
-    `💰 Valor: ${formatBRL(dados.valor!)}\n` +
-    `🏗️ Obra: ${dados.obraNome}\n` +
-    `📁 Categoria: ${dados.categoriaNome}\n` +
+    `💰 Valor: ${formatBRL(dados.valor!)}
+` +
+    `🏗️ Obra: ${dados.obraNome}
+` +
+    `📁 Categoria: ${dados.categoriaNome}
+` +
     `📐 Etapa: ${dados.etapaNome}`;
 
   if (dados.fornecedorNome) {
-    texto += `\n🏢 Fornecedor: ${dados.fornecedorNome}`;
+    texto += `
+🏢 Fornecedor: ${dados.fornecedorNome}`;
   }
   if (dados.descricao) {
-    texto += `\n📝 Descrição: ${dados.descricao}`;
+    texto += `
+📝 Descrição: ${dados.descricao}`;
   }
 
   await sendButtons(from, texto, [
@@ -525,7 +690,8 @@ async function handleDespesaConfirmacao(
 ) {
   if (message.replyId === "confirm:sim") {
     const dados = session.dados_coletados as Dados;
-    await createDespesa({
+    const autorNome = await getNomePorTelefone(from);
+    const despesa = await createDespesa({
       obraId: dados.obraId!,
       categoriaId: dados.categoriaId!,
       etapaId: dados.etapaId!,
@@ -533,15 +699,49 @@ async function handleDespesaConfirmacao(
       descricao: dados.descricao ?? null,
       fornecedorId: dados.fornecedorId ?? null,
       materialId: dados.materialId ?? null,
+      criadoPorTelefone: from,
+      criadoPorNome: autorNome,
+    });
+    if (dados.comprovante) {
+      await vincularComprovanteDespesa({
+        despesaId: despesa.id,
+        comprovante: dados.comprovante,
+      });
+    }
+    await registrarAtividade({
+      tipo: "criacao",
+      entidade: "despesa",
+      entidadeId: despesa.id,
+      origem: "whatsapp",
+      autorTelefone: from,
+      autorNome,
+      resumo: `Despesa de ${formatBRL(dados.valor!)} (${dados.categoriaNome}, ${dados.obraNome}) registrada por ${autorNome}`,
+      dadosDepois: dados,
     });
     await sendText(from, "✅ Despesa registrada com sucesso!");
-    await resetSession(from);
-    await sendMenuPrincipal(from);
+
+    if (dados.comprovante?.tipoDocumento === "comprovante_pagamento") {
+      await sendText(
+        from,
+        "💳 Pagamento marcado como comprovado porque o arquivo enviado já era um comprovante de pagamento."
+      );
+      await resetSession(from);
+      await sendMenuPrincipal(from);
+      return;
+    }
+
+    await saveSession(from, ESTADOS.ANEXAR_PAGAMENTO_ARQUIVO, {
+      despesaIdsPagamento: [despesa.id],
+    });
+    await sendText(
+      from,
+      "💳 Se você já tiver o comprovante de pagamento dessa conta/nota, envie a imagem ou PDF agora. Se ainda não tiver, digite *pular* ou *menu*."
+    );
     return;
   }
 
   if (message.replyId === "confirm:nao") {
-    await sendText(from, "Despesa cancelada.");
+    await sendText(from, "🚫 Despesa cancelada.");
     await resetSession(from);
     await sendMenuPrincipal(from);
     return;
@@ -554,11 +754,11 @@ async function handleDespesaConfirmacao(
 
 async function handleCadastroObraNome(from: string, message: IncomingMessage) {
   if (!message.text) {
-    await sendText(from, "Qual o nome da obra?");
+    await sendText(from, "🏗️ Qual o nome da obra?");
     return;
   }
   await saveSession(from, ESTADOS.CADASTRO_OBRA_ORCAMENTO, { nome: message.text });
-  await sendText(from, "Qual o orçamento total dessa obra? (ex: 500000,00)");
+  await sendText(from, "🏗️ Qual o orçamento total dessa obra? (ex: 500000,00)");
 }
 
 async function handleCadastroObraOrcamento(
@@ -567,17 +767,28 @@ async function handleCadastroObraOrcamento(
   session: Session
 ) {
   if (!message.text) {
-    await sendText(from, "Qual o orçamento total dessa obra? (ex: 500000,00)");
+    await sendText(from, "🏗️ Qual o orçamento total dessa obra? (ex: 500000,00)");
     return;
   }
   const valor = parseValorBR(message.text);
   if (valor === null) {
-    await sendText(from, "Não entendi o valor. Digite apenas o número, ex: 500000,00");
+    await sendText(from, "💰 Não entendi o valor. Digite apenas o número, ex: 500000,00");
     return;
   }
 
   const nome = session.dados_coletados.nome as string;
-  await createObra(nome, valor);
+  const obra = await createObra(nome, valor);
+  const autorNome = await getNomePorTelefone(from);
+  await registrarAtividade({
+    tipo: "criacao",
+    entidade: "obra",
+    entidadeId: obra.id,
+    origem: "whatsapp",
+    autorTelefone: from,
+    autorNome,
+    resumo: `Obra "${nome}" cadastrada (orçamento ${formatBRL(valor)}) por ${autorNome}`,
+    dadosDepois: { nome, orcamentoTotal: valor },
+  });
   await sendText(
     from,
     `✅ Obra "${nome}" cadastrada com orçamento de ${formatBRL(valor)}.`
@@ -590,7 +801,7 @@ async function handleCadastroObraOrcamento(
 
 async function handleCadastroMaterialNome(from: string, message: IncomingMessage) {
   if (!message.text) {
-    await sendText(from, "Qual o nome do material?");
+    await sendText(from, "📦 Qual o nome do material?");
     return;
   }
   await saveSession(from, ESTADOS.CADASTRO_MATERIAL_CATEGORIA, {
@@ -612,7 +823,18 @@ async function handleCadastroMaterialCategoria(
   }
 
   const nome = session.dados_coletados.nome as string;
-  await createMaterial(nome, categoria.id);
+  const material = await createMaterial(nome, categoria.id);
+  const autorNome = await getNomePorTelefone(from);
+  await registrarAtividade({
+    tipo: "criacao",
+    entidade: "material",
+    entidadeId: material.id,
+    origem: "whatsapp",
+    autorTelefone: from,
+    autorNome,
+    resumo: `Material "${nome}" cadastrado na categoria ${categoria.nome} por ${autorNome}`,
+    dadosDepois: { nome, categoria: categoria.nome },
+  });
   await sendText(
     from,
     `✅ Material "${nome}" cadastrado na categoria ${categoria.nome}.`
@@ -625,7 +847,7 @@ async function handleCadastroMaterialCategoria(
 
 async function handleCadastroFornecedorNome(from: string, message: IncomingMessage) {
   if (!message.text) {
-    await sendText(from, "Qual o nome do fornecedor?");
+    await sendText(from, "🏢 Qual o nome do fornecedor?");
     return;
   }
   await saveSession(from, ESTADOS.CADASTRO_FORNECEDOR_CONTATO, {
@@ -633,7 +855,7 @@ async function handleCadastroFornecedorNome(from: string, message: IncomingMessa
   });
   await sendText(
     from,
-    "Qual o contato do fornecedor (telefone)? Digite 'pular' se não quiser informar."
+    "🏢 Qual o contato do fornecedor (telefone)? Digite 'pular' se não quiser informar."
   );
 }
 
@@ -643,13 +865,24 @@ async function handleCadastroFornecedorContato(
   session: Session
 ) {
   if (!message.text) {
-    await sendText(from, "Digite o contato do fornecedor ou 'pular'.");
+    await sendText(from, "☎️ Digite o contato do fornecedor ou 'pular'.");
     return;
   }
 
   const contato = message.text.trim().toLowerCase() === "pular" ? null : message.text;
   const nome = session.dados_coletados.nome as string;
-  await createFornecedor(nome, contato);
+  const fornecedor = await createFornecedor(nome, contato);
+  const autorNome = await getNomePorTelefone(from);
+  await registrarAtividade({
+    tipo: "criacao",
+    entidade: "fornecedor",
+    entidadeId: fornecedor.id,
+    origem: "whatsapp",
+    autorTelefone: from,
+    autorNome,
+    resumo: `Fornecedor "${nome}" cadastrado por ${autorNome}`,
+    dadosDepois: { nome, contato },
+  });
   await sendText(from, `✅ Fornecedor "${nome}" cadastrado.`);
   await resetSession(from);
   await sendMenuPrincipal(from);
@@ -657,22 +890,58 @@ async function handleCadastroFornecedorContato(
 
 // ---------- Nota Fiscal / Comprovante / Áudio ----------
 
-async function handleNotaFiscalRecebida(from: string, media: IncomingMedia) {
-  await sendText(from, "📄 Recebi seu comprovante, analisando...");
+async function handleNotaFiscalRecebida(
+  from: string,
+  media: IncomingMedia,
+  options: { forcarNovaDespesa?: boolean } = {}
+) {
+  await sendText(from, "📄 Recebi seu documento, analisando...");
 
   let invoice;
+  let comprovante: Dados["comprovante"] | undefined;
   try {
     const { buffer, mimeType } = await downloadWhatsAppMedia(media.id);
     invoice = await extractInvoiceData(buffer, mimeType);
+    const tipoDocumento =
+      invoice?.tipoDocumento === "comprovante_pagamento"
+        ? "comprovante_pagamento"
+        : "documento_cobranca";
+
+    comprovante = await uploadComprovanteWhatsApp({
+      telefone: from,
+      mediaId: media.id,
+      buffer,
+      mimeType,
+      tipoDocumento,
+      contaOrigemBanco: invoice?.contaOrigemBanco ?? null,
+      contaOrigemTitular: invoice?.contaOrigemTitular ?? null,
+      contaOrigemDocumento: invoice?.contaOrigemDocumento ?? null,
+      contaOrigemAgencia: invoice?.contaOrigemAgencia ?? null,
+      contaOrigemNumero: invoice?.contaOrigemNumero ?? null,
+      metodoPagamento: invoice?.metodoPagamento ?? null,
+    });
   } catch (error) {
     console.error("Erro ao processar comprovante:", error);
     invoice = null;
   }
 
+  if (!options.forcarNovaDespesa && invoice?.tipoDocumento === "comprovante_pagamento" && comprovante) {
+    await saveSession(from, ESTADOS.ANEXAR_PAGAMENTO_SELECIONANDO_LANCAMENTO, {
+      comprovante,
+    });
+    await sendText(
+      from,
+      "💳 Identifiquei este arquivo como comprovante de pagamento. Escolha qual lançamento ele deve quitar. Se sua intenção era criar uma nova despesa com esse comprovante, toque em Registrar Despesa e envie o arquivo novamente."
+    );
+    await sendListDespesasRecentes(from);
+    return;
+  }
+
   if (!invoice || invoice.itens.length === 0) {
     await iniciarFallbackManual(
       from,
-      "Não consegui ler os dados automaticamente. Vamos registrar manualmente: qual o valor da despesa? (ex: 150,00)"
+      "Não consegui ler os dados automaticamente. Vamos registrar manualmente: qual o valor da despesa? (ex: 150,00)",
+      comprovante ? { comprovante } : {}
     );
     return;
   }
@@ -681,7 +950,7 @@ async function handleNotaFiscalRecebida(from: string, media: IncomingMedia) {
   if (obras.length === 0) {
     await sendText(
       from,
-      "Você ainda não tem nenhuma obra cadastrada. Cadastre uma obra antes de registrar despesas."
+      "📭 Você ainda não tem nenhuma obra cadastrada. Cadastre uma obra antes de registrar despesas."
     );
     await resetSession(from);
     await sendMenuPrincipal(from);
@@ -693,15 +962,17 @@ async function handleNotaFiscalRecebida(from: string, media: IncomingMedia) {
     invoice.fornecedorCnpj
   );
 
-  // Comprovante/recibo de um unico pagamento: reaproveita o fluxo manual de
-  // despesa (pergunta obra -> categoria -> etapa -> confirma), garantindo que
-  // toda despesa seja sempre classificada, nunca so extraida pela IA.
+  // Documento com um único item: reaproveita o fluxo guiado de despesa
+  // (obra -> categoria -> etapa -> confirma). Se o arquivo for comprovante
+  // de pagamento e o usuário estava em Registrar Despesa, ele vira uma nova
+  // despesa já paga, com o arquivo no ícone de pagamento.
   if (invoice.itens.length === 1) {
     await iniciarDespesaUnicaExtraida(from, {
       valor: invoice.itens[0].valorTotal,
       descricao: invoice.itens[0].descricao,
       fornecedorId: fornecedor.id,
       fornecedorNome: fornecedor.nome,
+      comprovante,
     });
     return;
   }
@@ -711,12 +982,13 @@ async function handleNotaFiscalRecebida(from: string, media: IncomingMedia) {
     fornecedorNome: fornecedor.nome,
     notaItens: invoice.itens,
     notaValorTotal: invoice.valorTotalNota,
+    comprovante,
   };
 
   await saveSession(from, ESTADOS.NOTA_AGUARDANDO_OBRA, dados);
   await sendText(
     from,
-    `Encontrei ${invoice.itens.length} itens do fornecedor *${fornecedor.nome}*. Em qual obra isso deve ser lançado?`
+    `🏗️ Encontrei ${invoice.itens.length} itens do fornecedor *${fornecedor.nome}*. Em qual obra isso deve ser lançado?`
   );
   await sendListObras(from);
 }
@@ -728,7 +1000,7 @@ async function handleAudioRecebido(from: string, media: IncomingMedia) {
   try {
     const { buffer, mimeType } = await downloadWhatsAppMedia(media.id);
     extraido = await extractDespesaDeAudio(buffer, mimeType);
-  } catch (error) {
+   } catch (error) {
     console.error("Erro ao processar áudio:", error);
     extraido = null;
   }
@@ -773,13 +1045,14 @@ async function iniciarDespesaUnicaExtraida(
     descricao: string;
     fornecedorId?: string;
     fornecedorNome?: string;
+    comprovante?: Dados["comprovante"];
   }
 ) {
   const obras = await listObrasAtivas();
   if (obras.length === 0) {
     await sendText(
       from,
-      "Você ainda não tem nenhuma obra cadastrada. Cadastre uma obra antes de registrar despesas."
+      "📭 Você ainda não tem nenhuma obra cadastrada. Cadastre uma obra antes de registrar despesas."
     );
     await resetSession(from);
     await sendMenuPrincipal(from);
@@ -791,19 +1064,212 @@ async function iniciarDespesaUnicaExtraida(
     descricao: extraido.descricao,
     fornecedorId: extraido.fornecedorId,
     fornecedorNome: extraido.fornecedorNome,
+    comprovante: extraido.comprovante,
   };
 
   await saveSession(from, ESTADOS.DESPESA_OBRA, dados);
   await sendText(
     from,
-    `Identifiquei: ${formatBRL(extraido.valor)} — ${extraido.descricao}. Em qual obra isso deve ser lançado?`
+    `✅ *Identifiquei uma nova despesa*\n` +
+      `💰 *Valor:* ${formatBRL(extraido.valor)}\n` +
+      `📝 *Descrição:* ${extraido.descricao}\n\n` +
+      `🏗️ Em qual obra isso deve ser lançado?`
   );
   await sendListObras(from);
 }
 
-async function iniciarFallbackManual(from: string, mensagem: string) {
-  await saveSession(from, ESTADOS.DESPESA_VALOR, {});
+async function iniciarFallbackManual(
+  from: string,
+  mensagem: string,
+  dados: Pick<Dados, "comprovante"> = {}
+) {
+  await saveSession(from, ESTADOS.DESPESA_VALOR, dados);
   await sendText(from, mensagem);
+}
+
+async function handleAnexarPagamentoTexto(
+  from: string,
+  message: IncomingMessage,
+  session: Session
+) {
+  const texto = message.text?.trim().toLowerCase();
+  if (texto === "pular" || texto === "depois" || texto === "não" || texto === "nao") {
+    await sendText(
+      from,
+      "💳 Ok. O lançamento ficou com pagamento pendente no dashboard. Quando quiser registrar o pagamento, envie o comprovante pelo fluxo de anexo."
+    );
+    await resetSession(from);
+    await sendMenuPrincipal(from);
+    return;
+  }
+
+  await saveSession(from, ESTADOS.ANEXAR_PAGAMENTO_ARQUIVO, session.dados_coletados);
+  await sendText(
+    from,
+    "💳 Envie a imagem ou PDF do comprovante de pagamento agora. Se ainda não tiver, digite *pular*."
+  );
+}
+
+async function iniciarAnexoPagamento(from: string) {
+  await saveSession(from, ESTADOS.ANEXAR_PAGAMENTO_SELECIONANDO_LANCAMENTO, {});
+  await sendText(from, "💳 Escolha o lançamento que deve receber o comprovante de pagamento.");
+  await sendListDespesasRecentes(from);
+}
+
+async function handleAnexarPagamentoSelecionandoLancamento(
+  from: string,
+  message: IncomingMessage,
+  session: Session
+) {
+  const despesaId = idSemPrefixo(message.replyId, "despesa:");
+  const despesa = despesaId ? await findDespesaCompletaById(despesaId) : null;
+
+  if (!despesa) {
+    await sendText(from, "👉 Não encontrei esse lançamento. Escolha novamente.");
+    await sendListDespesasRecentes(from);
+    return;
+  }
+
+  const dados = session.dados_coletados as Dados;
+  if (dados.comprovante) {
+    const autorNome = await getNomePorTelefone(from);
+    await vincularComprovanteDespesa({
+      despesaId: despesa.id,
+      comprovante: {
+        ...dados.comprovante,
+        tipoDocumento: "comprovante_pagamento",
+      },
+    });
+    await registrarAtividade({
+      tipo: "edicao",
+      entidade: "despesa",
+      entidadeId: despesa.id,
+      origem: "whatsapp",
+      autorTelefone: from,
+      autorNome,
+      resumo: `Comprovante de pagamento anexado ao lançamento de ${formatBRL(despesa.valor)} por ${autorNome}`,
+      dadosDepois: { despesaId: despesa.id, comprovantePagamento: dados.comprovante },
+    });
+    await sendText(from, "✅ Comprovante de pagamento vinculado com sucesso.");
+    await resetSession(from);
+    await sendMenuPrincipal(from);
+    return;
+  }
+
+  await saveSession(from, ESTADOS.ANEXAR_PAGAMENTO_ARQUIVO, {
+    despesaIdsPagamento: [despesa.id],
+  });
+  await sendText(
+    from,
+    `💳 Agora envie a imagem ou PDF do comprovante de pagamento de ${formatBRL(despesa.valor)}.`
+  );
+}
+
+async function handleAnexarPagamentoArquivo(
+  from: string,
+  media: IncomingMedia,
+  session: Session
+) {
+  const dados = session.dados_coletados as Dados;
+  const despesaIds = dados.despesaIdsPagamento ?? [];
+
+  if (despesaIds.length === 0) {
+    await sendText(from, "💳 Não encontrei o lançamento para vincular esse pagamento.");
+    await resetSession(from);
+    await sendMenuPrincipal(from);
+    return;
+  }
+
+  try {
+    const { buffer, mimeType } = await downloadWhatsAppMedia(media.id);
+    const pagamentoExtraido = await extractInvoiceData(buffer, mimeType);
+    const comprovantePagamento = await uploadComprovanteWhatsApp({
+      telefone: from,
+      mediaId: media.id,
+      buffer,
+      mimeType,
+      tipoDocumento: "comprovante_pagamento",
+      contaOrigemBanco: pagamentoExtraido?.contaOrigemBanco ?? null,
+      contaOrigemTitular: pagamentoExtraido?.contaOrigemTitular ?? null,
+      contaOrigemDocumento: pagamentoExtraido?.contaOrigemDocumento ?? null,
+      contaOrigemAgencia: pagamentoExtraido?.contaOrigemAgencia ?? null,
+      contaOrigemNumero: pagamentoExtraido?.contaOrigemNumero ?? null,
+      metodoPagamento: pagamentoExtraido?.metodoPagamento ?? null,
+    });
+
+    for (const despesaId of despesaIds) {
+      await vincularComprovanteDespesa({
+        despesaId,
+        comprovante: comprovantePagamento,
+      });
+    }
+
+    const autorNome = await getNomePorTelefone(from);
+    await registrarAtividade({
+      tipo: "edicao",
+      entidade: "despesa",
+      entidadeId: despesaIds[0],
+      origem: "whatsapp",
+      autorTelefone: from,
+      autorNome,
+      resumo:
+        despesaIds.length > 1
+          ? `Comprovante de pagamento anexado a ${despesaIds.length} lançamentos por ${autorNome}`
+          : `Comprovante de pagamento anexado por ${autorNome}`,
+      dadosDepois: { despesaIds, comprovantePagamento, pagamentoExtraido },
+    });
+
+    const valorLido = pagamentoExtraido?.valorTotalNota ?? pagamentoExtraido?.itens?.[0]?.valorTotal;
+    const fornecedorLido =
+      pagamentoExtraido?.fornecedorNome &&
+      pagamentoExtraido.fornecedorNome !== "Não identificado"
+        ? pagamentoExtraido.fornecedorNome
+        : null;
+    const tipoLido =
+      pagamentoExtraido?.tipoDocumento === "comprovante_pagamento"
+        ? "comprovante de pagamento"
+        : pagamentoExtraido?.tipoDocumento
+          ? "documento financeiro"
+          : null;
+    const contaOrigemLida = [
+      pagamentoExtraido?.contaOrigemBanco,
+      pagamentoExtraido?.contaOrigemTitular,
+      pagamentoExtraido?.contaOrigemAgencia
+        ? `Ag. ${pagamentoExtraido.contaOrigemAgencia}`
+        : null,
+      pagamentoExtraido?.contaOrigemNumero
+        ? `Conta ${pagamentoExtraido.contaOrigemNumero}`
+        : null,
+    ]
+      .filter(Boolean)
+      .join(" | ");
+
+
+    const resumoLeitura = [
+      "✅ Comprovante de pagamento anexado com sucesso.",
+      valorLido ? `💰 Valor identificado: ${formatBRL(valorLido)}` : null,
+      fornecedorLido ? `🏢 Recebedor: ${fornecedorLido}` : null,
+      contaOrigemLida ? `Banco/conta de origem: ${contaOrigemLida}` : null,
+      pagamentoExtraido?.metodoPagamento
+        ? `Metodo: ${pagamentoExtraido.metodoPagamento}`
+        : null,
+      tipoLido ? `📌 Tipo: ${tipoLido}` : null,
+    ]
+      .filter(Boolean)
+      .join("\n");
+
+    await sendText(from, resumoLeitura);
+  } catch (error) {
+    console.error("Erro ao anexar comprovante de pagamento:", error);
+    await sendText(
+      from,
+      "💳 Não consegui salvar esse comprovante de pagamento. Tente enviar novamente em imagem ou PDF."
+    );
+    return;
+  }
+
+  await resetSession(from);
+  await sendMenuPrincipal(from);
 }
 
 async function handleNotaAguardandoObra(
@@ -841,7 +1307,7 @@ async function perguntarClassificacaoItemAtual(from: string, dados: Dados) {
   await saveSession(from, ESTADOS.NOTA_ITEM_CATEGORIA, dados);
   await sendText(
     from,
-    `Item ${indice + 1}/${itens.length}: *${item.descricao}* — ${formatBRL(item.valorTotal)}\nQual a categoria desse item?`
+    `💰 Item ${indice + 1}/${itens.length}: *${item.descricao}* — ${formatBRL(item.valorTotal)}\nQual a categoria desse item?`
   );
   await sendListCategorias(from);
 }
@@ -937,7 +1403,7 @@ async function handleNotaConfirmacao(
   session: Session
 ) {
   if (message.replyId === "confirm:nao") {
-    await sendText(from, "Registro da nota cancelado.");
+    await sendText(from, "🚫 Registro da nota cancelado.");
     await resetSession(from);
     await sendMenuPrincipal(from);
     return;
@@ -949,6 +1415,8 @@ async function handleNotaConfirmacao(
   }
 
   const dados = session.dados_coletados as Dados;
+  const autorNome = await getNomePorTelefone(from);
+  const despesaIdsPagamento: string[] = [];
 
   for (const item of dados.notaItensClassificados ?? []) {
     const ehMaterial = item.categoriaNome.toLowerCase() === "material";
@@ -956,7 +1424,7 @@ async function handleNotaConfirmacao(
       ? await findOrCreateMaterial(item.descricao, item.categoriaId)
       : null;
 
-    await createDespesa({
+    const despesa = await createDespesa({
       obraId: dados.obraId!,
       categoriaId: item.categoriaId,
       etapaId: item.etapaId,
@@ -964,6 +1432,26 @@ async function handleNotaConfirmacao(
       descricao: `${item.descricao} (${item.quantidade}x)`,
       materialId: material?.id ?? null,
       fornecedorId: dados.fornecedorId ?? null,
+      criadoPorTelefone: from,
+      criadoPorNome: autorNome,
+    });
+    if (dados.comprovante) {
+      await vincularComprovanteDespesa({
+        despesaId: despesa.id,
+        comprovante: dados.comprovante,
+      });
+    }
+    despesaIdsPagamento.push(despesa.id);
+
+    await registrarAtividade({
+      tipo: "criacao",
+      entidade: "despesa",
+      entidadeId: despesa.id,
+      origem: "whatsapp",
+      autorTelefone: from,
+      autorNome,
+      resumo: `Despesa de ${formatBRL(item.valorTotal)} (${item.descricao}, nota fiscal) registrada por ${autorNome}`,
+      dadosDepois: item,
     });
   }
 
@@ -971,8 +1459,13 @@ async function handleNotaConfirmacao(
     from,
     `✅ Nota registrada! ${dados.notaItensClassificados?.length ?? 0} itens lançados na obra "${dados.obraNome}".`
   );
-  await resetSession(from);
-  await sendMenuPrincipal(from);
+  await saveSession(from, ESTADOS.ANEXAR_PAGAMENTO_ARQUIVO, {
+    despesaIdsPagamento,
+  });
+  await sendText(
+    from,
+    "💳 Se você já tiver o comprovante de pagamento dessa nota/conta, envie a imagem ou PDF agora. Vou vincular o pagamento aos lançamentos dessa nota. Se ainda não tiver, digite *pular* ou *menu*."
+  );
 }
 
 // ---------- Orçamento (planilha) ----------
@@ -985,7 +1478,7 @@ async function handleOrcamentoRecebido(from: string, media: IncomingMedia) {
     const { buffer } = await downloadWhatsAppMedia(media.id);
     const texto = extractSpreadsheetAsText(buffer);
     orcamento = await extractOrcamentoData(texto);
-  } catch (error) {
+   } catch (error) {
     console.error("Erro ao processar orçamento:", error);
     orcamento = null;
   }
@@ -993,7 +1486,7 @@ async function handleOrcamentoRecebido(from: string, media: IncomingMedia) {
   if (!orcamento || orcamento.etapas.length === 0) {
     await sendText(
       from,
-      "Não consegui identificar as etapas nessa planilha. Confira se ela tem um resumo por etapa com os valores totais."
+      "💰 Não consegui identificar as etapas nessa planilha. Confira se ela tem um resumo por etapa com os valores totais."
     );
     await resetSession(from);
     await sendMenuPrincipal(from);
@@ -1004,7 +1497,7 @@ async function handleOrcamentoRecebido(from: string, media: IncomingMedia) {
   if (obras.length === 0) {
     await sendText(
       from,
-      "Você ainda não tem nenhuma obra cadastrada. Cadastre uma obra antes de importar um orçamento."
+      "📭 Você ainda não tem nenhuma obra cadastrada. Cadastre uma obra antes de importar um orçamento."
     );
     await resetSession(from);
     await sendMenuPrincipal(from);
@@ -1019,7 +1512,7 @@ async function handleOrcamentoRecebido(from: string, media: IncomingMedia) {
   await saveSession(from, ESTADOS.ORCAMENTO_AGUARDANDO_OBRA, dados);
   await sendText(
     from,
-    `Encontrei ${orcamento.etapas.length} etapas nesse orçamento. Para qual obra devo importar?`
+    `🏗️ Encontrei ${orcamento.etapas.length} etapas nesse orçamento. Para qual obra devo importar?`
   );
   await sendListObras(from);
 }
@@ -1073,7 +1566,7 @@ async function handleOrcamentoConfirmacao(
   session: Session
 ) {
   if (message.replyId === "confirm:nao") {
-    await sendText(from, "Importação do orçamento cancelada.");
+    await sendText(from, "✨ Importação do orçamento cancelada.");
     await resetSession(from);
     await sendMenuPrincipal(from);
     return;
@@ -1087,6 +1580,18 @@ async function handleOrcamentoConfirmacao(
   const dados = session.dados_coletados as Dados;
   await upsertEtapasDeObra(dados.obraId!, dados.orcamentoEtapas ?? []);
 
+  const autorNome = await getNomePorTelefone(from);
+  await registrarAtividade({
+    tipo: "edicao",
+    entidade: "orcamento",
+    entidadeId: dados.obraId,
+    origem: "whatsapp",
+    autorTelefone: from,
+    autorNome,
+    resumo: `Orçamento importado via WhatsApp para a obra "${dados.obraNome}" (${dados.orcamentoEtapas?.length ?? 0} etapas) por ${autorNome}`,
+    dadosDepois: { etapas: dados.orcamentoEtapas },
+  });
+
   await sendText(
     from,
     `✅ Orçamento importado! ${dados.orcamentoEtapas?.length ?? 0} etapas cadastradas na obra "${dados.obraNome}".`
@@ -1095,13 +1600,33 @@ async function handleOrcamentoConfirmacao(
   await sendMenuPrincipal(from);
 }
 
+async function registrarEdicaoDespesa(
+  from: string,
+  dados: Dados,
+  resumoAlteracao: string,
+  dadosDepois: unknown
+) {
+  const autorNome = await getNomePorTelefone(from);
+  await registrarAtividade({
+    tipo: "edicao",
+    entidade: "despesa",
+    entidadeId: dados.despesaId,
+    origem: "whatsapp",
+    autorTelefone: from,
+    autorNome,
+    resumo: `${resumoAlteracao} (despesa de ${formatBRL(dados.despesaAntes?.valor ?? 0)}) por ${autorNome}`,
+    dadosAntes: dados.despesaAntes,
+    dadosDepois,
+  });
+}
+
 // ---------- Corrigir Lançamento ----------
 
 async function iniciarCorrecaoLancamento(from: string) {
   const despesas = await listDespesasRecentes(10);
 
   if (despesas.length === 0) {
-    await sendText(from, "Nenhuma despesa registrada ainda.");
+    await sendText(from, "📭 Nenhuma despesa registrada ainda.");
     await resetSession(from);
     await sendMenuPrincipal(from);
     return;
@@ -1122,7 +1647,7 @@ async function handleCorrigirSelecionandoLancamento(
     return;
   }
 
-  const dados: Dados = { despesaId: despesa.id };
+  const dados: Dados = { despesaId: despesa.id, despesaAntes: despesa };
   await saveSession(from, ESTADOS.CORRIGIR_SELECIONANDO_CAMPO, dados);
   await sendText(
     from,
@@ -1131,8 +1656,11 @@ async function handleCorrigirSelecionandoLancamento(
       `🏗️ Obra: ${despesa.obraNome}\n` +
       `📁 Categoria: ${despesa.categoriaNome}\n` +
       `📐 Etapa: ${despesa.etapaNome}\n` +
-      `🏢 Fornecedor: ${despesa.fornecedorNome ?? "—"}\n` +
-      `📝 Descrição: ${despesa.descricao ?? "—"}`
+      `📦 Material: ${despesa.materialNome ?? "?"}
+` +
+      `🏢 Fornecedor: ${despesa.fornecedorNome ?? "?"}
+` +
+      `📝 Descrição: ${despesa.descricao ?? "?"}`
   );
   await sendListCamposParaCorrigir(from);
 }
@@ -1147,11 +1675,11 @@ async function handleCorrigirSelecionandoCampo(
   switch (message.replyId) {
     case CAMPO_IDS.VALOR:
       await saveSession(from, ESTADOS.CORRIGIR_VALOR_NOVO, dados);
-      await sendText(from, "Qual o novo valor? (ex: 150,00)");
+      await sendText(from, "💰 Qual o novo valor? (ex: 150,00)");
       return;
     case CAMPO_IDS.DESCRICAO:
       await saveSession(from, ESTADOS.CORRIGIR_DESCRICAO_NOVA, dados);
-      await sendText(from, "Digite a nova descrição:");
+      await sendText(from, "⌨️ Digite a nova descrição:");
       return;
     case CAMPO_IDS.CATEGORIA:
       await saveSession(from, ESTADOS.CORRIGIR_CATEGORIA_NOVA, dados);
@@ -1163,6 +1691,10 @@ async function handleCorrigirSelecionandoCampo(
       await sendListEtapas(from, despesa!.obraId);
       return;
     }
+    case CAMPO_IDS.MATERIAL:
+      await saveSession(from, ESTADOS.CORRIGIR_MATERIAL_NOVO, dados);
+      await sendListMateriaisParaDespesa(from);
+      return;
     case CAMPO_IDS.FORNECEDOR:
       await saveSession(from, ESTADOS.CORRIGIR_FORNECEDOR_NOVO, dados);
       await sendListFornecedores(from);
@@ -1185,17 +1717,18 @@ async function handleCorrigirValorNovo(
   session: Session
 ) {
   if (!message.text) {
-    await sendText(from, "Digite o novo valor.");
+    await sendText(from, "💰 Digite o novo valor.");
     return;
   }
   const valor = parseValorBR(message.text);
   if (valor === null) {
-    await sendText(from, "Não entendi o valor. Digite apenas o número, ex: 150,00");
+    await sendText(from, "💰 Não entendi o valor. Digite apenas o número, ex: 150,00");
     return;
   }
 
   const dados = session.dados_coletados as Dados;
   await updateDespesaCampo(dados.despesaId!, { valor });
+  await registrarEdicaoDespesa(from, dados, `Valor alterado para ${formatBRL(valor)}`, { valor });
   await sendText(from, "✅ Valor atualizado.");
   await resetSession(from);
   await sendMenuPrincipal(from);
@@ -1207,12 +1740,15 @@ async function handleCorrigirDescricaoNova(
   session: Session
 ) {
   if (!message.text) {
-    await sendText(from, "Digite a nova descrição.");
+    await sendText(from, "⌨️ Digite a nova descrição.");
     return;
   }
 
   const dados = session.dados_coletados as Dados;
   await updateDespesaCampo(dados.despesaId!, { descricao: message.text });
+  await registrarEdicaoDespesa(from, dados, `Descrição alterada para "${message.text}"`, {
+    descricao: message.text,
+  });
   await sendText(from, "✅ Descrição atualizada.");
   await resetSession(from);
   await sendMenuPrincipal(from);
@@ -1232,6 +1768,12 @@ async function handleCorrigirCategoriaNova(
 
   const dados = session.dados_coletados as Dados;
   await updateDespesaCampo(dados.despesaId!, { categoria_id: categoria.id });
+  await registrarEdicaoDespesa(
+    from,
+    dados,
+    `Categoria alterada para "${categoria.nome}"`,
+    { categoriaId: categoria.id, categoriaNome: categoria.nome }
+  );
   await sendText(from, `✅ Categoria atualizada para "${categoria.nome}".`);
   await resetSession(from);
   await sendMenuPrincipal(from);
@@ -1253,7 +1795,38 @@ async function handleCorrigirEtapaNova(
   }
 
   await updateDespesaCampo(dados.despesaId!, { etapa_id: etapa.id });
+  await registrarEdicaoDespesa(from, dados, `Etapa alterada para "${etapa.nome}"`, {
+    etapaId: etapa.id,
+    etapaNome: etapa.nome,
+  });
   await sendText(from, `✅ Etapa atualizada para "${etapa.nome}".`);
+  await resetSession(from);
+  await sendMenuPrincipal(from);
+}
+
+async function handleCorrigirMaterialNovo(
+  from: string,
+  message: IncomingMessage,
+  session: Session
+) {
+  const materialId = idSemPrefixo(message.replyId, "material:");
+  const material = materialId ? await findMaterialById(materialId) : null;
+  const dados = session.dados_coletados as Dados;
+
+  if (!material) {
+    await sendListMateriaisParaDespesa(from);
+    return;
+  }
+
+  await updateDespesaCampo(dados.despesaId!, {
+    material_id: material.id,
+    descricao: material.nome,
+  });
+  await registrarEdicaoDespesa(from, dados, `Material alterado para "${material.nome}"`, {
+    materialId: material.id,
+    materialNome: material.nome,
+  });
+  await sendText(from, `✅ Material atualizado para "${material.nome}".`);
   await resetSession(from);
   await sendMenuPrincipal(from);
 }
@@ -1272,6 +1845,12 @@ async function handleCorrigirFornecedorNovo(
 
   const dados = session.dados_coletados as Dados;
   await updateDespesaCampo(dados.despesaId!, { fornecedor_id: fornecedor.id });
+  await registrarEdicaoDespesa(
+    from,
+    dados,
+    `Fornecedor alterado para "${fornecedor.nome}"`,
+    { fornecedorId: fornecedor.id, fornecedorNome: fornecedor.nome }
+  );
   await sendText(from, `✅ Fornecedor atualizado para "${fornecedor.nome}".`);
   await resetSession(from);
   await sendMenuPrincipal(from);
@@ -1286,6 +1865,17 @@ async function handleCorrigirConfirmarExclusao(
 
   if (message.replyId === "confirm:sim") {
     await deleteDespesaPorId(dados.despesaId!);
+    const autorNome = await getNomePorTelefone(from);
+    await registrarAtividade({
+      tipo: "exclusao",
+      entidade: "despesa",
+      entidadeId: dados.despesaId,
+      origem: "whatsapp",
+      autorTelefone: from,
+      autorNome,
+      resumo: `Despesa de ${formatBRL(dados.despesaAntes?.valor ?? 0)} (${dados.despesaAntes?.categoriaNome ?? "—"}) excluída por ${autorNome}`,
+      dadosAntes: dados.despesaAntes,
+    });
     await sendText(from, "🗑️ Despesa excluída.");
     await resetSession(from);
     await sendMenuPrincipal(from);
@@ -1293,7 +1883,7 @@ async function handleCorrigirConfirmarExclusao(
   }
 
   if (message.replyId === "confirm:nao") {
-    await sendText(from, "Ok, mantido sem alterações.");
+    await sendText(from, "✅ Ok, mantido sem alterações.");
     await resetSession(from);
     await sendMenuPrincipal(from);
     return;
@@ -1315,7 +1905,7 @@ const TIPO_REMOVER_LABEL: Record<NonNullable<Dados["tipoRemover"]>, string> = {
 
 async function iniciarRemoverCadastro(from: string) {
   await saveSession(from, ESTADOS.REMOVER_TIPO, {});
-  await sendButtons(from, "O que você deseja remover?", [
+  await sendButtons(from, "🗑️ O que você deseja remover?", [
     { id: TIPO_REMOVER_IDS.OBRA, title: "Obra" },
     { id: TIPO_REMOVER_IDS.MATERIAL, title: "Material" },
     { id: TIPO_REMOVER_IDS.FORNECEDOR, title: "Fornecedor" },
@@ -1351,7 +1941,7 @@ async function handleRemoverTipo(from: string, message: IncomingMessage) {
     tipo === "obra" ? obras : tipo === "material" ? materiais : fornecedores;
 
   if (itens.length === 0) {
-    await sendText(from, `Nenhum(a) ${TIPO_REMOVER_LABEL[tipo]} cadastrado(a) ainda.`);
+    await sendText(from, `📭 Nenhum(a) ${TIPO_REMOVER_LABEL[tipo]} cadastrado(a) ainda.`);
     await resetSession(from);
     await sendMenuPrincipal(from);
     return;
@@ -1398,7 +1988,7 @@ async function handleRemoverSelecionandoItem(
 
   await sendButtons(
     from,
-    `Remover ${TIPO_REMOVER_LABEL[tipo]} "${item.nome}"?\n${aviso}`,
+    `🗑️ Remover ${TIPO_REMOVER_LABEL[tipo]} "${item.nome}"?\n${aviso}`,
     [
       { id: "confirm:sim", title: "Remover" },
       { id: "confirm:nao", title: "Cancelar" },
@@ -1414,7 +2004,7 @@ async function handleRemoverConfirmacao(
   const dados = session.dados_coletados as Dados;
 
   if (message.replyId === "confirm:nao") {
-    await sendText(from, "Ok, nada foi removido.");
+    await sendText(from, "✅ Ok, nada foi removido.");
     await resetSession(from);
     await sendMenuPrincipal(from);
     return;
@@ -1423,7 +2013,7 @@ async function handleRemoverConfirmacao(
   if (message.replyId !== "confirm:sim") {
     await sendButtons(
       from,
-      `Remover ${TIPO_REMOVER_LABEL[dados.tipoRemover!]} "${dados.itemRemoverNome}"?`,
+      `🗑️ Remover ${TIPO_REMOVER_LABEL[dados.tipoRemover!]} "${dados.itemRemoverNome}"?`,
       [
         { id: "confirm:sim", title: "Remover" },
         { id: "confirm:nao", title: "Cancelar" },
@@ -1437,15 +2027,27 @@ async function handleRemoverConfirmacao(
     if (dados.tipoRemover === "material") await deleteMaterialPorId(dados.itemRemoverId!);
     if (dados.tipoRemover === "fornecedor") await deleteFornecedorPorId(dados.itemRemoverId!);
 
+    const autorNome = await getNomePorTelefone(from);
+    await registrarAtividade({
+      tipo: "exclusao",
+      entidade: dados.tipoRemover!,
+      entidadeId: dados.itemRemoverId,
+      origem: "whatsapp",
+      autorTelefone: from,
+      autorNome,
+      resumo: `${TIPO_REMOVER_LABEL[dados.tipoRemover!]} "${dados.itemRemoverNome}" removido(a) por ${autorNome}`,
+      dadosAntes: { nome: dados.itemRemoverNome },
+    });
+
     await sendText(
       from,
       `🗑️ ${TIPO_REMOVER_LABEL[dados.tipoRemover!]} "${dados.itemRemoverNome}" removido(a) com sucesso.`
     );
-  } catch (error) {
+   } catch (error) {
     console.error("Erro ao remover cadastro:", error);
     await sendText(
       from,
-      `Não consegui remover "${dados.itemRemoverNome}". Provavelmente existem despesas vinculadas a esse cadastro — corrija ou remova essas despesas primeiro (menu "Corrigir Lançamento").`
+      `🗑️ Não consegui remover "${dados.itemRemoverNome}". Provavelmente existem despesas vinculadas a esse cadastro — corrija ou remova essas despesas primeiro (menu "Corrigir Lançamento").`
     );
   }
 

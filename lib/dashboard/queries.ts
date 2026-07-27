@@ -138,10 +138,18 @@ export async function getDashboardData(
 ): Promise<DashboardData> {
   const supabase = await createClient();
 
-  const { data: obras } = await supabase
+  const obrasComLixeira = await supabase
     .from("obras")
     .select("id, nome, status")
+    .is("deleted_at", null)
     .order("created_at", { ascending: false });
+
+  const { data: obras } = obrasComLixeira.error
+    ? await supabase
+        .from("obras")
+        .select("id, nome, status")
+        .order("created_at", { ascending: false })
+    : obrasComLixeira;
 
   const listaObras = obras ?? [];
   const obraSelecionada =
@@ -158,29 +166,39 @@ export async function getDashboardData(
     };
   }
 
+  const obraComLixeira = await supabase
+    .from("obras")
+    .select("id, nome, orcamento_total")
+    .eq("id", obraSelecionada.id)
+    .is("deleted_at", null)
+    .maybeSingle();
+
+  const { data: obra } = obraComLixeira.error
+    ? await supabase
+        .from("obras")
+        .select("id, nome, orcamento_total")
+        .eq("id", obraSelecionada.id)
+        .maybeSingle()
+    : obraComLixeira;
+
   const [
-    { data: obra },
     { data: despesas },
     { data: categorias },
     { data: etapasProprias },
     { data: materiaisCatalogo },
   ] = await Promise.all([
     supabase
-      .from("obras")
-      .select("id, nome, orcamento_total")
-      .eq("id", obraSelecionada.id)
-      .single(),
-    supabase
       .from("despesas")
       .select("valor, categoria_id, etapa_id, material_id, data")
+      .is("deleted_at", null)
       .eq("obra_id", obraSelecionada.id),
-    supabase.from("categorias").select("id, nome").order("nome"),
+    supabase.from("categorias").select("id, nome").is("deleted_at", null).order("nome"),
     supabase
       .from("etapas")
       .select("id, nome, valor_orcado")
       .eq("obra_id", obraSelecionada.id)
       .order("ordem"),
-    supabase.from("materiais").select("id, nome"),
+    supabase.from("materiais").select("id, nome").is("deleted_at", null),
   ]);
 
   let etapasCatalogo = etapasProprias ?? [];

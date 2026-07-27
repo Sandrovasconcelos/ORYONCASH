@@ -1,124 +1,769 @@
 import Link from "next/link";
-import { createClient } from "@/lib/supabase/server";
+import { createAdminClient } from "@/lib/supabase/admin";
 import { formatBRL } from "@/lib/conversation/format";
-import { deleteDespesaAction } from "../actions";
+import { formatDataHoraBrasil } from "@/lib/format-date";
+import {
+  deleteDespesaAction,
+  reclassificarComprovanteDespesaAction,
+  updateDespesaAction,
+} from "../actions";
+import { CadastroModal } from "../cadastro-modal";
+import { ActionIcon } from "../action-icon";
 import { DeleteButton } from "./delete-button";
+import { OpenDespesaModalButton } from "./open-despesa-modal-button";
+
+export const dynamic = "force-dynamic";
+
+function valorInputBR(valor: number) {
+  return Number(valor ?? 0).toLocaleString("pt-BR", {
+    minimumFractionDigits: 2,
+    maximumFractionDigits: 2,
+  });
+}
+
+type ComprovanteQueryRow = {
+  id: string;
+  despesa_id: string | null;
+  tipo_documento: string;
+  storage_bucket: string;
+  storage_path: string;
+  mime_type: string;
+  nome_arquivo: string | null;
+  conta_origem_banco?: string | null;
+  conta_origem_titular?: string | null;
+  conta_origem_documento?: string | null;
+  conta_origem_agencia?: string | null;
+  conta_origem_numero?: string | null;
+  metodo_pagamento?: string | null;
+};
 
 export default async function DespesasPage({
   searchParams,
 }: {
-  searchParams: Promise<{ obra?: string }>;
+  searchParams: Promise<{
+    obra?: string;
+    categoria?: string;
+    etapa?: string;
+    material?: string;
+    busca?: string;
+  }>;
 }) {
   const params = await searchParams;
-  const supabase = await createClient();
+  const supabase = createAdminClient();
 
-  const [{ data: obras }, despesasQuery] = await Promise.all([
-    supabase.from("obras").select("id, nome").order("nome"),
+  const [
+    { data: obras },
+    { data: categorias },
+    { data: materiais },
+    { data: fornecedores },
+    { data: etapas },
+    despesasQuery,
+  ] = await Promise.all([
+    supabase.from("obras").select("id, nome").is("deleted_at", null).order("nome"),
+    supabase.from("categorias").select("id, nome").is("deleted_at", null).order("nome"),
+    supabase.from("materiais").select("id, nome").is("deleted_at", null).order("nome"),
+    supabase.from("fornecedores").select("id, nome").is("deleted_at", null).order("nome"),
+    supabase.from("etapas").select("id, nome, obra_id").order("ordem"),
     (async () => {
       let query = supabase
         .from("despesas")
         .select(
-          "id, valor, descricao, data, origem, obras(nome), categorias(nome), etapas(nome), fornecedores(nome)"
+          "id, obra_id, categoria_id, etapa_id, material_id, fornecedor_id, valor, descricao, data, origem, created_at, criado_por_nome, criado_por_telefone, obras(nome), categorias(nome), etapas(nome), materiais(nome), fornecedores(nome)"
         )
+        .is("deleted_at", null)
         .order("data", { ascending: false })
         .order("created_at", { ascending: false })
         .limit(200);
       if (params.obra) query = query.eq("obra_id", params.obra);
+      if (params.categoria) query = query.eq("categoria_id", params.categoria);
+      if (params.etapa) query = query.eq("etapa_id", params.etapa);
+      if (params.material) query = query.eq("material_id", params.material);
       return query;
     })(),
   ]);
 
-  const despesas = despesasQuery.data ?? [];
+  const normalizar = (texto: string) =>
+    texto
+      .normalize("NFD")
+      .replace(/\p{Mn}/gu, "")
+      .toLowerCase();
+  const termoBusca = normalizar((params.busca ?? "").trim());
+
+  const despesasBrutas = despesasQuery.data ?? [];
+  const despesas = termoBusca
+    ? despesasBrutas.filter((d) => {
+        const campos = [
+          d.descricao,
+          (d.obras as unknown as { nome: string } | null)?.nome,
+          (d.categorias as unknown as { nome: string } | null)?.nome,
+          (d.etapas as unknown as { nome: string } | null)?.nome,
+          (d.materiais as unknown as { nome: string } | null)?.nome,
+          (d.fornecedores as unknown as { nome: string } | null)?.nome,
+        ];
+        return campos.some(
+          (campo) => campo && normalizar(campo).includes(termoBusca)
+        );
+      })
+    : despesasBrutas;
+  const idsDespesas = despesas.map((d) => d.id);
+  const comprovantesQuery =
+    idsDespesas.length > 0
+      ? await (async () => {
+          const queryComContaOrigem = await supabase
+            .from("despesa_comprovantes")
+            .select("id, despesa_id, tipo_documento, storage_bucket, storage_path, mime_type, nome_arquivo, conta_origem_banco, conta_origem_titular, conta_origem_documento, conta_origem_agencia, conta_origem_numero, metodo_pagamento")
+            .in("despesa_id", idsDespesas)
+            .order("created_at", { ascending: false });
+
+          if (!queryComContaOrigem.error) return queryComContaOrigem;
+
+          return supabase
+            .from("despesa_comprovantes")
+            .select("id, despesa_id, tipo_documento, storage_bucket, storage_path, mime_type, nome_arquivo")
+            .in("despesa_id", idsDespesas)
+            .order("created_at", { ascending: false });
+        })()
+      : { data: [], error: null };
+  const comprovantes = comprovantesQuery.data ?? [];
+  const comprovantesIndisponiveis =
+    comprovantesQuery.error?.code === "PGRST205" ||
+    comprovantesQuery.error?.message?.toLowerCase().includes("despesa_comprovantes");
+  const comprovantesPorDespesa = new Map<
+    string,
+    Array<{
+      id: string;
+      tipo_documento: string;
+      storage_bucket: string;
+      storage_path: string;
+      mime_type: string;
+      nome_arquivo: string | null;
+      conta_origem_banco: string | null;
+      conta_origem_titular: string | null;
+      conta_origem_documento: string | null;
+      conta_origem_agencia: string | null;
+      conta_origem_numero: string | null;
+      metodo_pagamento: string | null;
+      url: string | null;
+    }>
+  >();
+
+  for (const comprovanteBase of comprovantes ?? []) {
+    const comprovante = comprovanteBase as ComprovanteQueryRow;
+    if (!comprovante.despesa_id) {
+      continue;
+    }
+    const { data: signed } = await supabase.storage
+      .from(comprovante.storage_bucket)
+      .createSignedUrl(comprovante.storage_path, 60 * 60);
+    const listaAtual = comprovantesPorDespesa.get(comprovante.despesa_id) ?? [];
+    listaAtual.push({
+      id: comprovante.id,
+      tipo_documento: comprovante.tipo_documento,
+      storage_bucket: comprovante.storage_bucket,
+      storage_path: comprovante.storage_path,
+      mime_type: comprovante.mime_type,
+      nome_arquivo: comprovante.nome_arquivo,
+      conta_origem_banco: comprovante.conta_origem_banco ?? null,
+      conta_origem_titular: comprovante.conta_origem_titular ?? null,
+      conta_origem_documento: comprovante.conta_origem_documento ?? null,
+      conta_origem_agencia: comprovante.conta_origem_agencia ?? null,
+      conta_origem_numero: comprovante.conta_origem_numero ?? null,
+      metodo_pagamento: comprovante.metodo_pagamento ?? null,
+      url: signed?.signedUrl ?? null,
+    });
+    comprovantesPorDespesa.set(comprovante.despesa_id, listaAtual);
+  }
+  const totalFiltrado = despesas.reduce((soma, d) => soma + d.valor, 0);
+  const queryString = new URLSearchParams(
+    Object.entries(params).filter(([, value]) => Boolean(value)) as [string, string][]
+  ).toString();
 
   return (
     <div className="flex flex-col gap-6">
-      <div className="flex flex-wrap items-center gap-3">
-        <p className="text-sm font-medium text-zinc-900 dark:text-zinc-50">
-          Filtrar por obra:
-        </p>
-        <form className="flex items-center gap-2">
-          <select
-            name="obra"
-            defaultValue={params.obra ?? ""}
-            className="rounded-lg border border-zinc-300 dark:border-zinc-700 bg-transparent px-3 py-1.5 text-sm outline-none focus:border-blue-500"
-          >
-            <option value="">Todas as obras</option>
-            {(obras ?? []).map((obra) => (
-              <option key={obra.id} value={obra.id}>
-                {obra.nome}
-              </option>
-            ))}
-          </select>
+      <div className="rounded-card border border-brand-gray-300/60 bg-white p-5 shadow-card">
+        <div className="mb-4 flex flex-col gap-2 sm:flex-row sm:items-end sm:justify-between">
+          <div>
+            <p className="text-sm font-semibold text-brand-black">Lançamentos</p>
+            <p className="mt-1 text-xs text-brand-gray-500">
+              Visualize, filtre, edite e gere relatório das despesas registradas.
+            </p>
+          </div>
+          <div className="rounded-brand-sm bg-brand-gray-100 px-4 py-2 text-right">
+            <p className="text-[10px] font-extrabold uppercase tracking-[0.12em] text-brand-gray-500">
+              Total filtrado
+            </p>
+            <p className="font-display text-lg font-bold text-brand-red">
+              {formatBRL(totalFiltrado)}
+            </p>
+          </div>
+        </div>
+
+        <form className="flex flex-wrap items-end gap-3">
+          <label className="flex min-w-full flex-1 basis-full flex-col gap-1 text-xs font-semibold text-brand-gray-500 sm:min-w-64 sm:basis-auto">
+            Buscar
+            <input
+              type="text"
+              name="busca"
+              defaultValue={params.busca ?? ""}
+              placeholder="Nome do item, material, fornecedor ou descrição"
+              className="w-full rounded-brand-sm border border-brand-gray-300 bg-transparent px-3 py-2 text-sm font-normal text-brand-black outline-none focus:border-brand-red"
+            />
+          </label>
+
+          <label className="flex min-w-48 flex-col gap-1 text-xs font-semibold text-brand-gray-500">
+            Obra
+            <select
+              name="obra"
+              defaultValue={params.obra ?? ""}
+              className="rounded-brand-sm border border-brand-gray-300 bg-transparent px-3 py-2 text-sm font-normal text-brand-black outline-none focus:border-brand-red"
+            >
+              <option value="">Todas as obras</option>
+              {(obras ?? []).map((obra) => (
+                <option key={obra.id} value={obra.id}>
+                  {obra.nome}
+                </option>
+              ))}
+            </select>
+          </label>
+
+          <label className="flex min-w-48 flex-col gap-1 text-xs font-semibold text-brand-gray-500">
+            Categoria
+            <select
+              name="categoria"
+              defaultValue={params.categoria ?? ""}
+              className="rounded-brand-sm border border-brand-gray-300 bg-transparent px-3 py-2 text-sm font-normal text-brand-black outline-none focus:border-brand-red"
+            >
+              <option value="">Todas as categorias</option>
+              {(categorias ?? []).map((categoria) => (
+                <option key={categoria.id} value={categoria.id}>
+                  {categoria.nome}
+                </option>
+              ))}
+            </select>
+          </label>
+
+          <label className="flex min-w-56 flex-col gap-1 text-xs font-semibold text-brand-gray-500">
+            Material
+            <select
+              name="material"
+              defaultValue={params.material ?? ""}
+              className="rounded-brand-sm border border-brand-gray-300 bg-transparent px-3 py-2 text-sm font-normal text-brand-black outline-none focus:border-brand-red"
+            >
+              <option value="">Todos os materiais</option>
+              {(materiais ?? []).map((material) => (
+                <option key={material.id} value={material.id}>
+                  {material.nome}
+                </option>
+              ))}
+            </select>
+          </label>
+
           <button
             type="submit"
-            className="rounded-lg bg-zinc-100 dark:bg-zinc-800 px-3 py-1.5 text-sm text-zinc-700 dark:text-zinc-300 hover:bg-zinc-200 dark:hover:bg-zinc-700"
+            className="rounded-brand-sm bg-brand-red px-4 py-2 text-sm font-semibold text-white hover:bg-brand-red-700"
           >
             Filtrar
           </button>
+
+          <Link
+            href={`/dashboard/despesas/relatorio${queryString ? `?${queryString}` : ""}`}
+            className="rounded-brand-sm border border-brand-gray-300 bg-white px-4 py-2 text-sm font-semibold text-brand-gray-700 hover:border-brand-red/40 hover:text-brand-red"
+          >
+            Gerar relatório
+          </Link>
+
+          {queryString && (
+            <Link
+              href="/dashboard/despesas"
+              className="px-2 py-2 text-sm font-medium text-brand-gray-500 hover:text-brand-red"
+            >
+              Limpar
+            </Link>
+          )}
         </form>
+
+        <p className="mt-3 text-xs font-medium text-brand-gray-500">
+          {despesas.length} lançamento(s) encontrados.
+        </p>
+        <div className="mt-3 flex flex-wrap items-center gap-3 text-xs font-semibold text-brand-gray-500">
+          <span className="inline-flex items-center gap-1.5">
+            <span className="inline-flex h-7 w-7 items-center justify-center rounded-brand-sm border border-status-info/25 bg-white text-status-info">
+              <ActionIcon name="file" />
+            </span>
+            Conta / nota
+          </span>
+          <span className="inline-flex items-center gap-1.5">
+            <span className="inline-flex h-7 w-7 items-center justify-center rounded-brand-sm border border-status-success/25 bg-[#e9f8f0] text-status-success">
+              <ActionIcon name="payment" />
+            </span>
+            Comprovante de pagamento
+          </span>
+        </div>
       </div>
 
-      <div className="rounded-2xl border border-zinc-200 dark:border-zinc-800 bg-white dark:bg-zinc-950 overflow-hidden overflow-x-auto">
-        <table className="w-full text-sm">
-          <thead className="bg-zinc-50 dark:bg-zinc-900 text-left text-zinc-500">
+      {comprovantesIndisponiveis && (
+        <div className="rounded-card border border-status-warning/30 bg-status-warning/10 p-5 text-sm leading-6 text-brand-gray-700 shadow-card">
+          <p className="font-semibold text-brand-black">Comprovantes ainda não ativados no Supabase.</p>
+          <p className="mt-1">
+            A tabela <code className="rounded bg-white/70 px-1">despesa_comprovantes</code> não existe no banco.
+            Aplique a migration <code className="rounded bg-white/70 px-1">supabase/migrations/20260727020000_etapas_e_comprovantes.sql</code> para o WhatsApp salvar contas, notas e comprovantes de pagamento.
+          </p>
+        </div>
+      )}
+
+      <div className="overflow-hidden overflow-x-auto rounded-card border border-brand-gray-300/60 bg-white shadow-card">
+        <table className="w-full min-w-[1120px] text-left text-sm">
+          <thead className="bg-brand-gray-100 text-[11px] uppercase tracking-[0.12em] text-brand-gray-500">
             <tr>
-              <th className="px-4 py-3 font-medium">Data</th>
-              <th className="px-4 py-3 font-medium">Obra</th>
-              <th className="px-4 py-3 font-medium">Categoria</th>
-              <th className="px-4 py-3 font-medium">Etapa</th>
-              <th className="px-4 py-3 font-medium">Descrição</th>
-              <th className="px-4 py-3 font-medium">Fornecedor</th>
-              <th className="px-4 py-3 font-medium text-right">Valor</th>
-              <th className="px-4 py-3 font-medium">Origem</th>
-              <th className="px-4 py-3 font-medium"></th>
+              <th className="px-5 py-3 font-extrabold">Lançamento</th>
+              <th className="px-5 py-3 font-extrabold">Classificação</th>
+              <th className="px-5 py-3 font-extrabold">Material / Fornecedor</th>
+              <th className="px-5 py-3 text-right font-extrabold">Valor</th>
+              <th className="px-5 py-3 font-extrabold">Comprovante</th>
+              <th className="px-5 py-3 font-extrabold">Origem</th>
+              <th className="px-5 py-3 font-extrabold">Registrado</th>
+              <th className="px-5 py-3 text-right font-extrabold">Ações</th>
             </tr>
           </thead>
-          <tbody className="divide-y divide-zinc-100 dark:divide-zinc-800">
-            {despesas.map((d) => (
-              <tr key={d.id}>
-                <td className="px-4 py-3 whitespace-nowrap text-zinc-600 dark:text-zinc-400">
-                  {new Date(d.data + "T00:00:00").toLocaleDateString("pt-BR")}
-                </td>
-                <td className="px-4 py-3 text-zinc-900 dark:text-zinc-100">
-                  {(d.obras as unknown as { nome: string } | null)?.nome ?? "—"}
-                </td>
-                <td className="px-4 py-3 text-zinc-700 dark:text-zinc-300">
-                  {(d.categorias as unknown as { nome: string } | null)?.nome ?? "—"}
-                </td>
-                <td className="px-4 py-3 text-zinc-700 dark:text-zinc-300">
-                  {(d.etapas as unknown as { nome: string } | null)?.nome ?? "—"}
-                </td>
-                <td className="px-4 py-3 max-w-[220px] truncate text-zinc-700 dark:text-zinc-300">
-                  {d.descricao ?? "—"}
-                </td>
-                <td className="px-4 py-3 text-zinc-700 dark:text-zinc-300">
-                  {(d.fornecedores as unknown as { nome: string } | null)?.nome ?? "—"}
-                </td>
-                <td className="px-4 py-3 text-right font-medium text-zinc-900 dark:text-zinc-100">
-                  {formatBRL(d.valor)}
-                </td>
-                <td className="px-4 py-3">
-                  <span className="rounded-full bg-zinc-100 dark:bg-zinc-800 px-2 py-0.5 text-xs capitalize text-zinc-600 dark:text-zinc-300">
-                    {d.origem}
-                  </span>
-                </td>
-                <td className="px-4 py-3">
-                  <div className="flex items-center gap-3 whitespace-nowrap">
-                    <Link
-                      href={`/dashboard/despesas/${d.id}`}
-                      className="text-sm font-medium text-blue-600 hover:underline"
-                    >
-                      Editar
-                    </Link>
-                    <DeleteButton despesaId={d.id} action={deleteDespesaAction} />
-                  </div>
-                </td>
-              </tr>
-            ))}
+          <tbody className="divide-y divide-brand-gray-300/40">
+            {despesas.map((d) => {
+              const obraNome = (d.obras as unknown as { nome: string } | null)?.nome ?? "-";
+              const categoriaNome =
+                (d.categorias as unknown as { nome: string } | null)?.nome ?? "-";
+              const etapaNome = (d.etapas as unknown as { nome: string } | null)?.nome ?? "-";
+              const materialNome =
+                (d.materiais as unknown as { nome: string } | null)?.nome ?? "-";
+              const fornecedorNome =
+                (d.fornecedores as unknown as { nome: string } | null)?.nome ?? "-";
+              const comprovantesDaDespesa = comprovantesPorDespesa.get(d.id) ?? [];
+              const documentosCobranca = comprovantesDaDespesa.filter(
+                (item) => item.tipo_documento === "documento_cobranca"
+              );
+              const comprovantesPagamento = comprovantesDaDespesa.filter(
+                (item) => item.tipo_documento === "comprovante_pagamento"
+              );
+              const etapasDaDespesa = (etapas ?? []).filter(
+                (etapa) => etapa.obra_id === d.obra_id || etapa.obra_id === null
+              );
+
+              return (
+                <tr key={d.id} className="align-top hover:bg-brand-gray-100/60">
+                  <td className="px-5 py-4">
+                    <OpenDespesaModalButton despesaId={d.id}>
+                      <div className="flex items-start gap-3">
+                        <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-brand-sm bg-brand-red/10 text-brand-red">
+                          <ActionIcon name="receipt" />
+                        </div>
+                        <div className="min-w-0">
+                          <p className="font-semibold text-brand-black">{obraNome}</p>
+                          <p className="mt-1 max-w-[280px] truncate text-xs text-brand-gray-500">
+                            {d.descricao ?? "Sem descrição"}
+                          </p>
+                          <p className="mt-1 text-[11px] font-bold text-brand-red">
+                            Clique para ver detalhes
+                          </p>
+                        </div>
+                      </div>
+                    </OpenDespesaModalButton>
+                  </td>
+                  <td className="px-5 py-4">
+                    <div className="flex flex-col gap-2">
+                      <span className="inline-flex w-fit rounded-full bg-brand-red/10 px-3 py-1 text-xs font-bold text-brand-red">
+                        {categoriaNome}
+                      </span>
+                      <span className="text-xs leading-5 text-brand-gray-500">{etapaNome}</span>
+                    </div>
+                  </td>
+                  <td className="px-5 py-4">
+                    <p className="max-w-[260px] font-medium text-brand-black">{materialNome}</p>
+                    <p className="mt-1 max-w-[260px] truncate text-xs text-brand-gray-500">
+                      {fornecedorNome}
+                    </p>
+                  </td>
+                  <td className="px-5 py-4 text-right">
+                    <p className="font-display text-lg font-bold text-brand-black">
+                      {formatBRL(d.valor)}
+                    </p>
+                  </td>
+                  <td className="px-5 py-4">
+                    <div className="flex items-center gap-2">
+                      {documentosCobranca[0]?.url ? (
+                        <Link
+                          href={documentosCobranca[0].url}
+                          target="_blank"
+                          rel="noreferrer"
+                          aria-label="Ver conta ou nota"
+                          title="Ver conta ou nota"
+                          className="inline-flex h-10 w-10 items-center justify-center rounded-brand-sm border border-status-info/25 bg-white text-status-info hover:bg-status-info hover:text-white"
+                        >
+                          <ActionIcon name="file" />
+                        </Link>
+                      ) : (
+                        <span
+                          aria-label="Sem conta ou nota"
+                          title="Sem conta ou nota"
+                          className="inline-flex h-10 w-10 items-center justify-center rounded-brand-sm border border-brand-gray-300 bg-brand-gray-100 text-brand-gray-500"
+                        >
+                          <ActionIcon name="file" />
+                        </span>
+                      )}
+                      {comprovantesPagamento[0]?.url ? (
+                        <Link
+                          href={comprovantesPagamento[0].url}
+                          target="_blank"
+                          rel="noreferrer"
+                          aria-label="Ver comprovante de pagamento"
+                          title="Ver comprovante de pagamento"
+                          className="inline-flex h-10 w-10 items-center justify-center rounded-brand-sm border border-status-success/25 bg-[#e9f8f0] text-status-success hover:bg-status-success hover:text-white"
+                        >
+                          <ActionIcon name="payment" />
+                        </Link>
+                      ) : (
+                        <span
+                          aria-label="Comprovante de pagamento pendente"
+                          title="Comprovante de pagamento pendente"
+                          className="inline-flex h-10 w-10 items-center justify-center rounded-brand-sm border border-status-warning/25 bg-status-warning/10 text-status-warning"
+                        >
+                          <ActionIcon name="payment" />
+                        </span>
+                      )}
+                    </div>
+                  </td>
+                  <td className="px-5 py-4">
+                    <div className="flex flex-col gap-1">
+                      <span
+                        className={
+                          d.origem === "whatsapp"
+                            ? "inline-flex w-fit rounded-full bg-[#e9f8f0] px-3 py-1 text-xs font-bold capitalize text-status-success"
+                            : "inline-flex w-fit rounded-full bg-brand-gray-100 px-3 py-1 text-xs font-bold capitalize text-brand-gray-700"
+                        }
+                      >
+                        {d.origem}
+                      </span>
+                      <span className="max-w-[180px] truncate text-xs text-brand-gray-500">
+                        por {d.criado_por_nome || d.criado_por_telefone || "Dashboard"}
+                      </span>
+                    </div>
+                  </td>
+                  <td className="whitespace-nowrap px-5 py-4 text-brand-gray-500">
+                    {formatDataHoraBrasil(d.created_at)}
+                  </td>
+                  <td className="px-5 py-4 text-right">
+                    <div className="flex items-center justify-end gap-2 whitespace-nowrap">
+                      <CadastroModal
+                        titulo="Editar lançamento"
+                        descricao="Ajuste obra, categoria, etapa, material, fornecedor, valor e descrição."
+                        botao="Editar"
+                        icone={<ActionIcon name="edit" />}
+                        variante="icone"
+                        triggerId={`despesa-${d.id}`}
+                        modalSize="wide"
+                      >
+                        <form action={updateDespesaAction} className="space-y-5">
+                          <input type="hidden" name="id" value={d.id} />
+                          <div className="rounded-brand-sm border border-brand-gray-300/70 bg-brand-gray-100/60 p-4 sm:col-span-2">
+                            <p className="text-sm font-bold text-brand-black">Resumo do lançamento</p>
+                            <div className="mt-3 grid gap-3 text-sm sm:grid-cols-3">
+                              <div>
+                                <p className="text-xs font-bold uppercase tracking-[0.12em] text-brand-gray-400">Criado por</p>
+                                <p className="mt-1 font-semibold text-brand-black">{d.criado_por_nome || d.criado_por_telefone || "Dashboard"}</p>
+                              </div>
+                              <div>
+                                <p className="text-xs font-bold uppercase tracking-[0.12em] text-brand-gray-400">Origem</p>
+                                <p className="mt-1 font-semibold capitalize text-brand-black">{d.origem}</p>
+                              </div>
+                              <div>
+                                <p className="text-xs font-bold uppercase tracking-[0.12em] text-brand-gray-400">Registrado em</p>
+                                <p className="mt-1 font-semibold text-brand-black">{formatDataHoraBrasil(d.created_at)}</p>
+                              </div>
+                            </div>
+                          </div>
+                          <div className="rounded-brand border border-brand-gray-300/70 bg-white p-5">
+                            <div className="mb-4">
+                              <p className="text-sm font-extrabold text-brand-black">Dados do lançamento</p>
+                              <p className="mt-1 text-xs text-brand-gray-500">Edite classificação, valor, data e descrição.</p>
+                            </div>
+                            <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
+                          <label className="flex flex-col gap-1 text-sm text-brand-gray-700">
+                            Obra
+                            <select
+                              name="obra_id"
+                              defaultValue={d.obra_id}
+                              required
+                              className="rounded-brand-sm border border-brand-gray-300 bg-white px-3 py-2 text-sm outline-none focus:border-brand-red"
+                            >
+                              {(obras ?? []).map((obra) => (
+                                <option key={obra.id} value={obra.id}>
+                                  {obra.nome}
+                                </option>
+                              ))}
+                            </select>
+                          </label>
+                          <label className="flex flex-col gap-1 text-sm text-brand-gray-700">
+                            Categoria
+                            <select
+                              name="categoria_id"
+                              defaultValue={d.categoria_id}
+                              required
+                              className="rounded-brand-sm border border-brand-gray-300 bg-white px-3 py-2 text-sm outline-none focus:border-brand-red"
+                            >
+                              {(categorias ?? []).map((categoria) => (
+                                <option key={categoria.id} value={categoria.id}>
+                                  {categoria.nome}
+                                </option>
+                              ))}
+                            </select>
+                          </label>
+                          <label className="flex flex-col gap-1 text-sm text-brand-gray-700">
+                            Etapa
+                            <select
+                              name="etapa_id"
+                              defaultValue={d.etapa_id ?? ""}
+                              className="rounded-brand-sm border border-brand-gray-300 bg-white px-3 py-2 text-sm outline-none focus:border-brand-red"
+                            >
+                              <option value="">Sem etapa</option>
+                              {etapasDaDespesa.map((etapa) => (
+                                <option key={etapa.id} value={etapa.id}>
+                                  {etapa.nome}
+                                </option>
+                              ))}
+                            </select>
+                          </label>
+                          <label className="flex flex-col gap-1 text-sm text-brand-gray-700">
+                            Material
+                            <select
+                              name="material_id"
+                              defaultValue={d.material_id ?? ""}
+                              className="rounded-brand-sm border border-brand-gray-300 bg-white px-3 py-2 text-sm outline-none focus:border-brand-red"
+                            >
+                              <option value="">Sem material</option>
+                              {(materiais ?? []).map((material) => (
+                                <option key={material.id} value={material.id}>
+                                  {material.nome}
+                                </option>
+                              ))}
+                            </select>
+                          </label>
+                          <label className="flex flex-col gap-1 text-sm text-brand-gray-700">
+                            Fornecedor
+                            <select
+                              name="fornecedor_id"
+                              defaultValue={d.fornecedor_id ?? ""}
+                              className="rounded-brand-sm border border-brand-gray-300 bg-white px-3 py-2 text-sm outline-none focus:border-brand-red"
+                            >
+                              <option value="">Sem fornecedor</option>
+                              {(fornecedores ?? []).map((fornecedor) => (
+                                <option key={fornecedor.id} value={fornecedor.id}>
+                                  {fornecedor.nome}
+                                </option>
+                              ))}
+                            </select>
+                          </label>
+                          <label className="flex flex-col gap-1 text-sm text-brand-gray-700">
+                            Data
+                            <input
+                              type="date"
+                              name="data"
+                              defaultValue={d.data}
+                              required
+                              className="rounded-brand-sm border border-brand-gray-300 bg-white px-3 py-2 text-sm outline-none focus:border-brand-red"
+                            />
+                          </label>
+                          <label className="flex flex-col gap-1 text-sm text-brand-gray-700">
+                            Valor
+                            <input
+                              name="valor"
+                              defaultValue={valorInputBR(d.valor)}
+                              required
+                              className="rounded-brand-sm border border-brand-gray-300 bg-white px-3 py-2 text-sm outline-none focus:border-brand-red"
+                            />
+                          </label>
+                          <label className="flex flex-col gap-1 text-sm text-brand-gray-700 sm:col-span-2">
+                            Descrição
+                            <textarea
+                              name="descricao"
+                              defaultValue={d.descricao ?? ""}
+                              rows={3}
+                              className="rounded-brand-sm border border-brand-gray-300 bg-white px-3 py-2 text-sm outline-none focus:border-brand-red"
+                            />
+                          </label>
+                            </div>
+                          </div>
+                          <div className="rounded-brand border border-brand-gray-300/70 bg-brand-gray-100/60 p-5">
+                            <div className="flex flex-col gap-1 sm:flex-row sm:items-start sm:justify-between">
+                              <div>
+                                <p className="text-sm font-bold text-brand-black">Documentos do lançamento</p>
+                                <p className="mt-1 text-xs leading-5 text-brand-gray-500">
+                                  Organize o que é cobrança e o que comprova o pagamento.
+                                </p>
+                              </div>
+                              <span className="mt-1 inline-flex w-fit rounded-full bg-white px-3 py-1 text-[11px] font-extrabold uppercase tracking-[0.16em] text-brand-gray-500">
+                                {comprovantesDaDespesa.length} arquivo(s)
+                              </span>
+                            </div>
+
+                            <div className="mt-4 grid gap-3 lg:grid-cols-2">
+                                {[
+                                  {
+                                    tipo: "documento_cobranca",
+                                    titulo: "Conta / nota",
+                                    descricao: "Nota fiscal, boleto, conta de luz ou cobrança original.",
+                                    icone: "file" as const,
+                                    cor: "text-status-info",
+                                    bg: "bg-status-info/10",
+                                    borda: "border-status-info/20",
+                                    vazio: "Nenhuma conta ou nota vinculada.",
+                                    acao: "Mover para conta",
+                                  },
+                                  {
+                                    tipo: "comprovante_pagamento",
+                                    titulo: "Comprovante de pagamento",
+                                    descricao: "Pix, recibo bancário ou confirmação de pagamento.",
+                                    icone: "payment" as const,
+                                    cor: "text-status-success",
+                                    bg: "bg-status-success/10",
+                                    borda: "border-status-success/20",
+                                    vazio: "Pagamento ainda sem comprovante.",
+                                    acao: "Mover para pagamento",
+                                  },
+                                ].map((grupo) => {
+                                  const arquivosDoTipo = comprovantesDaDespesa.filter(
+                                    (comprovante) => comprovante.tipo_documento === grupo.tipo
+                                  );
+                                  const outrosArquivos = comprovantesDaDespesa.filter(
+                                    (comprovante) => comprovante.tipo_documento !== grupo.tipo
+                                  );
+
+                                  return (
+                                    <div
+                                      key={grupo.tipo}
+                                      className={`rounded-brand border ${grupo.borda} bg-white p-4 shadow-sm`}
+                                    >
+                                      <div className="flex items-start gap-3">
+                                        <span
+                                          className={`inline-flex h-10 w-10 shrink-0 items-center justify-center rounded-brand-sm ${grupo.bg} ${grupo.cor}`}
+                                        >
+                                          <ActionIcon name={grupo.icone} />
+                                        </span>
+                                        <div className="min-w-0">
+                                          <p className="text-sm font-extrabold text-brand-black">{grupo.titulo}</p>
+                                          <p className="mt-1 text-xs leading-5 text-brand-gray-500">{grupo.descricao}</p>
+                                        </div>
+                                      </div>
+
+                                      <div className="mt-4 flex flex-col gap-2">
+                                        {arquivosDoTipo.length > 0 ? (
+                                          arquivosDoTipo.map((comprovante, index) => (
+                                            <div
+                                              key={comprovante.id}
+                                              className="flex items-center justify-between gap-3 rounded-brand-sm bg-brand-gray-100 px-3 py-2"
+                                            >
+                                              <div className="min-w-0">
+                                                <p className="truncate text-xs font-bold text-brand-black">
+                                                  {comprovante.nome_arquivo || `Arquivo ${index + 1}`}
+                                                </p>
+                                                <p className="text-[11px] text-brand-gray-500">
+                                                  Classificação correta
+                                                </p>
+                                                {grupo.tipo === "comprovante_pagamento" &&
+                                                  (comprovante.conta_origem_banco ||
+                                                    comprovante.conta_origem_titular ||
+                                                    comprovante.metodo_pagamento) && (
+                                                    <p className="mt-1 text-[11px] leading-4 text-brand-gray-600">
+                                                      Origem: {[comprovante.conta_origem_banco, comprovante.conta_origem_titular]
+                                                        .filter(Boolean)
+                                                        .join(" | ")}
+                                                      {comprovante.metodo_pagamento
+                                                        ? ` | ${comprovante.metodo_pagamento}`
+                                                        : ""}
+                                                    </p>
+                                                  )}
+                                              </div>
+                                              {comprovante.url && (
+                                                <Link
+                                                  href={comprovante.url}
+                                                  target="_blank"
+                                                  rel="noreferrer"
+                                                  className="inline-flex h-9 w-9 shrink-0 items-center justify-center rounded-brand-sm border border-brand-gray-300 bg-white text-brand-gray-700 hover:border-brand-red/40 hover:text-brand-red"
+                                                  aria-label={`Ver ${grupo.titulo.toLowerCase()}`}
+                                                  title={`Ver ${grupo.titulo.toLowerCase()}`}
+                                                >
+                                                  <ActionIcon name="file" />
+                                                </Link>
+                                              )}
+                                            </div>
+                                          ))
+                                        ) : (
+                                          <div className="rounded-brand-sm border border-dashed border-brand-gray-300 bg-brand-gray-100/70 px-3 py-3 text-xs text-brand-gray-500">
+                                            {grupo.vazio}
+                                          </div>
+                                        )}
+                                      </div>
+
+                                      {outrosArquivos.length > 0 && (
+                                        <div className="mt-3 border-t border-brand-gray-300/70 pt-3">
+                                          <p className="mb-2 text-[11px] font-bold uppercase tracking-[0.14em] text-brand-gray-400">
+                                            Corrigir classificação
+                                          </p>
+                                          <div className="flex flex-wrap gap-2">
+                                            {outrosArquivos.map((comprovante) => (
+                                              <button
+                                                key={comprovante.id}
+                                                type="submit"
+                                                formAction={reclassificarComprovanteDespesaAction}
+                                                name="reclassificar_comprovante"
+                                                value={`${comprovante.id}|${grupo.tipo}`}
+                                                className={`inline-flex items-center gap-2 rounded-brand-sm border ${grupo.borda} bg-white px-3 py-2 text-xs font-bold ${grupo.cor} hover:bg-brand-gray-100`}
+                                              >
+                                                <ActionIcon name={grupo.icone} />
+                                                {grupo.acao}
+                                              </button>
+                                            ))}
+                                          </div>
+                                        </div>
+                                      )}
+
+                                      <div className="mt-3 border-t border-brand-gray-300/70 pt-3">
+                                        <p className="mb-2 text-[11px] font-bold uppercase tracking-[0.14em] text-brand-gray-400">
+                                          Anexar pelo app
+                                        </p>
+                                        <div className="flex flex-col gap-2">
+                                          <input
+                                            type="file"
+                                            name={`arquivo_${grupo.tipo}`}
+                                            accept="image/*,application/pdf"
+                                            className="block w-full rounded-brand-sm border border-brand-gray-300 bg-white px-3 py-2 text-xs text-brand-gray-600 file:mr-3 file:rounded-brand-sm file:border-0 file:bg-brand-gray-100 file:px-3 file:py-1.5 file:text-xs file:font-bold file:text-brand-black hover:file:bg-brand-gray-200"
+                                          />
+                                          <p className="rounded-brand-sm bg-white px-3 py-2 text-[11px] leading-5 text-brand-gray-500">
+                                            Escolha um arquivo e clique em <strong>Salvar alterações</strong> para anexar.
+                                          </p>
+                                        </div>
+                                      </div>
+                                    </div>
+                                  );
+                                })}
+                              </div>
+                          </div>
+                          <input type="hidden" name="despesa_id" value={d.id} />
+                          <button
+                            type="submit"
+                            className="rounded-brand-sm bg-brand-red px-4 py-2 text-sm font-semibold text-white hover:bg-brand-red-700 sm:col-span-2"
+                          >
+                            Salvar edição
+                          </button>
+                        </form>
+                      </CadastroModal>
+                      <DeleteButton despesaId={d.id} action={deleteDespesaAction} />
+                    </div>
+                  </td>
+                </tr>
+              );
+            })}
+
             {despesas.length === 0 && (
               <tr>
-                <td colSpan={9} className="px-4 py-8 text-center text-zinc-500">
-                  Nenhuma despesa registrada ainda.
+                <td colSpan={8} className="px-5 py-10 text-center text-sm text-brand-gray-500">
+                  Nenhum lançamento encontrado para os filtros atuais.
                 </td>
               </tr>
             )}

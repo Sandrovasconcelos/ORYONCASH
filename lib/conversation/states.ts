@@ -10,6 +10,8 @@ export const ESTADOS = {
   DESPESA_DESCRICAO_PROMPT: "despesa_descricao_prompt",
   DESPESA_DESCRICAO_TEXTO: "despesa_descricao_texto",
   DESPESA_CONFIRMACAO: "despesa_confirmacao",
+  ANEXAR_PAGAMENTO_SELECIONANDO_LANCAMENTO: "anexar_pagamento_selecionando_lancamento",
+  ANEXAR_PAGAMENTO_ARQUIVO: "anexar_pagamento_arquivo",
 
   CADASTRO_OBRA_NOME: "cadastro_obra_nome",
   CADASTRO_OBRA_ORCAMENTO: "cadastro_obra_orcamento",
@@ -36,6 +38,7 @@ export const ESTADOS = {
   CORRIGIR_DESCRICAO_NOVA: "corrigir_descricao_nova",
   CORRIGIR_CATEGORIA_NOVA: "corrigir_categoria_nova",
   CORRIGIR_ETAPA_NOVA: "corrigir_etapa_nova",
+  CORRIGIR_MATERIAL_NOVO: "corrigir_material_novo",
   CORRIGIR_FORNECEDOR_NOVO: "corrigir_fornecedor_novo",
   CORRIGIR_CONFIRMAR_EXCLUSAO: "corrigir_confirmar_exclusao",
 
@@ -64,6 +67,7 @@ export const CAMPO_IDS = {
   VALOR: "campo:valor",
   CATEGORIA: "campo:categoria",
   ETAPA: "campo:etapa",
+  MATERIAL: "campo:material",
   FORNECEDOR: "campo:fornecedor",
   DESCRICAO: "campo:descricao",
   EXCLUIR: "campo:excluir",

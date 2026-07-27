@@ -23,10 +23,10 @@ function TooltipConteudo({
 }) {
   if (!active || !payload?.length) return null;
   return (
-    <div className="rounded-lg border border-zinc-200 dark:border-zinc-700 bg-white dark:bg-zinc-900 px-3 py-2 text-xs shadow-sm">
+    <div className="rounded-brand-sm border border-brand-gray-300/60 bg-white px-3 py-2 text-xs shadow-card">
       {payload.map((p) => (
         <p key={p.name} style={{ color: p.color }} className="font-medium">
-          {p.name}: <span className="text-zinc-700 dark:text-zinc-300">{formatBRL(p.value)}</span>
+          {p.name}: <span className="text-brand-gray-700">{formatBRL(p.value)}</span>
         </p>
       ))}
     </div>
@@ -40,7 +40,7 @@ export function OrcadoExecutadoChart({ itens }: { itens: Item[] }) {
 
   if (dados.length === 0) {
     return (
-      <p className="py-8 text-center text-sm text-zinc-500">
+      <p className="py-8 text-center text-sm text-brand-gray-500">
         Importe um orçamento por etapa para ver essa comparação.
       </p>
     );

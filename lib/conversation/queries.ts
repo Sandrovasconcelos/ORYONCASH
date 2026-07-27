@@ -1,11 +1,38 @@
 import { createAdminClient } from "@/lib/supabase/admin";
 
+const COMPROVANTES_BUCKET = "comprovantes";
+
+export type TipoDocumentoDespesa =
+  | "documento_cobranca"
+  | "comprovante_pagamento"
+  | "outro";
+
+function hojeNoBrasil(): string {
+  const partes = new Intl.DateTimeFormat("pt-BR", {
+    timeZone: "America/Fortaleza",
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+  }).formatToParts(new Date());
+
+  const ano = partes.find((parte) => parte.type === "year")?.value;
+  const mes = partes.find((parte) => parte.type === "month")?.value;
+  const dia = partes.find((parte) => parte.type === "day")?.value;
+
+  if (!ano || !mes || !dia) {
+    return new Date().toISOString().slice(0, 10);
+  }
+
+  return `${ano}-${mes}-${dia}`;
+}
+
 export async function listObrasAtivas() {
   const supabase = createAdminClient();
   const { data } = await supabase
     .from("obras")
     .select("id, nome")
     .eq("status", "ativa")
+    .is("deleted_at", null)
     .order("created_at", { ascending: false })
     .limit(10);
   return data ?? [];
@@ -16,6 +43,7 @@ export async function listCategorias() {
   const { data } = await supabase
     .from("categorias")
     .select("id, nome")
+    .is("deleted_at", null)
     .order("nome")
     .limit(10);
   return data ?? [];
@@ -87,6 +115,113 @@ export async function upsertEtapasDeObra(
     .eq("id", obraId);
 }
 
+export async function uploadComprovanteWhatsApp(input: {
+  telefone: string;
+  mediaId: string;
+  buffer: Buffer;
+  mimeType: string;
+  tipoDocumento?: TipoDocumentoDespesa;
+  contaOrigemBanco?: string | null;
+  contaOrigemTitular?: string | null;
+  contaOrigemDocumento?: string | null;
+  contaOrigemAgencia?: string | null;
+  contaOrigemNumero?: string | null;
+  metodoPagamento?: string | null;
+}) {
+  const supabase = createAdminClient();
+  const extensao =
+    input.mimeType.split("/")[1]?.replace("jpeg", "jpg").replace(/[^a-z0-9]/gi, "") ||
+    "bin";
+  const storagePath = `whatsapp/${input.telefone}/${Date.now()}-${input.mediaId}.${extensao}`;
+
+  const { error } = await supabase.storage
+    .from(COMPROVANTES_BUCKET)
+    .upload(storagePath, input.buffer, {
+      contentType: input.mimeType,
+      upsert: false,
+    });
+
+  if (error) throw error;
+
+  return {
+    bucket: COMPROVANTES_BUCKET,
+    path: storagePath,
+    mimeType: input.mimeType,
+    mediaId: input.mediaId,
+    tipoDocumento: input.tipoDocumento ?? "documento_cobranca",
+    contaOrigemBanco: input.contaOrigemBanco ?? null,
+    contaOrigemTitular: input.contaOrigemTitular ?? null,
+    contaOrigemDocumento: input.contaOrigemDocumento ?? null,
+    contaOrigemAgencia: input.contaOrigemAgencia ?? null,
+    contaOrigemNumero: input.contaOrigemNumero ?? null,
+    metodoPagamento: input.metodoPagamento ?? null,
+    nomeArquivo: `comprovante-${new Date().toISOString().slice(0, 10)}.${extensao}`,
+  };
+}
+
+export async function vincularComprovanteDespesa(input: {
+  despesaId: string;
+  comprovante: {
+    bucket: string;
+    path: string;
+    mimeType: string;
+    tipoDocumento?: TipoDocumentoDespesa;
+    mediaId?: string | null;
+    nomeArquivo?: string | null;
+    contaOrigemBanco?: string | null;
+    contaOrigemTitular?: string | null;
+    contaOrigemDocumento?: string | null;
+    contaOrigemAgencia?: string | null;
+    contaOrigemNumero?: string | null;
+    metodoPagamento?: string | null;
+  };
+}) {
+  const supabase = createAdminClient();
+  const dadosComContaOrigem = {
+    despesa_id: input.despesaId,
+    tipo_documento: input.comprovante.tipoDocumento ?? "documento_cobranca",
+    whatsapp_media_id: input.comprovante.mediaId ?? null,
+    storage_bucket: input.comprovante.bucket,
+    storage_path: input.comprovante.path,
+    mime_type: input.comprovante.mimeType,
+    nome_arquivo: input.comprovante.nomeArquivo ?? null,
+    conta_origem_banco: input.comprovante.contaOrigemBanco ?? null,
+    conta_origem_titular: input.comprovante.contaOrigemTitular ?? null,
+    conta_origem_documento: input.comprovante.contaOrigemDocumento ?? null,
+    conta_origem_agencia: input.comprovante.contaOrigemAgencia ?? null,
+    conta_origem_numero: input.comprovante.contaOrigemNumero ?? null,
+    metodo_pagamento: input.comprovante.metodoPagamento ?? null,
+    origem: "whatsapp" as const,
+  };
+
+  const { error } = await supabase
+    .from("despesa_comprovantes")
+    .insert(dadosComContaOrigem);
+
+  if (!error) return;
+
+  const mensagem = error.message.toLowerCase();
+  const erroDeColunaContaOrigem =
+    mensagem.includes("conta_origem") ||
+    mensagem.includes("metodo_pagamento") ||
+    mensagem.includes("column");
+
+  if (!erroDeColunaContaOrigem) throw error;
+
+  const { error: fallbackError } = await supabase.from("despesa_comprovantes").insert({
+    despesa_id: input.despesaId,
+    tipo_documento: input.comprovante.tipoDocumento ?? "documento_cobranca",
+    whatsapp_media_id: input.comprovante.mediaId ?? null,
+    storage_bucket: input.comprovante.bucket,
+    storage_path: input.comprovante.path,
+    mime_type: input.comprovante.mimeType,
+    nome_arquivo: input.comprovante.nomeArquivo ?? null,
+    origem: "whatsapp",
+  });
+
+  if (fallbackError) throw fallbackError;
+}
+
 export async function findObraById(id: string) {
   const supabase = createAdminClient();
   const { data } = await supabase
@@ -155,6 +290,7 @@ export async function findOrCreateMaterial(nome: string, categoriaId: string) {
     .from("materiais")
     .select("id, nome")
     .ilike("nome", nome)
+    .is("deleted_at", null)
     .maybeSingle();
   if (existente) return existente;
   return createMaterial(nome, categoriaId);
@@ -181,6 +317,7 @@ export async function findFornecedorByCnpj(cnpj: string) {
     .from("fornecedores")
     .select("id, nome")
     .eq("cnpj", cnpj)
+    .is("deleted_at", null)
     .maybeSingle();
   return data;
 }
@@ -204,9 +341,11 @@ export async function createDespesa(input: {
   descricao: string | null;
   materialId?: string | null;
   fornecedorId?: string | null;
+  criadoPorTelefone?: string | null;
+  criadoPorNome?: string | null;
 }) {
   const supabase = createAdminClient();
-  const { error } = await supabase.from("despesas").insert({
+  const base = {
     obra_id: input.obraId,
     categoria_id: input.categoriaId,
     etapa_id: input.etapaId,
@@ -214,9 +353,31 @@ export async function createDespesa(input: {
     descricao: input.descricao,
     material_id: input.materialId ?? null,
     fornecedor_id: input.fornecedorId ?? null,
-    origem: "whatsapp",
-  });
-  if (error) throw error;
+    data: hojeNoBrasil(),
+    origem: "whatsapp" as const,
+  };
+
+  const comAutoria = {
+    ...base,
+    criado_por_telefone: input.criadoPorTelefone ?? null,
+    criado_por_nome: input.criadoPorNome ?? null,
+  };
+
+  let result = await supabase
+    .from("despesas")
+    .insert(comAutoria)
+    .select("id")
+    .single();
+
+  if (
+    result.error &&
+    result.error.message.toLowerCase().includes("criado_por")
+  ) {
+    result = await supabase.from("despesas").insert(base).select("id").single();
+  }
+
+  if (result.error) throw result.error;
+  return result.data;
 }
 
 export async function listFornecedores() {
@@ -224,6 +385,7 @@ export async function listFornecedores() {
   const { data } = await supabase
     .from("fornecedores")
     .select("id, nome")
+    .is("deleted_at", null)
     .order("nome")
     .limit(10);
   return data ?? [];
@@ -235,6 +397,7 @@ export async function findFornecedorById(id: string) {
     .from("fornecedores")
     .select("id, nome")
     .eq("id", id)
+    .is("deleted_at", null)
     .maybeSingle();
   return data;
 }
@@ -244,8 +407,31 @@ export async function listMateriais() {
   const { data } = await supabase
     .from("materiais")
     .select("id, nome")
+    .is("deleted_at", null)
     .order("nome")
     .limit(10);
+  return data ?? [];
+}
+
+export async function listMateriaisSemelhantes(termo: string, limite = 8) {
+  const palavras = termo
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .toLowerCase()
+    .split(/\s+/)
+    .filter((p) => p.length >= 3)
+    .slice(0, 3);
+
+  if (palavras.length === 0) return [];
+
+  const supabase = createAdminClient();
+  const { data } = await supabase
+    .from("materiais")
+    .select("id, nome")
+    .or(palavras.map((p) => `nome.ilike.%${p}%`).join(","))
+    .is("deleted_at", null)
+    .order("nome")
+    .limit(limite);
   return data ?? [];
 }
 
@@ -255,6 +441,7 @@ export async function findMaterialById(id: string) {
     .from("materiais")
     .select("id, nome")
     .eq("id", id)
+    .is("deleted_at", null)
     .maybeSingle();
   return data;
 }
@@ -282,6 +469,7 @@ export async function listDespesasRecentes(limite = 10) {
   const { data } = await supabase
     .from("despesas")
     .select("id, valor, descricao, data, categorias(nome)")
+    .is("deleted_at", null)
     .order("created_at", { ascending: false })
     .limit(limite);
 
@@ -294,14 +482,31 @@ export async function listDespesasRecentes(limite = 10) {
   }));
 }
 
+export async function findDespesaRecenteParaComprovantePagamento() {
+  const supabase = createAdminClient();
+  const limiteTempo = new Date(Date.now() - 30 * 60 * 1000).toISOString();
+  const { data } = await supabase
+    .from("despesas")
+    .select("id, valor, descricao, created_at")
+    .eq("origem", "whatsapp")
+    .is("deleted_at", null)
+    .gte("created_at", limiteTempo)
+    .order("created_at", { ascending: false })
+    .limit(1)
+    .maybeSingle();
+
+  return data ?? null;
+}
+
 export async function findDespesaCompletaById(id: string) {
   const supabase = createAdminClient();
   const { data } = await supabase
     .from("despesas")
     .select(
-      "id, obra_id, categoria_id, etapa_id, fornecedor_id, valor, descricao, data, obras(nome), categorias(nome), etapas(nome), fornecedores(nome)"
+      "id, obra_id, categoria_id, etapa_id, material_id, fornecedor_id, valor, descricao, data, obras(nome), categorias(nome), etapas(nome), materiais(nome), fornecedores(nome)"
     )
     .eq("id", id)
+    .is("deleted_at", null)
     .maybeSingle();
   if (!data) return null;
 
@@ -313,6 +518,8 @@ export async function findDespesaCompletaById(id: string) {
     categoriaNome: (data.categorias as unknown as { nome: string } | null)?.nome ?? "—",
     etapaId: data.etapa_id,
     etapaNome: (data.etapas as unknown as { nome: string } | null)?.nome ?? "—",
+    materialId: data.material_id,
+    materialNome: (data.materiais as unknown as { nome: string } | null)?.nome ?? null,
     fornecedorId: data.fornecedor_id,
     fornecedorNome: (data.fornecedores as unknown as { nome: string } | null)?.nome ?? null,
     valor: data.valor,
@@ -327,6 +534,7 @@ export async function updateDespesaCampo(
     descricao: string | null;
     categoria_id: string;
     etapa_id: string;
+    material_id: string | null;
     fornecedor_id: string;
   }>
 ) {
@@ -349,7 +557,7 @@ export async function getObraResumo(obraId: string) {
       .select("nome, orcamento_total")
       .eq("id", obraId)
       .maybeSingle(),
-    supabase.from("despesas").select("valor").eq("obra_id", obraId),
+    supabase.from("despesas").select("valor").eq("obra_id", obraId).is("deleted_at", null),
   ]);
 
   if (!obra) return null;

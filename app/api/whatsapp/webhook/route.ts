@@ -32,7 +32,7 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ ok: true });
   }
 
-  if (!isAllowedNumber(message.from)) {
+  if (!(await isAllowedNumber(message.from))) {
     return NextResponse.json({ ok: true });
   }
 

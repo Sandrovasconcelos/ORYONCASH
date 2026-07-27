@@ -6,43 +6,74 @@ export type InvoiceItem = {
   valorTotal: number;
 };
 
+export type TipoDocumentoExtraido =
+  | "documento_cobranca"
+  | "comprovante_pagamento"
+  | "outro";
+
 export type InvoiceData = {
+  tipoDocumento: TipoDocumentoExtraido;
   fornecedorNome: string;
   fornecedorCnpj: string | null;
+  contaOrigemBanco: string | null;
+  contaOrigemTitular: string | null;
+  contaOrigemDocumento: string | null;
+  contaOrigemAgencia: string | null;
+  contaOrigemNumero: string | null;
+  metodoPagamento: string | null;
   itens: InvoiceItem[];
   valorTotalNota: number | null;
 };
 
-const PROMPT = `Voce recebeu a imagem/PDF de um documento de despesa de uma
-obra de construcao. Pode ser uma nota fiscal (NF-e/DANFE) com varios
-produtos, ou pode ser um comprovante simples: recibo de pagamento, comprovante
-de PIX/transferencia, recibo de mao de obra, foto de um unico item comprado
-com o preco escrito, etc. Extraia os dados no formato JSON abaixo.
+const PROMPT = `Você recebeu a imagem/PDF de um documento financeiro de uma obra.
+
+Classifique primeiro o documento:
+- "documento_cobranca": nota fiscal, DANFE, fatura, boleto, conta de luz/água,
+  recibo/conta que representa algo a pagar ou uma despesa a registrar.
+- "comprovante_pagamento": comprovante Pix, TED, transferência, pagamento de
+  boleto/conta, recibo bancário, tela com autenticação/transação concluída,
+  documento que prova que o pagamento já foi realizado.
+- "outro": quando não for possível identificar com segurança.
+
+Depois extraia os dados em JSON.
 
 Regras:
-- "fornecedorNome": nome de quem RECEBEU o pagamento (vendedor, prestador de
-  servico, pessoa que emitiu o recibo), nunca o destinatario/pagador. Se for
-  um comprovante de PIX/transferencia sem nome de empresa, use o nome da
-  pessoa/chave informada, ou "Não identificado" se nao houver nenhum nome.
-- "fornecedorCnpj": CNPJ do emissor, apenas digitos (sem pontuacao). Use
-  null se nao encontrar (normal em recibos simples).
-- "itens": se for uma nota fiscal com varios produtos, um item para cada
-  produto/servico, com a descricao reescrita de forma legivel (capitalizada,
-  mantendo especificacoes como medidas/voltagem), a quantidade e o valor
-  TOTAL daquele item (nao o valor unitario). Se for um comprovante/recibo de
-  UM UNICO pagamento (ex.: pagamento de mao de obra, frete, servico), retorne
-  um UNICO item com quantidade 1 e uma descricao clara do que foi pago (nunca
-  deixe a descricao vazia ou generica como "despesa" - descreva o que
-  especificamente foi pago, com base no que estiver escrito no documento).
-- "valorTotalNota": valor total do documento. Use null se nao conseguir
+- "fornecedorNome": nome de quem recebeu o pagamento ou emitiu a cobrança
+  (vendedor, prestador, empresa ou pessoa recebedora). Nunca use o nome do
+  pagador como fornecedor. Se não encontrar, use "Não identificado".
+- "fornecedorCnpj": CNPJ do emissor/recebedor, apenas dígitos. Use null se não
+  encontrar.
+- Para comprovantes de pagamento, extraia também a conta de origem do dinheiro:
+  "contaOrigemBanco" é o banco/instituição de onde saiu o pagamento
+  (ex: Caixa, Nubank, Itaú, Bradesco).
+  "contaOrigemTitular" é o nome do pagador/titular/debitado/remetente.
+  "contaOrigemDocumento" é CPF/CNPJ do pagador/titular, apenas dígitos.
+  "contaOrigemAgencia" é a agência de origem, quando aparecer.
+  "contaOrigemNumero" é o número da conta de origem, quando aparecer.
+  "metodoPagamento" é Pix, TED, boleto, cartão, dinheiro, transferência ou outro.
+  Use null nos campos que não aparecerem. Não confunda recebedor com conta de origem.
+- "itens": se for nota/conta com vários produtos/serviços, retorne um item por
+  produto/serviço. Se for um comprovante de pagamento único, retorne um único
+  item com quantidade 1 e uma descrição clara do pagamento.
+- "valorTotalNota": valor total do documento. Use null se não conseguir
   identificar.
 - Responda APENAS com o JSON, sem texto adicional.`;
 
 const RESPONSE_SCHEMA = {
   type: "object",
   properties: {
+    tipoDocumento: {
+      type: "string",
+      enum: ["documento_cobranca", "comprovante_pagamento", "outro"],
+    },
     fornecedorNome: { type: "string" },
     fornecedorCnpj: { type: "string", nullable: true },
+    contaOrigemBanco: { type: "string", nullable: true },
+    contaOrigemTitular: { type: "string", nullable: true },
+    contaOrigemDocumento: { type: "string", nullable: true },
+    contaOrigemAgencia: { type: "string", nullable: true },
+    contaOrigemNumero: { type: "string", nullable: true },
+    metodoPagamento: { type: "string", nullable: true },
     itens: {
       type: "array",
       items: {
@@ -57,7 +88,17 @@ const RESPONSE_SCHEMA = {
     },
     valorTotalNota: { type: "number", nullable: true },
   },
-  required: ["fornecedorNome", "itens"],
+  required: [
+    "tipoDocumento",
+    "fornecedorNome",
+    "contaOrigemBanco",
+    "contaOrigemTitular",
+    "contaOrigemDocumento",
+    "contaOrigemAgencia",
+    "contaOrigemNumero",
+    "metodoPagamento",
+    "itens",
+  ],
 };
 
 export async function extractInvoiceData(

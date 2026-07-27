@@ -17,6 +17,9 @@ export interface Database {
           data_inicio: string | null;
           status: "ativa" | "concluida";
           created_at: string;
+          deleted_at: string | null;
+          deleted_by: string | null;
+          deleted_reason: string | null;
         };
         Insert: {
           id?: string;
@@ -25,13 +28,30 @@ export interface Database {
           data_inicio?: string | null;
           status?: "ativa" | "concluida";
           created_at?: string;
+          deleted_at?: string | null;
+          deleted_by?: string | null;
+          deleted_reason?: string | null;
         };
         Update: Partial<Database["public"]["Tables"]["obras"]["Insert"]>;
         Relationships: [];
       };
       categorias: {
-        Row: { id: string; nome: string; created_at: string };
-        Insert: { id?: string; nome: string; created_at?: string };
+        Row: {
+          id: string;
+          nome: string;
+          created_at: string;
+          deleted_at: string | null;
+          deleted_by: string | null;
+          deleted_reason: string | null;
+        };
+        Insert: {
+          id?: string;
+          nome: string;
+          created_at?: string;
+          deleted_at?: string | null;
+          deleted_by?: string | null;
+          deleted_reason?: string | null;
+        };
         Update: Partial<Database["public"]["Tables"]["categorias"]["Insert"]>;
         Relationships: [];
       };
@@ -69,12 +89,18 @@ export interface Database {
           nome: string;
           categoria_id: string | null;
           created_at: string;
+          deleted_at: string | null;
+          deleted_by: string | null;
+          deleted_reason: string | null;
         };
         Insert: {
           id?: string;
           nome: string;
           categoria_id?: string | null;
           created_at?: string;
+          deleted_at?: string | null;
+          deleted_by?: string | null;
+          deleted_reason?: string | null;
         };
         Update: Partial<Database["public"]["Tables"]["materiais"]["Insert"]>;
         Relationships: [
@@ -94,6 +120,9 @@ export interface Database {
           contato: string | null;
           cnpj: string | null;
           created_at: string;
+          deleted_at: string | null;
+          deleted_by: string | null;
+          deleted_reason: string | null;
         };
         Insert: {
           id?: string;
@@ -101,6 +130,9 @@ export interface Database {
           contato?: string | null;
           cnpj?: string | null;
           created_at?: string;
+          deleted_at?: string | null;
+          deleted_by?: string | null;
+          deleted_reason?: string | null;
         };
         Update: Partial<
           Database["public"]["Tables"]["fornecedores"]["Insert"]
@@ -119,7 +151,12 @@ export interface Database {
           valor: number;
           data: string;
           origem: "whatsapp" | "dashboard";
+          criado_por_telefone: string | null;
+          criado_por_nome: string | null;
           created_at: string;
+          deleted_at: string | null;
+          deleted_by: string | null;
+          deleted_reason: string | null;
         };
         Insert: {
           id?: string;
@@ -132,7 +169,12 @@ export interface Database {
           valor: number;
           data?: string;
           origem?: "whatsapp" | "dashboard";
+          criado_por_telefone?: string | null;
+          criado_por_nome?: string | null;
           created_at?: string;
+          deleted_at?: string | null;
+          deleted_by?: string | null;
+          deleted_reason?: string | null;
         };
         Update: Partial<Database["public"]["Tables"]["despesas"]["Insert"]>;
         Relationships: [
@@ -173,6 +215,56 @@ export interface Database {
           },
         ];
       };
+      despesa_comprovantes: {
+        Row: {
+          id: string;
+          despesa_id: string | null;
+          tipo_documento: "documento_cobranca" | "comprovante_pagamento" | "outro";
+          whatsapp_media_id: string | null;
+          storage_bucket: string;
+          storage_path: string;
+          mime_type: string;
+          nome_arquivo: string | null;
+          conta_origem_banco: string | null;
+          conta_origem_titular: string | null;
+          conta_origem_documento: string | null;
+          conta_origem_agencia: string | null;
+          conta_origem_numero: string | null;
+          metodo_pagamento: string | null;
+          origem: "whatsapp" | "dashboard";
+          created_at: string;
+        };
+        Insert: {
+          id?: string;
+          despesa_id?: string | null;
+          tipo_documento?: "documento_cobranca" | "comprovante_pagamento" | "outro";
+          whatsapp_media_id?: string | null;
+          storage_bucket?: string;
+          storage_path: string;
+          mime_type: string;
+          nome_arquivo?: string | null;
+          conta_origem_banco?: string | null;
+          conta_origem_titular?: string | null;
+          conta_origem_documento?: string | null;
+          conta_origem_agencia?: string | null;
+          conta_origem_numero?: string | null;
+          metodo_pagamento?: string | null;
+          origem?: "whatsapp" | "dashboard";
+          created_at?: string;
+        };
+        Update: Partial<
+          Database["public"]["Tables"]["despesa_comprovantes"]["Insert"]
+        >;
+        Relationships: [
+          {
+            foreignKeyName: "despesa_comprovantes_despesa_id_fkey";
+            columns: ["despesa_id"];
+            isOneToOne: false;
+            referencedRelation: "despesas";
+            referencedColumns: ["id"];
+          },
+        ];
+      };
       whatsapp_sessions: {
         Row: {
           telefone: string;
@@ -189,6 +281,68 @@ export interface Database {
         Update: Partial<
           Database["public"]["Tables"]["whatsapp_sessions"]["Insert"]
         >;
+        Relationships: [];
+      };
+      usuarios_whatsapp: {
+        Row: {
+          telefone: string;
+          nome: string;
+          ativo: boolean;
+          created_at: string;
+        };
+        Insert: {
+          telefone: string;
+          nome: string;
+          ativo?: boolean;
+          created_at?: string;
+        };
+        Update: Partial<
+          Database["public"]["Tables"]["usuarios_whatsapp"]["Insert"]
+        >;
+        Relationships: [];
+      };
+      atividades: {
+        Row: {
+          id: string;
+          tipo: "criacao" | "edicao" | "exclusao";
+          entidade:
+            | "despesa"
+            | "obra"
+            | "categoria"
+            | "material"
+            | "fornecedor"
+            | "orcamento"
+            | "usuario_whatsapp";
+          entidade_id: string | null;
+          origem: "whatsapp" | "dashboard";
+          autor_telefone: string | null;
+          autor_nome: string | null;
+          resumo: string;
+          dados_antes: Json | null;
+          dados_depois: Json | null;
+          created_at: string;
+        };
+        Insert: {
+          id?: string;
+          tipo: "criacao" | "edicao" | "exclusao";
+          entidade:
+            | "despesa"
+            | "obra"
+            | "categoria"
+            | "material"
+            | "fornecedor"
+            | "orcamento"
+            | "usuario_whatsapp";
+          entidade_id?: string | null;
+          origem: "whatsapp" | "dashboard";
+          autor_telefone?: string | null;
+          autor_nome?: string | null;
+          resumo: string;
+          dados_antes?: Json | null;
+          dados_depois?: Json | null;
+          created_at?: string;
+        };
+        Update: Partial<Database["public"]["Tables"]["atividades"]["Insert"]>;
         Relationships: [];
       };
     };

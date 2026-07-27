@@ -1,3 +1,4 @@
+import Link from "next/link";
 import { formatBRL } from "@/lib/conversation/format";
 import type { CategoriaBreakdown, EtapaBreakdown } from "@/lib/dashboard/queries";
 
@@ -11,14 +12,18 @@ export function BreakdownList({
   titulo,
   itens,
   getIcon,
+  filtroParam,
+  obraId,
 }: {
   titulo: string;
   itens: Item[];
   getIcon: (nome: string) => string;
+  filtroParam: "categoria" | "etapa" | "material";
+  obraId: string;
 }) {
   return (
-    <div className="rounded-2xl border border-zinc-200 dark:border-zinc-800 bg-white dark:bg-zinc-950 p-5 shadow-sm">
-      <p className="text-sm font-semibold text-zinc-900 dark:text-zinc-50 mb-4">
+    <div className="rounded-card border border-brand-gray-300/60 bg-white p-5 shadow-card">
+      <p className="text-sm font-semibold text-brand-black mb-4">
         {titulo}
       </p>
       <ul className="flex flex-col gap-1">
@@ -37,19 +42,22 @@ export function BreakdownList({
               className={
                 destacar
                   ? estourado
-                    ? "rounded-xl border border-red-300 bg-red-50 dark:border-red-900/60 dark:bg-red-950/20 p-3"
-                    : "rounded-xl border border-amber-300 bg-amber-50 dark:border-amber-900/60 dark:bg-amber-950/20 p-3"
-                  : "p-3"
+                    ? "rounded-brand-lg border border-status-danger/30 bg-status-danger/5"
+                    : "rounded-brand-lg border border-status-warning/30 bg-status-warning/5"
+                  : ""
               }
             >
-              <div className="flex items-start gap-3">
+              <Link
+                href={`/dashboard/despesas?obra=${obraId}&${filtroParam}=${item.id}`}
+                className="flex items-start gap-3 p-3 rounded-brand-lg transition-colors hover:bg-brand-gray-100"
+              >
                 <div
                   className={
                     destacar
                       ? estourado
-                        ? "flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-red-100 dark:bg-red-900/50 text-base"
-                        : "flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-amber-100 dark:bg-amber-900/50 text-base"
-                      : "flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-zinc-100 dark:bg-zinc-800 text-base"
+                        ? "flex h-9 w-9 shrink-0 items-center justify-center rounded-brand-sm bg-status-danger/15 text-base"
+                        : "flex h-9 w-9 shrink-0 items-center justify-center rounded-brand-sm bg-status-warning/15 text-base"
+                      : "flex h-9 w-9 shrink-0 items-center justify-center rounded-brand-sm bg-brand-gray-100 text-base"
                   }
                 >
                   {getIcon(item.nome)}
@@ -57,13 +65,13 @@ export function BreakdownList({
 
                 <div className="flex-1 min-w-0">
                   <div className="flex items-center justify-between gap-2">
-                    <span className="truncate font-medium text-sm text-zinc-800 dark:text-zinc-100">
+                    <span className="truncate font-medium text-sm text-brand-gray-700">
                       {item.nome}
                     </span>
-                    <span className="shrink-0 font-semibold text-sm text-zinc-900 dark:text-zinc-50">
+                    <span className="shrink-0 font-semibold text-sm text-brand-black">
                       {formatBRL(item.total)}
                       {comOrcamento && (
-                        <span className="ml-1 font-normal text-xs text-zinc-500">
+                        <span className="ml-1 font-normal text-xs text-brand-gray-500">
                           / {formatBRL(item.valorOrcado!)}
                         </span>
                       )}
@@ -71,40 +79,40 @@ export function BreakdownList({
                   </div>
 
                   {estourado && (
-                    <span className="mt-1 inline-block rounded-full bg-red-200 dark:bg-red-900 px-2 py-0.5 text-[10px] font-semibold text-red-900 dark:text-red-200">
+                    <span className="mt-1 inline-block rounded-full bg-status-danger/15 px-2 py-0.5 text-[10px] font-semibold text-status-danger">
                       Orçamento estourado
                     </span>
                   )}
                   {!estourado && item.maiorGasto && (
-                    <span className="mt-1 inline-block rounded-full bg-amber-200 dark:bg-amber-900 px-2 py-0.5 text-[10px] font-semibold text-amber-900 dark:text-amber-200">
+                    <span className="mt-1 inline-block rounded-full bg-status-warning/15 px-2 py-0.5 text-[10px] font-semibold text-status-warning">
                       Maior Gasto
                     </span>
                   )}
 
-                  <div className="mt-2 h-1.5 w-full rounded-full bg-zinc-100 dark:bg-zinc-800">
+                  <div className="mt-2 h-1.5 w-full rounded-full bg-brand-gray-100">
                     <div
                       className={
                         estourado
-                          ? "h-1.5 rounded-full bg-red-500"
+                          ? "h-1.5 rounded-full bg-status-danger"
                           : destacar
-                            ? "h-1.5 rounded-full bg-amber-500"
-                            : "h-1.5 rounded-full bg-blue-500"
+                            ? "h-1.5 rounded-full bg-status-warning"
+                            : "h-1.5 rounded-full bg-brand-red"
                       }
                       style={{ width: `${Math.min(100, percentualBarra)}%` }}
                     />
                   </div>
-                  <p className="mt-1 text-xs text-zinc-500">
+                  <p className="mt-1 text-xs text-brand-gray-500">
                     {percentualBarra.toFixed(1)}%{" "}
                     {comOrcamento ? "do orçado" : "das despesas"}
                   </p>
                 </div>
-              </div>
+              </Link>
             </li>
           );
         })}
 
         {itens.length === 0 && (
-          <li className="py-6 text-center text-sm text-zinc-500">
+          <li className="py-6 text-center text-sm text-brand-gray-500">
             Nenhum registro ainda.
           </li>
         )}

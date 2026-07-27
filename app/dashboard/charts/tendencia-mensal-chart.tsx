@@ -23,9 +23,9 @@ function TooltipConteudo({
   if (!active || !payload?.length) return null;
   const ponto = payload[0].payload;
   return (
-    <div className="rounded-lg border border-zinc-200 dark:border-zinc-700 bg-white dark:bg-zinc-900 px-3 py-2 text-xs shadow-sm">
-      <p className="font-medium text-zinc-900 dark:text-zinc-50">{ponto.mes}</p>
-      <p className="text-zinc-600 dark:text-zinc-400">{formatBRL(ponto.valor)}</p>
+    <div className="rounded-brand-sm border border-brand-gray-300/60 bg-white px-3 py-2 text-xs shadow-card">
+      <p className="font-medium text-brand-black">{ponto.mes}</p>
+      <p className="text-brand-gray-500">{formatBRL(ponto.valor)}</p>
     </div>
   );
 }
@@ -33,7 +33,7 @@ function TooltipConteudo({
 export function TendenciaMensalChart({ pontos }: { pontos: Ponto[] }) {
   if (pontos.length === 0) {
     return (
-      <p className="py-8 text-center text-sm text-zinc-500">
+      <p className="py-8 text-center text-sm text-brand-gray-500">
         Sem despesas registradas ainda.
       </p>
     );

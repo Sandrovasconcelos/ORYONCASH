@@ -24,9 +24,9 @@ function TooltipConteudo({
   if (!active || !payload?.length) return null;
   const item = payload[0].payload;
   return (
-    <div className="rounded-lg border border-zinc-200 dark:border-zinc-700 bg-white dark:bg-zinc-900 px-3 py-2 text-xs shadow-sm">
-      <p className="font-medium text-zinc-900 dark:text-zinc-50">{item.nome}</p>
-      <p className="text-zinc-600 dark:text-zinc-400">{formatBRL(item.total)}</p>
+    <div className="rounded-brand-sm border border-brand-gray-300/60 bg-white px-3 py-2 text-xs shadow-card">
+      <p className="font-medium text-brand-black">{item.nome}</p>
+      <p className="text-brand-gray-500">{formatBRL(item.total)}</p>
     </div>
   );
 }
@@ -38,7 +38,7 @@ export function GastoPorCategoriaChart({ itens }: { itens: Item[] }) {
 
   if (dados.length === 0) {
     return (
-      <p className="py-8 text-center text-sm text-zinc-500">
+      <p className="py-8 text-center text-sm text-brand-gray-500">
         Sem despesas registradas ainda.
       </p>
     );

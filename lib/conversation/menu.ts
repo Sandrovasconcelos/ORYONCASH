@@ -3,46 +3,46 @@ import { MENU_IDS } from "./states";
 
 export async function sendMenuPrincipal(to: string) {
   await sendList(to, {
-    headerText: "Menu Principal",
-    bodyText: "O que você quer fazer?",
-    buttonText: "Ver Opções",
+    headerText: "🏠 Menu Principal",
+    bodyText: "O que você quer fazer agora?",
+    buttonText: "📋 Ver opções",
     sections: [
       {
         rows: [
           {
             id: MENU_IDS.REGISTRAR_DESPESA,
-            title: "Registrar Despesa",
-            description: "Lançar uma nova compra ou gasto",
+            title: "💸 Registrar despesa",
+            description: "Enviar nota, comprovante, texto ou áudio",
           },
           {
             id: MENU_IDS.CADASTRAR_OBRA,
-            title: "Cadastrar Obra",
+            title: "🏗️ Cadastrar obra",
             description: "Adicionar um novo projeto",
           },
           {
             id: MENU_IDS.CADASTRAR_MATERIAL,
-            title: "Cadastrar Material",
-            description: "Adicionar um material ao catálogo",
+            title: "📦 Cadastrar material",
+            description: "Adicionar item ao catálogo",
           },
           {
             id: MENU_IDS.CADASTRAR_FORNECEDOR,
-            title: "Cadastrar Fornecedor",
-            description: "Adicionar um fornecedor",
+            title: "🏢 Cadastrar fornecedor",
+            description: "Adicionar loja, prestador ou empresa",
           },
           {
             id: MENU_IDS.VER_RESUMO,
-            title: "Ver Resumo",
+            title: "📊 Ver resumo",
             description: "Orçamento x gasto de uma obra",
           },
           {
             id: MENU_IDS.CORRIGIR_LANCAMENTO,
-            title: "Corrigir Lançamento",
-            description: "Editar ou excluir uma despesa registrada",
+            title: "✏️ Corrigir lançamento",
+            description: "Editar ou excluir uma despesa",
           },
           {
             id: MENU_IDS.REMOVER_CADASTRO,
-            title: "Remover Cadastro",
-            description: "Excluir uma obra, material ou fornecedor",
+            title: "🗑️ Remover cadastro",
+            description: "Enviar obra, material ou fornecedor para remoção",
           },
         ],
       },
