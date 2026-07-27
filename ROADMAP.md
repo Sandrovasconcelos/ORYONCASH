@@ -1,67 +1,63 @@
 # OryonCash — Funcionalidades Pendentes
 
 Lista do que falta para o app ficar redondo, organizada por prioridade.
-Reflete o estado atual: bot de WhatsApp (registrar despesa, cadastrar
-obra/material/fornecedor, leitura de nota fiscal por foto/PDF) + dashboard
-web (login, resumo por obra, categorias/etapas, CRUD básico de
-obras/materiais/fornecedores).
+Atualizada em 2026-07-27 — a versão anterior estava desatualizada: editar/
+excluir despesas, obras, materiais e fornecedores, tela de Categorias,
+anexo de comprovante, log de auditoria e lixeira já foram implementados
+desde então.
 
 ## Alta prioridade
 
-- **Editar e excluir despesas** — hoje só dá para criar uma despesa (pelo
-  WhatsApp ou implicitamente); não existe tela para ver a lista de despesas
-  lançadas, corrigir um valor errado ou apagar um lançamento duplicado.
-- **Token de acesso permanente do WhatsApp** — o token atual é de usuário e
-  expira/precisa ser regerado periodicamente. Para uso contínuo sem
-  manutenção manual, criar um System User no Business Manager e gerar um
-  token permanente (`whatsapp_business_messaging` + `whatsapp_business_management`,
-  sem expiração).
-- **Concluir a Verificação da Empresa no Meta** (Etapa 3) — sem isso o
-  envio de mensagens pode continuar instável/bloqueado esporadicamente.
-- **Editar/excluir obras, materiais e fornecedores** — as telas atuais só
-  cadastram e listam; falta poder corrigir um nome errado, encerrar uma
-  obra (marcar como "concluída") ou remover um fornecedor duplicado.
-- **Tela de gestão de Categorias e Etapas** — essas tabelas existem e são
-  usadas o tempo todo, mas não têm nenhuma tela no dashboard (só dá para
-  editar direto no Supabase).
+- **Concluir a Verificação da Empresa no Meta** (Etapa 3 do onboarding do
+  WhatsApp) — sem isso o envio de mensagens pode continuar
+  instável/bloqueado esporadicamente.
+- **`entidade_id` na tabela `atividades`** — o log de auditoria guarda só
+  um texto-resumo, sem o id do registro alterado. Sem isso não dá para
+  linkar cada atividade direto pro lançamento/obra/etc. específico (só dá
+  pra filtrar por tipo/entidade, não abrir o item exato).
+- **Deduplicar fornecedores/materiais cadastrados pelo WhatsApp** — hoje
+  já existem cadastros duplicados (ex.: o mesmo fornecedor criado 2-3x com
+  nomes quase iguais) porque o bot cria um novo registro sempre que o
+  texto não bate exatamente. Precisa de correspondência aproximada (ou
+  confirmação "já existe esse, quer usar?") antes de criar um novo.
 
 ## Média prioridade
 
 - **Comando de resumo mais rico pelo WhatsApp** — hoje "Ver Resumo" manda
-  só um texto fixo. Seria útil responder perguntas livres tipo "quanto
-  gastei em material esse mês" ou "lista de compras da obra X".
-- **Anexar o comprovante/nota fiscal à despesa** — quando o bot lê uma nota
-  fiscal, os dados são extraídos mas a imagem/PDF original não fica salva
-  em lugar nenhum. Guardar o arquivo (Supabase Storage) e linkar na
-  despesa evita ter que procurar a nota física depois.
-- **Alerta de orçamento estourado** — avisar (pelo WhatsApp ou no
-  dashboard) quando o gasto de uma obra ultrapassa X% do orçamento.
-- **Cronograma real por obra** — hoje "Etapas" é um catálogo genérico sem
-  datas. Para o "cronograma de tempo" mencionado no pedido original,
-  cada obra precisaria de datas de início/fim previstas por etapa, com
-  indicador visual de atraso.
-- **Exportar relatórios** (PDF/Excel) — útil para prestar contas ou levar
-  ao contador; hoje os dados só existem dentro do dashboard.
+  só um texto fixo. Seria útil responder perguntas tipo "quanto gastei em
+  material esse mês" ou "lista de compras da obra X".
+- **Alerta ativo de orçamento estourado** — hoje só existe indicação
+  visual (badge) quando você está olhando o dashboard; não existe aviso
+  proativo (WhatsApp ou e-mail) no momento em que o orçamento estoura.
+- **Cronograma real por obra** — "Etapas" tem `valor_orcado` mas não datas
+  de início/fim previstas nem indicador de atraso (a obra em si tem
+  `data_inicio`, mas nada por etapa).
+- **Exportar relatório em Excel (.xlsx) de verdade** — hoje o relatório
+  visual tem impressão/PDF e um CSV simples; não existe uma planilha
+  formatada (várias abas, fórmulas, etc.) pra levar ao contador.
 - **Recuperação de senha pelo próprio app** — hoje só dá para trocar senha
-  direto no painel do Supabase. Uma tela de "esqueci minha senha" no
-  próprio login evita depender do Supabase Studio.
+  direto no painel do Supabase.
 
 ## Baixa prioridade / polimento
 
 - **Cancelar/editar uma despesa direto pelo WhatsApp** ("apagar o último
-  lançamento", "mudar o valor da última despesa").
-- **Múltiplos usuários por obra** (ex.: um sócio ou mestre de obras
-  também podendo registrar despesas) — hoje só um número autorizado.
+  lançamento", "mudar o valor da última despesa") — hoje precisa passar
+  pelo fluxo guiado "Corrigir Lançamento".
+- **Múltiplos usuários por obra** com papéis diferentes (ex.: um mestre de
+  obras só registra despesa, não vê financeiro completo) — hoje todo
+  número autorizado tem acesso igual.
 - **Notificações push/e-mail** de resumo semanal automático.
 - **Testes automatizados** (unitários para o motor de conversas do bot,
   E2E para o dashboard) — hoje a validação é só manual.
-- **Onboarding do bot** — uma mensagem de boas-vindas explicando os
-  comandos na primeira conversa de um número novo.
-- **Acessibilidade e responsividade mobile** do dashboard — já funciona,
-  mas não foi testado a fundo em telas pequenas.
+- **Onboarding do bot** — mensagem de boas-vindas explicando os comandos
+  na primeira conversa de um número novo.
+- **Acessibilidade e responsividade mobile** do dashboard — já funciona e
+  foi ajustado várias vezes (cabeçalho, tabelas), mas não passou por uma
+  auditoria formal de acessibilidade.
 
 ## Fora de escopo por enquanto (decisão já tomada)
 
 - Multi-tenant / cobrança por plano (uso é pessoal, não produto vendido).
 - Interpretação por IA de texto livre no bot (fluxo é guiado por
   listas/botões, por escolha do usuário).
+- Integração com o "Oryon ERP" (Firebase) maior — adiada explicitamente.
