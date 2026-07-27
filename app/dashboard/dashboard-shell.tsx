@@ -136,9 +136,6 @@ export function DashboardShell({ children }: { children: React.ReactNode }) {
             </div>
 
             <div className="flex w-full flex-col gap-2 sm:w-auto sm:flex-row sm:items-center">
-              <Link href="/dashboard/numeros" className="oc-button oc-button-soft">
-                Conexão WhatsApp
-              </Link>
               <Link href={action.href} className="oc-button oc-button-dark">
                 <span aria-hidden="true">{action.icon}</span>
                 {action.label}
