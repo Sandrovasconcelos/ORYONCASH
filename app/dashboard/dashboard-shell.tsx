@@ -111,7 +111,6 @@ export function DashboardShell({ children }: { children: React.ReactNode }) {
   const pathname = usePathname();
   const meta = getPageMeta(pathname);
   const action = getPrimaryAction(pathname);
-  const isRelatorio = pathname.startsWith("/dashboard/despesas/relatorio");
 
   return (
     <div className="flex min-h-screen flex-1 flex-col bg-[#111317] text-brand-black md:flex-row print:block print:min-h-0 print:bg-white">
@@ -119,12 +118,7 @@ export function DashboardShell({ children }: { children: React.ReactNode }) {
         <Sidebar />
       </div>
       <div className="min-w-0 flex flex-1 flex-col bg-brand-gray-100 md:rounded-l-[26px] md:border-l md:border-white/10 print:block print:rounded-none print:border-0 print:bg-white">
-        <header
-          className={
-            (isRelatorio ? "" : "sticky top-0 z-30 ") +
-            "border-b border-brand-gray-300/80 bg-brand-gray-100/92 backdrop-blur-xl print:hidden"
-          }
-        >
+        <header className="border-b border-brand-gray-300/80 bg-brand-gray-100/92 backdrop-blur-xl print:hidden">
           <div className="mx-auto flex min-h-[86px] w-full max-w-[1440px] flex-col items-start justify-between gap-3 px-4 py-4 sm:min-h-[92px] sm:flex-row sm:items-center sm:px-6 lg:px-8">
             <div className="min-w-0 max-w-full">
               <div className="mb-2 flex flex-wrap items-center gap-2">
