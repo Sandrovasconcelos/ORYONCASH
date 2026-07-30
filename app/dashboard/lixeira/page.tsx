@@ -186,9 +186,7 @@ export default async function LixeiraPage() {
                     <span className="line-clamp-2">{item.detalhe || "—"}</span>
                   </td>
                   <td className="px-5 py-4 text-brand-gray-500">
-                    {item.removidoEm
-                      ? formatDataHoraBrasil(item.removidoEm, { year: true })
-                      : "—"}
+                    {item.removidoEm ? formatDataHoraBrasil(item.removidoEm) : "—"}
                   </td>
                   <td className="px-5 py-4 text-brand-gray-500">
                     {item.removidoPor || "—"}

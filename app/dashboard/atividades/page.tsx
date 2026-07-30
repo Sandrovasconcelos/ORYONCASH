@@ -80,7 +80,7 @@ type DespesaRecente = {
 };
 
 function formatDataHora(iso: string): string {
-  return formatDataHoraBrasil(iso, { year: true });
+  return formatDataHoraBrasil(iso);
 }
 
 function getNomeRelacao(relacao: DespesaRecente["categorias"]): string | null {

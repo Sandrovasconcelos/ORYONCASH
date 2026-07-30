@@ -2,6 +2,7 @@ import Link from "next/link";
 import { getDashboardData } from "@/lib/dashboard/queries";
 import { listAtividades } from "@/lib/atividades";
 import { formatBRL } from "@/lib/conversation/format";
+import { formatDataHoraBrasil } from "@/lib/format-date";
 import { getCategoriaIcon, getEtapaIcon, getMaterialIcon } from "@/lib/dashboard/icons";
 import { ObraSelector } from "./obra-selector";
 import { BreakdownList } from "./breakdown-list";
@@ -158,12 +159,7 @@ export default async function DashboardPage({
           >
             <span className="text-sm text-brand-black">{a.resumo}</span>
             <span className="shrink-0 text-xs text-brand-gray-500">
-              {new Date(a.created_at).toLocaleString("pt-BR", {
-                day: "2-digit",
-                month: "2-digit",
-                hour: "2-digit",
-                minute: "2-digit",
-              })}
+              {formatDataHoraBrasil(a.created_at)}
             </span>
           </li>
         ))}

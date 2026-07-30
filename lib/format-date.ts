@@ -1,11 +1,12 @@
 const TIME_ZONE_BRASIL = "America/Fortaleza";
 
 export function formatDataHoraBrasil(iso: string, options?: { year?: boolean }) {
+  const incluirAno = options?.year ?? true;
   return new Date(iso).toLocaleString("pt-BR", {
     timeZone: TIME_ZONE_BRASIL,
     day: "2-digit",
     month: "2-digit",
-    ...(options?.year ? { year: "2-digit" as const } : {}),
+    ...(incluirAno ? { year: "2-digit" as const } : {}),
     hour: "2-digit",
     minute: "2-digit",
   });
