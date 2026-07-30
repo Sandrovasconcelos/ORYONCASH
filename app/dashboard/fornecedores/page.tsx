@@ -11,18 +11,60 @@ import { ActionIcon } from "../action-icon";
 
 export const dynamic = "force-dynamic";
 
+type FornecedorRow = {
+  id: string;
+  nome: string;
+  contato: string | null;
+  cnpj: string | null;
+  cpf: string | null;
+  chave_pix: string | null;
+  conta_banco: string | null;
+  conta_agencia: string | null;
+  conta_numero: string | null;
+  created_at: string;
+};
+
+async function buscarFornecedoresComFallback(supabase: ReturnType<typeof createAdminClient>) {
+  const completo = await supabase
+    .from("fornecedores")
+    .select(
+      "id, nome, contato, cnpj, cpf, chave_pix, conta_banco, conta_agencia, conta_numero, created_at"
+    )
+    .is("deleted_at", null)
+    .order("nome");
+
+  if (!completo.error) {
+    return { data: (completo.data ?? []) as FornecedorRow[], camposNovosIndisponiveis: false };
+  }
+
+  const basico = await supabase
+    .from("fornecedores")
+    .select("id, nome, contato, cnpj, created_at")
+    .is("deleted_at", null)
+    .order("nome");
+
+  return {
+    data: (basico.data ?? []).map((f) => ({
+      ...f,
+      cpf: null,
+      chave_pix: null,
+      conta_banco: null,
+      conta_agencia: null,
+      conta_numero: null,
+    })) as FornecedorRow[],
+    camposNovosIndisponiveis: true,
+  };
+}
+
 export default async function FornecedoresPage() {
   const supabase = createAdminClient();
-  const [{ data: fornecedores }, { data: despesas }] = await Promise.all([
-    supabase
-      .from("fornecedores")
-      .select("id, nome, contato, cnpj, created_at")
-      .is("deleted_at", null)
-      .order("nome"),
+  const [fornecedoresQuery, { data: despesas }] = await Promise.all([
+    buscarFornecedoresComFallback(supabase),
     supabase.from("despesas").select("fornecedor_id, valor").is("deleted_at", null),
   ]);
 
-  const lista = fornecedores ?? [];
+  const lista = fornecedoresQuery.data;
+  const camposNovosIndisponiveis = fornecedoresQuery.camposNovosIndisponiveis;
   const usoPorFornecedor = new Map<string, { total: number; lancamentos: number }>();
 
   for (const despesa of despesas ?? []) {
@@ -36,6 +78,19 @@ export default async function FornecedoresPage() {
 
   return (
     <div className="flex flex-col gap-6">
+      {camposNovosIndisponiveis && (
+        <div className="rounded-card border border-status-warning/30 bg-status-warning/10 p-5 text-sm text-brand-gray-700">
+          <p className="font-semibold text-brand-black">
+            Campos de CPF/Pix/conta ainda não ativados no Supabase.
+          </p>
+          <p className="mt-1">
+            Aplique a migration{" "}
+            <code>20260727050000_fornecedor_pix_cpf_e_numero_documento.sql</code> para
+            liberar CPF, chave Pix e dados bancários no cadastro de fornecedores.
+          </p>
+        </div>
+      )}
+
       <div className="flex flex-col gap-3 rounded-card border border-brand-gray-300/60 bg-white p-5 shadow-card sm:flex-row sm:items-center sm:justify-between">
         <div>
           <p className="text-sm font-semibold text-brand-black">Fornecedores</p>
@@ -64,6 +119,32 @@ export default async function FornecedoresPage() {
               <input
                 name="contato"
                 placeholder="Telefone, WhatsApp ou observação"
+                className="rounded-brand-sm border border-brand-gray-300 bg-white px-3 py-2 text-sm outline-none focus:border-brand-red"
+              />
+            </label>
+            <div className="grid grid-cols-2 gap-4">
+              <label className="flex flex-col gap-1 text-sm text-brand-gray-700">
+                CNPJ
+                <input
+                  name="cnpj"
+                  placeholder="00.000.000/0000-00"
+                  className="rounded-brand-sm border border-brand-gray-300 bg-white px-3 py-2 text-sm outline-none focus:border-brand-red"
+                />
+              </label>
+              <label className="flex flex-col gap-1 text-sm text-brand-gray-700">
+                CPF
+                <input
+                  name="cpf"
+                  placeholder="000.000.000-00"
+                  className="rounded-brand-sm border border-brand-gray-300 bg-white px-3 py-2 text-sm outline-none focus:border-brand-red"
+                />
+              </label>
+            </div>
+            <label className="flex flex-col gap-1 text-sm text-brand-gray-700">
+              Chave Pix
+              <input
+                name="chave_pix"
+                placeholder="Telefone, e-mail, CPF/CNPJ ou chave aleatória"
                 className="rounded-brand-sm border border-brand-gray-300 bg-white px-3 py-2 text-sm outline-none focus:border-brand-red"
               />
             </label>
@@ -151,14 +232,58 @@ export default async function FornecedoresPage() {
                                 className="rounded-brand-sm border border-brand-gray-300 bg-white px-3 py-2 text-sm outline-none focus:border-brand-red"
                               />
                             </label>
+                            <div className="grid grid-cols-2 gap-4">
+                              <label className="flex flex-col gap-1 text-sm text-brand-gray-700">
+                                CNPJ
+                                <input
+                                  name="cnpj"
+                                  defaultValue={fornecedor.cnpj ?? ""}
+                                  className="rounded-brand-sm border border-brand-gray-300 bg-white px-3 py-2 text-sm outline-none focus:border-brand-red"
+                                />
+                              </label>
+                              <label className="flex flex-col gap-1 text-sm text-brand-gray-700">
+                                CPF
+                                <input
+                                  name="cpf"
+                                  defaultValue={fornecedor.cpf ?? ""}
+                                  className="rounded-brand-sm border border-brand-gray-300 bg-white px-3 py-2 text-sm outline-none focus:border-brand-red"
+                                />
+                              </label>
+                            </div>
                             <label className="flex flex-col gap-1 text-sm text-brand-gray-700">
-                              CNPJ
+                              Chave Pix
                               <input
-                                name="cnpj"
-                                defaultValue={fornecedor.cnpj ?? ""}
+                                name="chave_pix"
+                                defaultValue={fornecedor.chave_pix ?? ""}
                                 className="rounded-brand-sm border border-brand-gray-300 bg-white px-3 py-2 text-sm outline-none focus:border-brand-red"
                               />
                             </label>
+                            <div className="grid grid-cols-3 gap-4">
+                              <label className="flex flex-col gap-1 text-sm text-brand-gray-700">
+                                Banco
+                                <input
+                                  name="conta_banco"
+                                  defaultValue={fornecedor.conta_banco ?? ""}
+                                  className="rounded-brand-sm border border-brand-gray-300 bg-white px-3 py-2 text-sm outline-none focus:border-brand-red"
+                                />
+                              </label>
+                              <label className="flex flex-col gap-1 text-sm text-brand-gray-700">
+                                Agência
+                                <input
+                                  name="conta_agencia"
+                                  defaultValue={fornecedor.conta_agencia ?? ""}
+                                  className="rounded-brand-sm border border-brand-gray-300 bg-white px-3 py-2 text-sm outline-none focus:border-brand-red"
+                                />
+                              </label>
+                              <label className="flex flex-col gap-1 text-sm text-brand-gray-700">
+                                Conta
+                                <input
+                                  name="conta_numero"
+                                  defaultValue={fornecedor.conta_numero ?? ""}
+                                  className="rounded-brand-sm border border-brand-gray-300 bg-white px-3 py-2 text-sm outline-none focus:border-brand-red"
+                                />
+                              </label>
+                            </div>
                             <button
                               type="submit"
                               className="rounded-brand-sm bg-brand-red px-4 py-2 text-sm font-semibold text-white hover:bg-brand-red-700"

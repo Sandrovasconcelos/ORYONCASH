@@ -96,6 +96,7 @@ type Dados = {
     contaOrigemAgencia?: string | null;
     contaOrigemNumero?: string | null;
     metodoPagamento?: string | null;
+    numeroDocumento?: string | null;
   };
 
   despesaId?: string;
@@ -468,17 +469,19 @@ async function handleDespesaEtapa(
     etapaNome: etapa.nome,
   };
 
-  // Se a descricao ja veio preenchida (extraida por IA de audio/comprovante),
-  // nao pergunta de novo - vai direto pra confirmacao.
-  if (dados.descricao) {
-    await saveSession(from, ESTADOS.DESPESA_CONFIRMACAO, dados);
-    await enviarConfirmacao(from, dados);
+  // Categoria "Material" sempre exige selecionar/cadastrar um material,
+  // mesmo quando a descricao ja veio preenchida por IA (audio/comprovante) -
+  // senao o lancamento fica sem material_id (aparece "-" no dashboard).
+  if (dados.categoriaNome?.toLowerCase() === "material" && !dados.materialId) {
+    await saveSession(from, ESTADOS.DESPESA_MATERIAL, dados);
+    await sendListMateriaisParaDespesa(from);
     return;
   }
 
-  if (dados.categoriaNome?.toLowerCase() === "material") {
-    await saveSession(from, ESTADOS.DESPESA_MATERIAL, dados);
-    await sendListMateriaisParaDespesa(from);
+  // Se a descricao ja veio preenchida (extraida por IA de audio/comprovante),
+  // deixa o usuario manter ou editar em vez de travar no texto automatico.
+  if (dados.descricao) {
+    await perguntarSeMantemOuEditaDescricao(from, dados, dados.descricao);
     return;
   }
 
@@ -487,6 +490,44 @@ async function handleDespesaEtapa(
     { id: "desc:add", title: "Adicionar" },
     { id: "desc:skip", title: "Pular" },
   ]);
+}
+
+async function perguntarSeMantemOuEditaDescricao(
+  from: string,
+  dados: Dados,
+  descricaoAtual: string
+) {
+  await saveSession(from, ESTADOS.DESPESA_DESCRICAO_PROMPT, dados);
+  await sendButtons(
+    from,
+    `💸 Descrição atual: "${descricaoAtual}". Quer manter ou editar?`,
+    [
+      { id: "desc:manter", title: "Manter" },
+      { id: "desc:add", title: "Editar" },
+    ]
+  );
+}
+
+async function finalizarSelecaoMaterial(
+  from: string,
+  dados: Dados,
+  material: { id: string; nome: string }
+) {
+  const descricaoOriginal = dados.descricao;
+  const novosDados: Dados = {
+    ...dados,
+    materialId: material.id,
+    descricao: descricaoOriginal ?? material.nome,
+    materialNomePendente: undefined,
+  };
+
+  if (descricaoOriginal) {
+    await perguntarSeMantemOuEditaDescricao(from, novosDados, descricaoOriginal);
+    return;
+  }
+
+  await saveSession(from, ESTADOS.DESPESA_CONFIRMACAO, novosDados);
+  await enviarConfirmacao(from, novosDados);
 }
 
 async function handleDespesaMaterial(
@@ -501,14 +542,7 @@ async function handleDespesaMaterial(
       dados.materialNomePendente,
       dados.categoriaId!
     );
-    const novosDados: Dados = {
-      ...dados,
-      materialId: material.id,
-      descricao: material.nome,
-      materialNomePendente: undefined,
-    };
-    await saveSession(from, ESTADOS.DESPESA_CONFIRMACAO, novosDados);
-    await enviarConfirmacao(from, novosDados);
+    await finalizarSelecaoMaterial(from, dados, material);
     return;
   }
 
@@ -518,14 +552,7 @@ async function handleDespesaMaterial(
       MODELOS_MATERIAL[modeloId],
       dados.categoriaId!
     );
-    const novosDados: Dados = {
-      ...dados,
-      materialId: material.id,
-      descricao: material.nome,
-      materialNomePendente: undefined,
-    };
-    await saveSession(from, ESTADOS.DESPESA_CONFIRMACAO, novosDados);
-    await enviarConfirmacao(from, novosDados);
+    await finalizarSelecaoMaterial(from, dados, material);
     return;
   }
 
@@ -545,13 +572,7 @@ async function handleDespesaMaterial(
     return;
   }
 
-  const novosDados: Dados = {
-    ...dados,
-    materialId: material.id,
-    descricao: material.nome,
-  };
-  await saveSession(from, ESTADOS.DESPESA_CONFIRMACAO, novosDados);
-  await enviarConfirmacao(from, novosDados);
+  await finalizarSelecaoMaterial(from, dados, material);
 }
 
 async function handleDespesaMaterialNovo(
@@ -605,14 +626,7 @@ async function handleDespesaMaterialNovo(
   }
 
   const material = await findOrCreateMaterial(nome, dados.categoriaId!);
-
-  const novosDados: Dados = {
-    ...dados,
-    materialId: material.id,
-    descricao: material.nome,
-  };
-  await saveSession(from, ESTADOS.DESPESA_CONFIRMACAO, novosDados);
-  await enviarConfirmacao(from, novosDados);
+  await finalizarSelecaoMaterial(from, dados, material);
 }
 
 async function handleDespesaDescricaoPrompt(
@@ -626,6 +640,13 @@ async function handleDespesaDescricaoPrompt(
       from,
       "💳 Digite a descrição da despesa:\n(Ex: Compra de cimento, Pagamento pedreiro, etc.)"
     );
+    return;
+  }
+
+  if (message.replyId === "desc:manter") {
+    const dados = session.dados_coletados as Dados;
+    await saveSession(from, ESTADOS.DESPESA_CONFIRMACAO, dados);
+    await enviarConfirmacao(from, dados);
     return;
   }
 
@@ -919,6 +940,7 @@ async function handleNotaFiscalRecebida(
       contaOrigemAgencia: invoice?.contaOrigemAgencia ?? null,
       contaOrigemNumero: invoice?.contaOrigemNumero ?? null,
       metodoPagamento: invoice?.metodoPagamento ?? null,
+      numeroDocumento: invoice?.numeroDocumento ?? null,
     });
   } catch (error) {
     console.error("Erro ao processar comprovante:", error);
@@ -957,10 +979,15 @@ async function handleNotaFiscalRecebida(
     return;
   }
 
-  const fornecedor = await findOrCreateFornecedorPorNota(
-    invoice.fornecedorNome,
-    invoice.fornecedorCnpj
-  );
+  const fornecedor = await findOrCreateFornecedorPorNota({
+    nome: invoice.fornecedorNome,
+    cnpj: invoice.fornecedorCnpj,
+    cpf: invoice.fornecedorCpf,
+    chavePix: invoice.fornecedorChavePix,
+    contaBanco: invoice.fornecedorContaBanco,
+    contaAgencia: invoice.fornecedorContaAgencia,
+    contaNumero: invoice.fornecedorContaNumero,
+  });
 
   // Documento com um único item: reaproveita o fluxo guiado de despesa
   // (obra -> categoria -> etapa -> confirma). Se o arquivo for comprovante
@@ -1016,10 +1043,9 @@ async function handleAudioRecebido(from: string, media: IncomingMedia) {
   let fornecedorId: string | undefined;
   let fornecedorNome: string | undefined;
   if (extraido.fornecedorNome) {
-    const fornecedor = await findOrCreateFornecedorPorNota(
-      extraido.fornecedorNome,
-      null
-    );
+    const fornecedor = await findOrCreateFornecedorPorNota({
+      nome: extraido.fornecedorNome,
+    });
     fornecedorId = fornecedor.id;
     fornecedorNome = fornecedor.nome;
   }

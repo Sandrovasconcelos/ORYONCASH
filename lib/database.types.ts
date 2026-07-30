@@ -119,6 +119,11 @@ export interface Database {
           nome: string;
           contato: string | null;
           cnpj: string | null;
+          cpf: string | null;
+          chave_pix: string | null;
+          conta_banco: string | null;
+          conta_agencia: string | null;
+          conta_numero: string | null;
           created_at: string;
           deleted_at: string | null;
           deleted_by: string | null;
@@ -129,6 +134,11 @@ export interface Database {
           nome: string;
           contato?: string | null;
           cnpj?: string | null;
+          cpf?: string | null;
+          chave_pix?: string | null;
+          conta_banco?: string | null;
+          conta_agencia?: string | null;
+          conta_numero?: string | null;
           created_at?: string;
           deleted_at?: string | null;
           deleted_by?: string | null;
@@ -231,6 +241,7 @@ export interface Database {
           conta_origem_agencia: string | null;
           conta_origem_numero: string | null;
           metodo_pagamento: string | null;
+          numero_documento: string | null;
           origem: "whatsapp" | "dashboard";
           created_at: string;
         };
@@ -243,6 +254,7 @@ export interface Database {
           storage_path: string;
           mime_type: string;
           nome_arquivo?: string | null;
+          numero_documento?: string | null;
           conta_origem_banco?: string | null;
           conta_origem_titular?: string | null;
           conta_origem_documento?: string | null;

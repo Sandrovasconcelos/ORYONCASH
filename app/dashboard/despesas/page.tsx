@@ -35,7 +35,18 @@ type ComprovanteQueryRow = {
   conta_origem_agencia?: string | null;
   conta_origem_numero?: string | null;
   metodo_pagamento?: string | null;
+  numero_documento?: string | null;
 };
+
+type FornecedorDados = {
+  nome: string;
+  cnpj: string | null;
+  cpf: string | null;
+  chave_pix: string | null;
+  conta_banco: string | null;
+  conta_agencia: string | null;
+  conta_numero: string | null;
+} | null;
 
 export default async function DespesasPage({
   searchParams,
@@ -66,7 +77,27 @@ export default async function DespesasPage({
     supabase.from("fornecedores").select("id, nome").is("deleted_at", null).order("nome"),
     supabase.from("etapas").select("id, nome, obra_id").order("ordem"),
     (async () => {
-      let query = supabase
+      let queryCompleta = supabase
+        .from("despesas")
+        .select(
+          "id, obra_id, categoria_id, etapa_id, material_id, fornecedor_id, valor, descricao, data, origem, created_at, criado_por_nome, criado_por_telefone, obras(nome), categorias(nome), etapas(nome), materiais(nome), fornecedores(nome, cnpj, cpf, chave_pix, conta_banco, conta_agencia, conta_numero)"
+        )
+        .is("deleted_at", null)
+        .order("data", { ascending: false })
+        .order("created_at", { ascending: false })
+        .limit(200);
+      if (params.obra) queryCompleta = queryCompleta.eq("obra_id", params.obra);
+      if (params.categoria) queryCompleta = queryCompleta.eq("categoria_id", params.categoria);
+      if (params.etapa) queryCompleta = queryCompleta.eq("etapa_id", params.etapa);
+      if (params.material) queryCompleta = queryCompleta.eq("material_id", params.material);
+      if (params.fornecedor) queryCompleta = queryCompleta.eq("fornecedor_id", params.fornecedor);
+
+      const resultadoCompleto = await queryCompleta;
+      if (!resultadoCompleto.error) return resultadoCompleto;
+
+      // Colunas novas do fornecedor (cpf/chave_pix/conta_*) podem nao existir
+      // ainda (migration pendente) - refaz so com os campos ja garantidos.
+      let queryReduzida = supabase
         .from("despesas")
         .select(
           "id, obra_id, categoria_id, etapa_id, material_id, fornecedor_id, valor, descricao, data, origem, created_at, criado_por_nome, criado_por_telefone, obras(nome), categorias(nome), etapas(nome), materiais(nome), fornecedores(nome)"
@@ -75,46 +106,28 @@ export default async function DespesasPage({
         .order("data", { ascending: false })
         .order("created_at", { ascending: false })
         .limit(200);
-      if (params.obra) query = query.eq("obra_id", params.obra);
-      if (params.categoria) query = query.eq("categoria_id", params.categoria);
-      if (params.etapa) query = query.eq("etapa_id", params.etapa);
-      if (params.material) query = query.eq("material_id", params.material);
-      if (params.fornecedor) query = query.eq("fornecedor_id", params.fornecedor);
-      return query;
+      if (params.obra) queryReduzida = queryReduzida.eq("obra_id", params.obra);
+      if (params.categoria) queryReduzida = queryReduzida.eq("categoria_id", params.categoria);
+      if (params.etapa) queryReduzida = queryReduzida.eq("etapa_id", params.etapa);
+      if (params.material) queryReduzida = queryReduzida.eq("material_id", params.material);
+      if (params.fornecedor) queryReduzida = queryReduzida.eq("fornecedor_id", params.fornecedor);
+      return queryReduzida;
     })(),
   ]);
 
-  const normalizar = (texto: string) =>
-    texto
-      .normalize("NFD")
-      .replace(/\p{Mn}/gu, "")
-      .toLowerCase();
-  const termoBusca = normalizar((params.busca ?? "").trim());
-
   const despesasBrutas = despesasQuery.data ?? [];
-  const despesas = termoBusca
-    ? despesasBrutas.filter((d) => {
-        const campos = [
-          d.descricao,
-          (d.obras as unknown as { nome: string } | null)?.nome,
-          (d.categorias as unknown as { nome: string } | null)?.nome,
-          (d.etapas as unknown as { nome: string } | null)?.nome,
-          (d.materiais as unknown as { nome: string } | null)?.nome,
-          (d.fornecedores as unknown as { nome: string } | null)?.nome,
-        ];
-        return campos.some(
-          (campo) => campo && normalizar(campo).includes(termoBusca)
-        );
-      })
-    : despesasBrutas;
-  const idsDespesas = despesas.map((d) => d.id);
+
+  // Busca os comprovantes de TODAS as despesas candidatas (antes do filtro de
+  // busca) para poder buscar tambem por numero do documento/CNPJ do emissor -
+  // nao so pelos campos ja carregados na despesa.
+  const idsDespesasBrutas = despesasBrutas.map((d) => d.id);
   const comprovantesQuery =
-    idsDespesas.length > 0
+    idsDespesasBrutas.length > 0
       ? await (async () => {
           const queryComContaOrigem = await supabase
             .from("despesa_comprovantes")
-            .select("id, despesa_id, tipo_documento, storage_bucket, storage_path, mime_type, nome_arquivo, conta_origem_banco, conta_origem_titular, conta_origem_documento, conta_origem_agencia, conta_origem_numero, metodo_pagamento")
-            .in("despesa_id", idsDespesas)
+            .select("id, despesa_id, tipo_documento, storage_bucket, storage_path, mime_type, nome_arquivo, conta_origem_banco, conta_origem_titular, conta_origem_documento, conta_origem_agencia, conta_origem_numero, metodo_pagamento, numero_documento")
+            .in("despesa_id", idsDespesasBrutas)
             .order("created_at", { ascending: false });
 
           if (!queryComContaOrigem.error) return queryComContaOrigem;
@@ -122,7 +135,7 @@ export default async function DespesasPage({
           return supabase
             .from("despesa_comprovantes")
             .select("id, despesa_id, tipo_documento, storage_bucket, storage_path, mime_type, nome_arquivo")
-            .in("despesa_id", idsDespesas)
+            .in("despesa_id", idsDespesasBrutas)
             .order("created_at", { ascending: false });
         })()
       : { data: [], error: null };
@@ -145,6 +158,7 @@ export default async function DespesasPage({
       conta_origem_agencia: string | null;
       conta_origem_numero: string | null;
       metodo_pagamento: string | null;
+      numero_documento: string | null;
       url: string | null;
     }>
   >();
@@ -171,10 +185,40 @@ export default async function DespesasPage({
       conta_origem_agencia: comprovante.conta_origem_agencia ?? null,
       conta_origem_numero: comprovante.conta_origem_numero ?? null,
       metodo_pagamento: comprovante.metodo_pagamento ?? null,
+      numero_documento: comprovante.numero_documento ?? null,
       url: signed?.signedUrl ?? null,
     });
     comprovantesPorDespesa.set(comprovante.despesa_id, listaAtual);
   }
+
+  const normalizar = (texto: string) =>
+    texto
+      .normalize("NFD")
+      .replace(/\p{Mn}/gu, "")
+      .toLowerCase();
+  const termoBusca = normalizar((params.busca ?? "").trim());
+
+  const despesas = termoBusca
+    ? despesasBrutas.filter((d) => {
+        const fornecedorDados = d.fornecedores as unknown as FornecedorDados;
+        const comprovantesDaDespesa = comprovantesPorDespesa.get(d.id) ?? [];
+        const campos = [
+          d.descricao,
+          (d.obras as unknown as { nome: string } | null)?.nome,
+          (d.categorias as unknown as { nome: string } | null)?.nome,
+          (d.etapas as unknown as { nome: string } | null)?.nome,
+          (d.materiais as unknown as { nome: string } | null)?.nome,
+          fornecedorDados?.nome,
+          fornecedorDados?.cnpj,
+          fornecedorDados?.cpf,
+          ...comprovantesDaDespesa.map((c) => c.numero_documento),
+          ...comprovantesDaDespesa.map((c) => c.conta_origem_documento),
+        ];
+        return campos.some(
+          (campo) => campo && normalizar(campo).includes(termoBusca)
+        );
+      })
+    : despesasBrutas;
   const totalFiltrado = despesas.reduce((soma, d) => soma + d.valor, 0);
   const queryString = new URLSearchParams(
     Object.entries(params).filter(([, value]) => Boolean(value)) as [string, string][]
@@ -335,8 +379,8 @@ export default async function DespesasPage({
               const etapaNome = (d.etapas as unknown as { nome: string } | null)?.nome ?? "-";
               const materialNome =
                 (d.materiais as unknown as { nome: string } | null)?.nome ?? "-";
-              const fornecedorNome =
-                (d.fornecedores as unknown as { nome: string } | null)?.nome ?? "-";
+              const fornecedorDados = d.fornecedores as unknown as FornecedorDados;
+              const fornecedorNome = fornecedorDados?.nome ?? "-";
               const comprovantesDaDespesa = comprovantesPorDespesa.get(d.id) ?? [];
               const documentosCobranca = comprovantesDaDespesa.filter(
                 (item) => item.tipo_documento === "documento_cobranca"
@@ -480,6 +524,51 @@ export default async function DespesasPage({
                               </div>
                             </div>
                           </div>
+                          {fornecedorDados &&
+                            (fornecedorDados.cnpj ||
+                              fornecedorDados.cpf ||
+                              fornecedorDados.chave_pix ||
+                              fornecedorDados.conta_banco) && (
+                              <div className="rounded-brand-sm border border-brand-gray-300/70 bg-brand-gray-100/60 p-4 sm:col-span-2">
+                                <p className="text-sm font-bold text-brand-black">
+                                  Dados do fornecedor rastreados do recibo/comprovante
+                                </p>
+                                <div className="mt-3 grid gap-3 text-sm sm:grid-cols-4">
+                                  {fornecedorDados.cnpj && (
+                                    <div>
+                                      <p className="text-xs font-bold uppercase tracking-[0.12em] text-brand-gray-400">CNPJ</p>
+                                      <p className="mt-1 font-semibold text-brand-black">{fornecedorDados.cnpj}</p>
+                                    </div>
+                                  )}
+                                  {fornecedorDados.cpf && (
+                                    <div>
+                                      <p className="text-xs font-bold uppercase tracking-[0.12em] text-brand-gray-400">CPF</p>
+                                      <p className="mt-1 font-semibold text-brand-black">{fornecedorDados.cpf}</p>
+                                    </div>
+                                  )}
+                                  {fornecedorDados.chave_pix && (
+                                    <div>
+                                      <p className="text-xs font-bold uppercase tracking-[0.12em] text-brand-gray-400">Chave Pix</p>
+                                      <p className="mt-1 font-semibold text-brand-black">{fornecedorDados.chave_pix}</p>
+                                    </div>
+                                  )}
+                                  {fornecedorDados.conta_banco && (
+                                    <div>
+                                      <p className="text-xs font-bold uppercase tracking-[0.12em] text-brand-gray-400">Conta</p>
+                                      <p className="mt-1 font-semibold text-brand-black">
+                                        {[
+                                          fornecedorDados.conta_banco,
+                                          fornecedorDados.conta_agencia,
+                                          fornecedorDados.conta_numero,
+                                        ]
+                                          .filter(Boolean)
+                                          .join(" · ")}
+                                      </p>
+                                    </div>
+                                  )}
+                                </div>
+                              </div>
+                            )}
                           <div className="rounded-brand border border-brand-gray-300/70 bg-white p-5">
                             <div className="mb-4">
                               <p className="text-sm font-extrabold text-brand-black">Dados do lançamento</p>
@@ -680,6 +769,11 @@ export default async function DespesasPage({
                                                         : ""}
                                                     </p>
                                                   )}
+                                                {comprovante.numero_documento && (
+                                                  <p className="mt-1 text-[11px] leading-4 text-brand-gray-600">
+                                                    Nº do documento: {comprovante.numero_documento}
+                                                  </p>
+                                                )}
                                               </div>
                                               {comprovante.url && (
                                                 <Link

@@ -127,6 +127,7 @@ export async function uploadComprovanteWhatsApp(input: {
   contaOrigemAgencia?: string | null;
   contaOrigemNumero?: string | null;
   metodoPagamento?: string | null;
+  numeroDocumento?: string | null;
 }) {
   const supabase = createAdminClient();
   const extensao =
@@ -155,6 +156,7 @@ export async function uploadComprovanteWhatsApp(input: {
     contaOrigemAgencia: input.contaOrigemAgencia ?? null,
     contaOrigemNumero: input.contaOrigemNumero ?? null,
     metodoPagamento: input.metodoPagamento ?? null,
+    numeroDocumento: input.numeroDocumento ?? null,
     nomeArquivo: `comprovante-${new Date().toISOString().slice(0, 10)}.${extensao}`,
   };
 }
@@ -174,6 +176,7 @@ export async function vincularComprovanteDespesa(input: {
     contaOrigemAgencia?: string | null;
     contaOrigemNumero?: string | null;
     metodoPagamento?: string | null;
+    numeroDocumento?: string | null;
   };
 }) {
   const supabase = createAdminClient();
@@ -191,6 +194,7 @@ export async function vincularComprovanteDespesa(input: {
     conta_origem_agencia: input.comprovante.contaOrigemAgencia ?? null,
     conta_origem_numero: input.comprovante.contaOrigemNumero ?? null,
     metodo_pagamento: input.comprovante.metodoPagamento ?? null,
+    numero_documento: input.comprovante.numeroDocumento ?? null,
     origem: "whatsapp" as const,
   };
 
@@ -204,6 +208,7 @@ export async function vincularComprovanteDespesa(input: {
   const erroDeColunaContaOrigem =
     mensagem.includes("conta_origem") ||
     mensagem.includes("metodo_pagamento") ||
+    mensagem.includes("numero_documento") ||
     mensagem.includes("column");
 
   if (!erroDeColunaContaOrigem) throw error;
@@ -296,19 +301,56 @@ export async function findOrCreateMaterial(nome: string, categoriaId: string) {
   return createMaterial(nome, categoriaId);
 }
 
+type CamposFornecedor = {
+  cnpj?: string | null;
+  cpf?: string | null;
+  chavePix?: string | null;
+  contaBanco?: string | null;
+  contaAgencia?: string | null;
+  contaNumero?: string | null;
+};
+
+function normalizarNomeFornecedor(nome: string): string {
+  return nome
+    .normalize("NFD")
+    .replace(/[̀-ͯ]/g, "")
+    .toLowerCase()
+    .trim();
+}
+
 export async function createFornecedor(
   nome: string,
   contato: string | null,
-  cnpj: string | null = null
+  campos: CamposFornecedor = {}
 ) {
   const supabase = createAdminClient();
+  const completo = {
+    nome,
+    contato,
+    cnpj: campos.cnpj ?? null,
+    cpf: campos.cpf ?? null,
+    chave_pix: campos.chavePix ?? null,
+    conta_banco: campos.contaBanco ?? null,
+    conta_agencia: campos.contaAgencia ?? null,
+    conta_numero: campos.contaNumero ?? null,
+  };
+
   const { data, error } = await supabase
     .from("fornecedores")
-    .insert({ nome, contato, cnpj })
+    .insert(completo)
     .select("id, nome")
     .single();
-  if (error) throw error;
-  return data;
+  if (!error) return data;
+
+  // Colunas novas (cpf/chave_pix/conta_*) podem nao existir ainda (migration
+  // pendente) - tenta de novo so com os campos base ja garantidos.
+  const { data: dataReduzido, error: erroReduzido } = await supabase
+    .from("fornecedores")
+    .insert({ nome, contato, cnpj: campos.cnpj ?? null })
+    .select("id, nome")
+    .single();
+  if (erroReduzido) throw erroReduzido;
+  return dataReduzido;
 }
 
 export async function findFornecedorByCnpj(cnpj: string) {
@@ -322,15 +364,82 @@ export async function findFornecedorByCnpj(cnpj: string) {
   return data;
 }
 
-export async function findOrCreateFornecedorPorNota(
-  nome: string,
-  cnpj: string | null
-) {
-  if (cnpj) {
-    const existente = await findFornecedorByCnpj(cnpj);
-    if (existente) return existente;
+async function findFornecedorByCpf(cpf: string) {
+  const supabase = createAdminClient();
+  const { data, error } = await supabase
+    .from("fornecedores")
+    .select("id, nome")
+    .eq("cpf", cpf)
+    .is("deleted_at", null)
+    .maybeSingle();
+  if (error) return null; // coluna cpf pode nao existir ainda (migration pendente)
+  return data;
+}
+
+async function findFornecedorPorNomeNormalizado(nome: string) {
+  const supabase = createAdminClient();
+  const alvo = normalizarNomeFornecedor(nome);
+  const { data } = await supabase
+    .from("fornecedores")
+    .select("id, nome")
+    .is("deleted_at", null);
+
+  return (data ?? []).find((f) => normalizarNomeFornecedor(f.nome) === alvo) ?? null;
+}
+
+async function backfillDadosFornecedor(fornecedorId: string, novos: CamposFornecedor) {
+  const supabase = createAdminClient();
+  const { data: atual, error } = await supabase
+    .from("fornecedores")
+    .select("cnpj, cpf, chave_pix, conta_banco, conta_agencia, conta_numero")
+    .eq("id", fornecedorId)
+    .maybeSingle();
+  if (error || !atual) return; // colunas novas podem nao existir ainda
+
+  const patch: {
+    cnpj?: string;
+    cpf?: string;
+    chave_pix?: string;
+    conta_banco?: string;
+    conta_agencia?: string;
+    conta_numero?: string;
+  } = {};
+  if (!atual.cnpj && novos.cnpj) patch.cnpj = novos.cnpj;
+  if (!atual.cpf && novos.cpf) patch.cpf = novos.cpf;
+  if (!atual.chave_pix && novos.chavePix) patch.chave_pix = novos.chavePix;
+  if (!atual.conta_banco && novos.contaBanco) patch.conta_banco = novos.contaBanco;
+  if (!atual.conta_agencia && novos.contaAgencia) patch.conta_agencia = novos.contaAgencia;
+  if (!atual.conta_numero && novos.contaNumero) patch.conta_numero = novos.contaNumero;
+
+  if (Object.keys(patch).length === 0) return;
+  await supabase.from("fornecedores").update(patch).eq("id", fornecedorId);
+}
+
+/**
+ * Resolve o fornecedor de um documento extraido (nota/comprovante), evitando
+ * duplicar cadastro: tenta por CNPJ, depois CPF, depois nome normalizado
+ * identico (sem acento/case) - de proposito NAO usa correspondencia
+ * aproximada por palavras aqui (essa fusao e automatica, em background;
+ * correspondencia aproximada e melhor reservada pra fluxos onde um humano
+ * confirma, como listMateriaisSemelhantes). Se achar, faz backfill dos
+ * campos novos que estiverem vazios no cadastro existente.
+ */
+export async function findOrCreateFornecedorPorNota(dados: {
+  nome: string;
+} & CamposFornecedor) {
+  const { nome, ...campos } = dados;
+
+  let existente: { id: string; nome: string } | null = null;
+  if (campos.cnpj) existente = await findFornecedorByCnpj(campos.cnpj);
+  if (!existente && campos.cpf) existente = await findFornecedorByCpf(campos.cpf);
+  if (!existente) existente = await findFornecedorPorNomeNormalizado(nome);
+
+  if (existente) {
+    await backfillDadosFornecedor(existente.id, campos);
+    return existente;
   }
-  return createFornecedor(nome, null, cnpj);
+
+  return createFornecedor(nome, null, campos);
 }
 
 export async function createDespesa(input: {

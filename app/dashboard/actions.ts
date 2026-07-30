@@ -612,12 +612,27 @@ export async function deleteMaterialAction(formData: FormData) {
 export async function createFornecedorAction(formData: FormData) {
   const nome = String(formData.get("nome") ?? "").trim();
   const contato = String(formData.get("contato") ?? "").trim() || null;
+  const cnpj = String(formData.get("cnpj") ?? "").trim() || null;
+  const cpf = String(formData.get("cpf") ?? "").trim() || null;
+  const chavePix = String(formData.get("chave_pix") ?? "").trim() || null;
+  const contaBanco = String(formData.get("conta_banco") ?? "").trim() || null;
+  const contaAgencia = String(formData.get("conta_agencia") ?? "").trim() || null;
+  const contaNumero = String(formData.get("conta_numero") ?? "").trim() || null;
   if (!nome) return;
 
   const supabase = await createClient();
   const { data: fornecedor } = await supabase
     .from("fornecedores")
-    .insert({ nome, contato })
+    .insert({
+      nome,
+      contato,
+      cnpj,
+      cpf,
+      chave_pix: chavePix,
+      conta_banco: contaBanco,
+      conta_agencia: contaAgencia,
+      conta_numero: contaNumero,
+    })
     .select("id")
     .single();
 
@@ -629,7 +644,7 @@ export async function createFornecedorAction(formData: FormData) {
     origem: "dashboard",
     autorNome,
     resumo: `Fornecedor "${nome}" cadastrado por ${autorNome}`,
-    dadosDepois: { nome, contato },
+    dadosDepois: { nome, contato, cnpj, cpf },
   });
 
   revalidatePath("/dashboard/fornecedores");
@@ -642,6 +657,11 @@ export async function updateFornecedorAction(formData: FormData) {
   const nome = String(formData.get("nome") ?? "").trim();
   const contato = String(formData.get("contato") ?? "").trim() || null;
   const cnpj = String(formData.get("cnpj") ?? "").trim() || null;
+  const cpf = String(formData.get("cpf") ?? "").trim() || null;
+  const chavePix = String(formData.get("chave_pix") ?? "").trim() || null;
+  const contaBanco = String(formData.get("conta_banco") ?? "").trim() || null;
+  const contaAgencia = String(formData.get("conta_agencia") ?? "").trim() || null;
+  const contaNumero = String(formData.get("conta_numero") ?? "").trim() || null;
   if (!nome) return;
 
   const supabase = await createClient();
@@ -651,7 +671,16 @@ export async function updateFornecedorAction(formData: FormData) {
     .eq("id", id)
     .maybeSingle();
 
-  const depois = { nome, contato, cnpj };
+  const depois = {
+    nome,
+    contato,
+    cnpj,
+    cpf,
+    chave_pix: chavePix,
+    conta_banco: contaBanco,
+    conta_agencia: contaAgencia,
+    conta_numero: contaNumero,
+  };
   await supabase.from("fornecedores").update(depois).eq("id", id);
 
   const autorNome = await getAutorNomeDashboard();
@@ -677,6 +706,11 @@ export async function updateFornecedorModalAction(formData: FormData) {
   const nome = String(formData.get("nome") ?? "").trim();
   const contato = String(formData.get("contato") ?? "").trim() || null;
   const cnpj = String(formData.get("cnpj") ?? "").trim() || null;
+  const cpf = String(formData.get("cpf") ?? "").trim() || null;
+  const chavePix = String(formData.get("chave_pix") ?? "").trim() || null;
+  const contaBanco = String(formData.get("conta_banco") ?? "").trim() || null;
+  const contaAgencia = String(formData.get("conta_agencia") ?? "").trim() || null;
+  const contaNumero = String(formData.get("conta_numero") ?? "").trim() || null;
   if (!nome) return;
 
   const supabase = await createClient();
@@ -686,7 +720,16 @@ export async function updateFornecedorModalAction(formData: FormData) {
     .eq("id", id)
     .maybeSingle();
 
-  const depois = { nome, contato, cnpj };
+  const depois = {
+    nome,
+    contato,
+    cnpj,
+    cpf,
+    chave_pix: chavePix,
+    conta_banco: contaBanco,
+    conta_agencia: contaAgencia,
+    conta_numero: contaNumero,
+  };
   await supabase.from("fornecedores").update(depois).eq("id", id);
 
   const autorNome = await getAutorNomeDashboard();
