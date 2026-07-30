@@ -1,13 +1,24 @@
 # OryonCash — Funcionalidades Pendentes
 
 Lista do que falta para o app ficar redondo, organizada por prioridade.
-Atualizada em 2026-07-27 — a versão anterior estava desatualizada: editar/
-excluir despesas, obras, materiais e fornecedores, tela de Categorias,
-anexo de comprovante, log de auditoria e lixeira já foram implementados
-desde então.
+Atualizada em 2026-07-30 — desde a última revisão (2026-07-27), foram
+implementados: dedup de fornecedor por CNPJ/CPF/nome normalizado (com
+backfill), captura de chave Pix/CPF/conta do fornecedor a partir do
+comprovante, número do documento/nota rastreável e buscável na lista de
+despesas, e o bug do campo Material ficar em branco em despesas lançadas
+por foto/áudio.
 
 ## Alta prioridade
 
+- **Conciliação semanal de extrato bancário x lançamentos** — o usuário
+  quer subir o extrato do banco uma vez por semana e o app comparar
+  automaticamente o que foi lançado com o que não foi (transações no
+  extrato sem despesa correspondente). É um recurso novo e grande:
+  precisa de tabelas próprias (extrato + transações), extração de várias
+  transações por IA a partir do extrato (PDF/imagem), lógica de casamento
+  por valor+data+descrição, e uma tela de revisão mostrando o que bateu e
+  o que não bateu. Combinado com o usuário para planejar numa rodada
+  separada, ainda não iniciado.
 - **Concluir a Verificação da Empresa no Meta** (Etapa 3 do onboarding do
   WhatsApp) — sem isso o envio de mensagens pode continuar
   instável/bloqueado esporadicamente.
@@ -15,11 +26,11 @@ desde então.
   um texto-resumo, sem o id do registro alterado. Sem isso não dá para
   linkar cada atividade direto pro lançamento/obra/etc. específico (só dá
   pra filtrar por tipo/entidade, não abrir o item exato).
-- **Deduplicar fornecedores/materiais cadastrados pelo WhatsApp** — hoje
-  já existem cadastros duplicados (ex.: o mesmo fornecedor criado 2-3x com
-  nomes quase iguais) porque o bot cria um novo registro sempre que o
-  texto não bate exatamente. Precisa de correspondência aproximada (ou
-  confirmação "já existe esse, quer usar?") antes de criar um novo.
+- **Deduplicar materiais cadastrados pelo WhatsApp com nomes quase iguais**
+  — `findOrCreateMaterial` já dedupe por nome idêntico (case-insensitive),
+  mas dois nomes parecidos-mas-diferentes (ex.: "Cimento CPII" vs "Cimento
+  CP-II 50kg") ainda viram cadastros separados. Fornecedor já foi
+  resolvido (dedup por CNPJ/CPF/nome normalizado + backfill).
 
 ## Média prioridade
 
