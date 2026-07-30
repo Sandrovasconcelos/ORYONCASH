@@ -117,9 +117,20 @@ export default async function DashboardPage({
         <TendenciaMensalChart pontos={data.tendenciaMensal} />
       </ChartCard>
 
-      <ChartCard titulo="Gasto por Material">
-        <GastoPorCategoriaChart itens={data.materiais} />
-      </ChartCard>
+      <div className="grid grid-cols-1 gap-6 lg:grid-cols-2">
+        <ChartCard titulo="Gasto por Material">
+          <GastoPorCategoriaChart itens={data.materiais} />
+        </ChartCard>
+        <ChartCard titulo="Top Fornecedores">
+          <GastoPorCategoriaChart itens={data.fornecedores} />
+        </ChartCard>
+      </div>
+
+      {data.comparativoObras.length > 1 && (
+        <ChartCard titulo="Comparativo entre Obras">
+          <GastoPorCategoriaChart itens={data.comparativoObras} />
+        </ChartCard>
+      )}
     </div>
   );
 

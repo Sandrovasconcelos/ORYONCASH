@@ -5,6 +5,7 @@ import {
   BarChart,
   CartesianGrid,
   Cell,
+  LabelList,
   ResponsiveContainer,
   Tooltip,
   XAxis,
@@ -49,7 +50,7 @@ export function GastoPorCategoriaChart({ itens }: { itens: Item[] }) {
       <BarChart
         data={dados}
         layout="vertical"
-        margin={{ top: 0, right: 24, bottom: 0, left: 0 }}
+        margin={{ top: 0, right: 72, bottom: 0, left: 0 }}
         barCategoryGap={10}
       >
         <CartesianGrid
@@ -77,6 +78,12 @@ export function GastoPorCategoriaChart({ itens }: { itens: Item[] }) {
           {dados.map((item) => (
             <Cell key={item.nome} fill="var(--chart-1)" />
           ))}
+          <LabelList
+            dataKey="total"
+            position="right"
+            formatter={(value: unknown) => formatBRL(Number(value ?? 0))}
+            style={{ fill: "var(--chart-ink-secondary)", fontSize: 11, fontWeight: 600 }}
+          />
         </Bar>
       </BarChart>
     </ResponsiveContainer>

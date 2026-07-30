@@ -30,6 +30,8 @@ export type DashboardData = {
   categorias: CategoriaBreakdown[];
   etapas: EtapaBreakdown[];
   materiais: CategoriaBreakdown[];
+  fornecedores: CategoriaBreakdown[];
+  comparativoObras: CategoriaBreakdown[];
   tendenciaMensal: PontoTendencia[];
 };
 
@@ -48,17 +50,36 @@ const NOMES_MES = [
   "Dez",
 ];
 
-function agruparPorMes(despesas: { valor: number; data: string }[]): PontoTendencia[] {
+/**
+ * Agrupa por dia quando o periodo coberto pelos lancamentos e curto (obra
+ * recente, poucos dias de uso) - agrupar por mes nesse caso renderizaria um
+ * grafico de tendencia com um unico ponto. A partir de ~45 dias de intervalo
+ * volta a agrupar por mes, que fica mais legivel conforme o historico cresce.
+ */
+function agruparTendencia(despesas: { valor: number; data: string }[]): PontoTendencia[] {
+  if (despesas.length === 0) return [];
+
+  const datasOrdenadas = despesas.map((d) => d.data).sort();
+  const primeira = new Date(datasOrdenadas[0]);
+  const ultima = new Date(datasOrdenadas[datasOrdenadas.length - 1]);
+  const diasDeSpan = Math.round(
+    (ultima.getTime() - primeira.getTime()) / (1000 * 60 * 60 * 24)
+  );
+  const porDia = diasDeSpan <= 45;
+
   const totais = new Map<string, number>();
   for (const d of despesas) {
-    const [ano, mes] = d.data.split("-");
-    const chave = `${ano}-${mes}`;
+    const chave = porDia ? d.data : d.data.slice(0, 7);
     totais.set(chave, (totais.get(chave) ?? 0) + d.valor);
   }
 
   return Array.from(totais.entries())
     .sort(([a], [b]) => a.localeCompare(b))
     .map(([chave, valor]) => {
+      if (porDia) {
+        const [, mes, dia] = chave.split("-");
+        return { mes: `${dia}/${mes}`, valor };
+      }
       const [ano, mes] = chave.split("-");
       return { mes: `${NOMES_MES[Number(mes) - 1]}/${ano.slice(2)}`, valor };
     });
@@ -133,6 +154,59 @@ function agruparMateriais(
     .sort((a, b) => b.total - a.total);
 }
 
+function agruparFornecedores(
+  despesas: { valor: number; fornecedor_id: string | null }[],
+  fornecedoresCatalogo: { id: string; nome: string }[],
+  gastoTotal: number
+): CategoriaBreakdown[] {
+  const totais = new Map<string, number>();
+  for (const d of despesas) {
+    if (!d.fornecedor_id) continue;
+    totais.set(d.fornecedor_id, (totais.get(d.fornecedor_id) ?? 0) + d.valor);
+  }
+  if (totais.size === 0) return [];
+
+  const nomesPorId = new Map(fornecedoresCatalogo.map((f) => [f.id, f.nome]));
+  const maiorTotal = Math.max(0, ...Array.from(totais.values()));
+
+  return Array.from(totais.entries())
+    .map(([id, total]) => ({
+      id,
+      nome: nomesPorId.get(id) ?? "Fornecedor removido",
+      total,
+      percentual: gastoTotal > 0 ? (total / gastoTotal) * 100 : 0,
+      maiorGasto: total > 0 && total === maiorTotal,
+    }))
+    .sort((a, b) => b.total - a.total)
+    .slice(0, 8);
+}
+
+function agruparComparativoObras(
+  despesas: { valor: number; obra_id: string }[],
+  obrasCatalogo: { id: string; nome: string }[]
+): CategoriaBreakdown[] {
+  const totais = new Map<string, number>();
+  for (const d of despesas) {
+    totais.set(d.obra_id, (totais.get(d.obra_id) ?? 0) + d.valor);
+  }
+
+  const gastoGeral = Array.from(totais.values()).reduce((soma, v) => soma + v, 0);
+  const maiorTotal = Math.max(0, ...Array.from(totais.values()));
+
+  return obrasCatalogo
+    .map((obra) => {
+      const total = totais.get(obra.id) ?? 0;
+      return {
+        id: obra.id,
+        nome: obra.nome,
+        total,
+        percentual: gastoGeral > 0 ? (total / gastoGeral) * 100 : 0,
+        maiorGasto: total > 0 && total === maiorTotal,
+      };
+    })
+    .sort((a, b) => b.total - a.total);
+}
+
 export async function getDashboardData(
   obraIdSolicitada: string | null
 ): Promise<DashboardData> {
@@ -162,6 +236,8 @@ export async function getDashboardData(
       categorias: [],
       etapas: [],
       materiais: [],
+      fornecedores: [],
+      comparativoObras: [],
       tendenciaMensal: [],
     };
   }
@@ -186,10 +262,12 @@ export async function getDashboardData(
     { data: categorias },
     { data: etapasProprias },
     { data: materiaisCatalogo },
+    { data: fornecedoresCatalogo },
+    { data: despesasTodasObras },
   ] = await Promise.all([
     supabase
       .from("despesas")
-      .select("valor, categoria_id, etapa_id, material_id, data")
+      .select("valor, categoria_id, etapa_id, material_id, fornecedor_id, data")
       .is("deleted_at", null)
       .eq("obra_id", obraSelecionada.id),
     supabase.from("categorias").select("id, nome").is("deleted_at", null).order("nome"),
@@ -199,6 +277,8 @@ export async function getDashboardData(
       .eq("obra_id", obraSelecionada.id)
       .order("ordem"),
     supabase.from("materiais").select("id, nome").is("deleted_at", null),
+    supabase.from("fornecedores").select("id, nome").is("deleted_at", null),
+    supabase.from("despesas").select("obra_id, valor").is("deleted_at", null),
   ]);
 
   let etapasCatalogo = etapasProprias ?? [];
@@ -232,7 +312,18 @@ export async function getDashboardData(
     gastoTotal
   );
 
-  const tendenciaMensal = agruparPorMes(
+  const fornecedorBreakdown = agruparFornecedores(
+    (despesas ?? []).map((d) => ({ valor: d.valor, fornecedor_id: d.fornecedor_id })),
+    fornecedoresCatalogo ?? [],
+    gastoTotal
+  );
+
+  const comparativoObras = agruparComparativoObras(
+    despesasTodasObras ?? [],
+    listaObras
+  );
+
+  const tendenciaMensal = agruparTendencia(
     (despesas ?? []).map((d) => ({ valor: d.valor, data: d.data }))
   );
 
@@ -250,6 +341,8 @@ export async function getDashboardData(
     categorias: categoriaBreakdown,
     etapas: etapaBreakdown,
     materiais: materialBreakdown,
+    fornecedores: fornecedorBreakdown,
+    comparativoObras,
     tendenciaMensal,
   };
 }
