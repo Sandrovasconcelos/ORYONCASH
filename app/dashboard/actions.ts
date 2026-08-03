@@ -1173,3 +1173,309 @@ export async function importarOrcamentoAction(
 
   return { ok: true, etapas: orcamento.etapas.length };
 }
+
+// ---------- Módulo de Qualidade ----------
+
+export async function createChecklistTemplateAction(formData: FormData) {
+  const nome = String(formData.get("nome") ?? "").trim();
+  const descricao = String(formData.get("descricao") ?? "").trim() || null;
+  if (!nome) return;
+
+  const supabase = await createClient();
+  const { data: template } = await supabase
+    .from("checklist_templates")
+    .insert({ nome, descricao })
+    .select("id")
+    .single();
+
+  const autorNome = await getAutorNomeDashboard();
+  await registrarAtividade({
+    tipo: "criacao",
+    entidade: "categoria",
+    entidadeId: template?.id,
+    origem: "dashboard",
+    autorNome,
+    resumo: `Modelo de checklist "${nome}" cadastrado por ${autorNome}`,
+    dadosDepois: { nome, descricao },
+  });
+
+  revalidatePath("/dashboard/qualidade");
+}
+
+export async function updateChecklistTemplateAction(formData: FormData) {
+  const id = String(formData.get("id") ?? "");
+  const nome = String(formData.get("nome") ?? "").trim();
+  const descricao = String(formData.get("descricao") ?? "").trim() || null;
+  if (!id || !nome) return;
+
+  const supabase = await createClient();
+  const { data: antes } = await supabase
+    .from("checklist_templates")
+    .select("*")
+    .eq("id", id)
+    .maybeSingle();
+
+  const depois = { nome, descricao };
+  await supabase.from("checklist_templates").update(depois).eq("id", id);
+
+  const autorNome = await getAutorNomeDashboard();
+  await registrarAtividade({
+    tipo: "edicao",
+    entidade: "categoria",
+    entidadeId: id,
+    origem: "dashboard",
+    autorNome,
+    resumo: `Modelo de checklist "${nome}" editado por ${autorNome}`,
+    dadosAntes: antes,
+    dadosDepois: depois,
+  });
+
+  revalidatePath("/dashboard/qualidade");
+}
+
+export async function deleteChecklistTemplateAction(formData: FormData) {
+  const id = String(formData.get("id") ?? "");
+  if (!id) return;
+
+  const supabase = await createClient();
+  const { data: template } = await supabase
+    .from("checklist_templates")
+    .select("*")
+    .eq("id", id)
+    .maybeSingle();
+
+  const autorNome = await getAutorNomeDashboard();
+  await supabase
+    .from("checklist_templates")
+    .update({
+      deleted_at: new Date().toISOString(),
+      deleted_by: autorNome,
+    })
+    .eq("id", id);
+
+  await registrarAtividade({
+    tipo: "exclusao",
+    entidade: "categoria",
+    entidadeId: id,
+    origem: "dashboard",
+    autorNome,
+    resumo: `Modelo de checklist "${template?.nome ?? id}" apagado por ${autorNome}`,
+    dadosAntes: template,
+  });
+
+  revalidatePath("/dashboard/qualidade");
+}
+
+export async function createChecklistItemAction(formData: FormData) {
+  const templateId = String(formData.get("template_id") ?? "");
+  const descricao = String(formData.get("descricao") ?? "").trim();
+  const critico = formData.get("critico") === "on";
+  const ordem = Number(formData.get("ordem") ?? 0) || 1;
+  if (!templateId || !descricao) return;
+
+  const supabase = await createClient();
+  await supabase.from("checklist_itens").insert({
+    template_id: templateId,
+    descricao,
+    critico,
+    ordem,
+  });
+
+  const autorNome = await getAutorNomeDashboard();
+  await registrarAtividade({
+    tipo: "criacao",
+    entidade: "categoria",
+    entidadeId: templateId,
+    origem: "dashboard",
+    autorNome,
+    resumo: `Item de checklist "${descricao}" adicionado por ${autorNome}`,
+    dadosDepois: { descricao, critico, ordem },
+  });
+
+  revalidatePath("/dashboard/qualidade");
+}
+
+export async function deleteChecklistItemAction(formData: FormData) {
+  const id = String(formData.get("id") ?? "");
+  const templateId = String(formData.get("template_id") ?? "");
+  if (!id) return;
+
+  const supabase = await createClient();
+  const { data: item } = await supabase
+    .from("checklist_itens")
+    .select("*")
+    .eq("id", id)
+    .maybeSingle();
+
+  await supabase.from("checklist_itens").delete().eq("id", id);
+
+  const autorNome = await getAutorNomeDashboard();
+  await registrarAtividade({
+    tipo: "exclusao",
+    entidade: "categoria",
+    entidadeId: templateId || item?.template_id,
+    origem: "dashboard",
+    autorNome,
+    resumo: `Item de checklist "${item?.descricao ?? id}" apagado por ${autorNome}`,
+    dadosAntes: item,
+  });
+
+  revalidatePath("/dashboard/qualidade");
+}
+
+export async function vincularChecklistEtapaAction(formData: FormData) {
+  const etapaId = String(formData.get("etapa_id") ?? "");
+  const templateId = String(formData.get("checklist_template_id") ?? "") || null;
+  const fornecedorId = String(formData.get("fornecedor_id") ?? "") || null;
+  if (!etapaId) return;
+
+  const supabase = await createClient();
+  const { data: antes } = await supabase
+    .from("etapas")
+    .select("nome, obra_id, checklist_template_id, fornecedor_id")
+    .eq("id", etapaId)
+    .maybeSingle();
+
+  await supabase
+    .from("etapas")
+    .update({ checklist_template_id: templateId, fornecedor_id: fornecedorId })
+    .eq("id", etapaId);
+
+  const autorNome = await getAutorNomeDashboard();
+  await registrarAtividade({
+    tipo: "edicao",
+    entidade: "obra",
+    entidadeId: antes?.obra_id,
+    origem: "dashboard",
+    autorNome,
+    resumo: `Checklist/fornecedor vinculado à etapa "${antes?.nome ?? etapaId}" por ${autorNome}`,
+    dadosAntes: antes,
+    dadosDepois: { checklist_template_id: templateId, fornecedor_id: fornecedorId },
+  });
+
+  revalidatePath("/dashboard/qualidade");
+}
+
+async function anexarEvidenciaInspecao(input: {
+  supabase: Awaited<ReturnType<typeof createClient>>;
+  inspecaoId: string;
+  arquivo: File;
+}) {
+  const { supabase, inspecaoId, arquivo } = input;
+  if (arquivo.size === 0) return;
+
+  const extensao =
+    arquivo.name.split(".").pop()?.replace(/[^a-z0-9]/gi, "").toLowerCase() ||
+    arquivo.type.split("/")[1]?.replace("jpeg", "jpg").replace(/[^a-z0-9]/gi, "") ||
+    "bin";
+  const storagePath = `qualidade/${inspecaoId}/${Date.now()}-${crypto.randomUUID()}.${extensao}`;
+
+  const { error: uploadError } = await supabase.storage
+    .from("comprovantes")
+    .upload(storagePath, arquivo, {
+      contentType: arquivo.type || "application/octet-stream",
+      upsert: false,
+    });
+  if (uploadError) throw uploadError;
+
+  await supabase.from("inspecao_evidencias").insert({
+    inspecao_id: inspecaoId,
+    storage_bucket: "comprovantes",
+    storage_path: storagePath,
+    mime_type: arquivo.type || "application/octet-stream",
+    nome_arquivo: arquivo.name,
+  });
+}
+
+const PESO_RESULTADO: Record<string, number> = {
+  reprovado: 3,
+  pendente: 2,
+  aprovado: 1,
+};
+
+export async function iniciarInspecaoAction(formData: FormData) {
+  const etapaId = String(formData.get("etapa_id") ?? "");
+  const templateId = String(formData.get("template_id") ?? "");
+  const observacao = String(formData.get("observacao") ?? "").trim() || null;
+  const inspecionadoPor = String(formData.get("inspecionado_por") ?? "").trim() || null;
+  if (!etapaId || !templateId) return;
+
+  const supabase = await createClient();
+
+  const [{ data: etapa }, { data: itens }] = await Promise.all([
+    supabase.from("etapas").select("nome, obra_id").eq("id", etapaId).maybeSingle(),
+    supabase
+      .from("checklist_itens")
+      .select("id, descricao")
+      .eq("template_id", templateId)
+      .order("ordem"),
+  ]);
+  if (!itens || itens.length === 0) return;
+
+  type Resposta = "aprovado" | "pendente" | "reprovado" | "nao_aplica";
+  const RESPOSTAS_VALIDAS: Resposta[] = ["aprovado", "pendente", "reprovado", "nao_aplica"];
+  const respostas = itens.map((item) => {
+    const bruto = String(formData.get(`resposta_${item.id}`) ?? "nao_aplica");
+    const resposta: Resposta = RESPOSTAS_VALIDAS.includes(bruto as Resposta)
+      ? (bruto as Resposta)
+      : "nao_aplica";
+    return { itemId: item.id, resposta };
+  });
+
+  const piorPeso = Math.max(
+    ...respostas.map((r) => PESO_RESULTADO[r.resposta] ?? 0)
+  );
+  const resultado =
+    piorPeso === 3 ? "reprovado" : piorPeso === 2 ? "pendente" : "aprovado";
+
+  const { data: inspecao } = await supabase
+    .from("inspecoes")
+    .insert({
+      etapa_id: etapaId,
+      template_id: templateId,
+      resultado,
+      observacao,
+      inspecionado_por: inspecionadoPor,
+    })
+    .select("id")
+    .single();
+  if (!inspecao) return;
+
+  await supabase.from("inspecao_respostas").insert(
+    respostas.map((r) => ({
+      inspecao_id: inspecao.id,
+      checklist_item_id: r.itemId,
+      resposta: r.resposta,
+    }))
+  );
+
+  for (const arquivo of formData.getAll("evidencia")) {
+    if (arquivo instanceof File) {
+      await anexarEvidenciaInspecao({ supabase, inspecaoId: inspecao.id, arquivo });
+    }
+  }
+
+  await supabase
+    .from("etapas")
+    .update({ situacao_qualidade: resultado })
+    .eq("id", etapaId);
+
+  const autorNome = await getAutorNomeDashboard();
+  const resultadoLabel =
+    resultado === "aprovado"
+      ? "aprovada"
+      : resultado === "pendente"
+        ? "aprovada com pendências"
+        : "reprovada";
+  await registrarAtividade({
+    tipo: "criacao",
+    entidade: "obra",
+    entidadeId: etapa?.obra_id,
+    origem: "dashboard",
+    autorNome,
+    resumo: `Inspeção de qualidade da etapa "${etapa?.nome ?? etapaId}" ${resultadoLabel} por ${autorNome}`,
+    dadosDepois: { resultado, observacao, respostas },
+  });
+
+  revalidatePath("/dashboard/qualidade");
+}

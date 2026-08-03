@@ -62,6 +62,9 @@ export interface Database {
           ordem: number;
           obra_id: string | null;
           valor_orcado: number | null;
+          fornecedor_id: string | null;
+          situacao_qualidade: string;
+          checklist_template_id: string | null;
           created_at: string;
         };
         Insert: {
@@ -70,6 +73,9 @@ export interface Database {
           ordem?: number;
           obra_id?: string | null;
           valor_orcado?: number | null;
+          fornecedor_id?: string | null;
+          situacao_qualidade?: string;
+          checklist_template_id?: string | null;
           created_at?: string;
         };
         Update: Partial<Database["public"]["Tables"]["etapas"]["Insert"]>;
@@ -79,6 +85,20 @@ export interface Database {
             columns: ["obra_id"];
             isOneToOne: false;
             referencedRelation: "obras";
+            referencedColumns: ["id"];
+          },
+          {
+            foreignKeyName: "etapas_fornecedor_id_fkey";
+            columns: ["fornecedor_id"];
+            isOneToOne: false;
+            referencedRelation: "fornecedores";
+            referencedColumns: ["id"];
+          },
+          {
+            foreignKeyName: "etapas_checklist_template_id_fkey";
+            columns: ["checklist_template_id"];
+            isOneToOne: false;
+            referencedRelation: "checklist_templates";
             referencedColumns: ["id"];
           },
         ];
@@ -356,6 +376,164 @@ export interface Database {
         };
         Update: Partial<Database["public"]["Tables"]["atividades"]["Insert"]>;
         Relationships: [];
+      };
+      checklist_templates: {
+        Row: {
+          id: string;
+          nome: string;
+          descricao: string | null;
+          created_at: string;
+          deleted_at: string | null;
+          deleted_by: string | null;
+          deleted_reason: string | null;
+        };
+        Insert: {
+          id?: string;
+          nome: string;
+          descricao?: string | null;
+          created_at?: string;
+          deleted_at?: string | null;
+          deleted_by?: string | null;
+          deleted_reason?: string | null;
+        };
+        Update: Partial<
+          Database["public"]["Tables"]["checklist_templates"]["Insert"]
+        >;
+        Relationships: [];
+      };
+      checklist_itens: {
+        Row: {
+          id: string;
+          template_id: string;
+          descricao: string;
+          critico: boolean;
+          ordem: number;
+          created_at: string;
+        };
+        Insert: {
+          id?: string;
+          template_id: string;
+          descricao: string;
+          critico?: boolean;
+          ordem?: number;
+          created_at?: string;
+        };
+        Update: Partial<Database["public"]["Tables"]["checklist_itens"]["Insert"]>;
+        Relationships: [
+          {
+            foreignKeyName: "checklist_itens_template_id_fkey";
+            columns: ["template_id"];
+            isOneToOne: false;
+            referencedRelation: "checklist_templates";
+            referencedColumns: ["id"];
+          },
+        ];
+      };
+      inspecoes: {
+        Row: {
+          id: string;
+          etapa_id: string;
+          template_id: string | null;
+          resultado: "aprovado" | "pendente" | "reprovado";
+          observacao: string | null;
+          inspecionado_por: string | null;
+          origem: "dashboard";
+          created_at: string;
+        };
+        Insert: {
+          id?: string;
+          etapa_id: string;
+          template_id?: string | null;
+          resultado: "aprovado" | "pendente" | "reprovado";
+          observacao?: string | null;
+          inspecionado_por?: string | null;
+          origem?: "dashboard";
+          created_at?: string;
+        };
+        Update: Partial<Database["public"]["Tables"]["inspecoes"]["Insert"]>;
+        Relationships: [
+          {
+            foreignKeyName: "inspecoes_etapa_id_fkey";
+            columns: ["etapa_id"];
+            isOneToOne: false;
+            referencedRelation: "etapas";
+            referencedColumns: ["id"];
+          },
+          {
+            foreignKeyName: "inspecoes_template_id_fkey";
+            columns: ["template_id"];
+            isOneToOne: false;
+            referencedRelation: "checklist_templates";
+            referencedColumns: ["id"];
+          },
+        ];
+      };
+      inspecao_respostas: {
+        Row: {
+          id: string;
+          inspecao_id: string;
+          checklist_item_id: string;
+          resposta: "aprovado" | "pendente" | "reprovado" | "nao_aplica";
+          created_at: string;
+        };
+        Insert: {
+          id?: string;
+          inspecao_id: string;
+          checklist_item_id: string;
+          resposta: "aprovado" | "pendente" | "reprovado" | "nao_aplica";
+          created_at?: string;
+        };
+        Update: Partial<
+          Database["public"]["Tables"]["inspecao_respostas"]["Insert"]
+        >;
+        Relationships: [
+          {
+            foreignKeyName: "inspecao_respostas_inspecao_id_fkey";
+            columns: ["inspecao_id"];
+            isOneToOne: false;
+            referencedRelation: "inspecoes";
+            referencedColumns: ["id"];
+          },
+          {
+            foreignKeyName: "inspecao_respostas_checklist_item_id_fkey";
+            columns: ["checklist_item_id"];
+            isOneToOne: false;
+            referencedRelation: "checklist_itens";
+            referencedColumns: ["id"];
+          },
+        ];
+      };
+      inspecao_evidencias: {
+        Row: {
+          id: string;
+          inspecao_id: string;
+          storage_bucket: string;
+          storage_path: string;
+          mime_type: string;
+          nome_arquivo: string | null;
+          created_at: string;
+        };
+        Insert: {
+          id?: string;
+          inspecao_id: string;
+          storage_bucket?: string;
+          storage_path: string;
+          mime_type: string;
+          nome_arquivo?: string | null;
+          created_at?: string;
+        };
+        Update: Partial<
+          Database["public"]["Tables"]["inspecao_evidencias"]["Insert"]
+        >;
+        Relationships: [
+          {
+            foreignKeyName: "inspecao_evidencias_inspecao_id_fkey";
+            columns: ["inspecao_id"];
+            isOneToOne: false;
+            referencedRelation: "inspecoes";
+            referencedColumns: ["id"];
+          },
+        ];
       };
     };
     Views: Record<string, never>;

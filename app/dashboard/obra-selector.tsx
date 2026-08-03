@@ -6,9 +6,11 @@ import type { ObraResumida } from "@/lib/dashboard/queries";
 export function ObraSelector({
   obras,
   obraAtualId,
+  basePath = "/dashboard",
 }: {
   obras: ObraResumida[];
   obraAtualId: string;
+  basePath?: string;
 }) {
   const router = useRouter();
 
@@ -30,7 +32,7 @@ export function ObraSelector({
 
       <select
         value={obraAtualId}
-        onChange={(e) => router.push(`/dashboard?obra=${e.target.value}`)}
+        onChange={(e) => router.push(`${basePath}?obra=${e.target.value}`)}
         className="w-full rounded-brand-sm border border-brand-gray-300 bg-transparent px-3 py-2 text-sm outline-none focus:border-brand-red sm:w-64"
       >
         {obras.map((obra) => (

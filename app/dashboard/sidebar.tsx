@@ -10,6 +10,7 @@ const NAV_ITEMS = [
   { href: "/dashboard", label: "Visão geral", icon: "dashboard" },
   { href: "/dashboard/despesas", label: "Lançamentos", icon: "receipt" },
   { href: "/dashboard/obras", label: "Obras", icon: "building" },
+  { href: "/dashboard/qualidade", label: "Qualidade", icon: "check" },
   { href: "/dashboard/categorias", label: "Categorias", icon: "tag" },
   { href: "/dashboard/materiais", label: "Materiais", icon: "box" },
   { href: "/dashboard/fornecedores", label: "Fornecedores", icon: "truck" },
@@ -63,6 +64,12 @@ function NavIcon({ name }: { name: string }) {
       <>
         <circle cx="12" cy="12" r="9" />
         <path d="M12 7v5l3 2" />
+      </>
+    ),
+    check: (
+      <>
+        <circle cx="12" cy="12" r="9" />
+        <path d="m8.5 12.5 2.5 2.5 5-5" />
       </>
     ),
     trash: (
