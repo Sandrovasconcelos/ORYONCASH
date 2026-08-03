@@ -65,6 +65,9 @@ export interface Database {
           fornecedor_id: string | null;
           situacao_qualidade: string;
           checklist_template_id: string | null;
+          data_inicio_prevista: string | null;
+          data_fim_prevista: string | null;
+          percentual_executado: number;
           created_at: string;
         };
         Insert: {
@@ -76,6 +79,9 @@ export interface Database {
           fornecedor_id?: string | null;
           situacao_qualidade?: string;
           checklist_template_id?: string | null;
+          data_inicio_prevista?: string | null;
+          data_fim_prevista?: string | null;
+          percentual_executado?: number;
           created_at?: string;
         };
         Update: Partial<Database["public"]["Tables"]["etapas"]["Insert"]>;
@@ -531,6 +537,114 @@ export interface Database {
             columns: ["inspecao_id"];
             isOneToOne: false;
             referencedRelation: "inspecoes";
+            referencedColumns: ["id"];
+          },
+        ];
+      };
+      medicoes: {
+        Row: {
+          id: string;
+          obra_id: string;
+          categoria_id: string;
+          periodo_inicio: string;
+          periodo_fim: string;
+          status: "preparada" | "aprovada" | "paga";
+          valor_total: number;
+          observacao: string | null;
+          criado_por: string | null;
+          aprovado_por: string | null;
+          aprovado_em: string | null;
+          pago_em: string | null;
+          created_at: string;
+          deleted_at: string | null;
+          deleted_by: string | null;
+          deleted_reason: string | null;
+        };
+        Insert: {
+          id?: string;
+          obra_id: string;
+          categoria_id: string;
+          periodo_inicio: string;
+          periodo_fim: string;
+          status?: "preparada" | "aprovada" | "paga";
+          valor_total?: number;
+          observacao?: string | null;
+          criado_por?: string | null;
+          aprovado_por?: string | null;
+          aprovado_em?: string | null;
+          pago_em?: string | null;
+          created_at?: string;
+          deleted_at?: string | null;
+          deleted_by?: string | null;
+          deleted_reason?: string | null;
+        };
+        Update: Partial<Database["public"]["Tables"]["medicoes"]["Insert"]>;
+        Relationships: [
+          {
+            foreignKeyName: "medicoes_obra_id_fkey";
+            columns: ["obra_id"];
+            isOneToOne: false;
+            referencedRelation: "obras";
+            referencedColumns: ["id"];
+          },
+          {
+            foreignKeyName: "medicoes_categoria_id_fkey";
+            columns: ["categoria_id"];
+            isOneToOne: false;
+            referencedRelation: "categorias";
+            referencedColumns: ["id"];
+          },
+        ];
+      };
+      medicao_itens: {
+        Row: {
+          id: string;
+          medicao_id: string;
+          etapa_id: string;
+          fornecedor_id: string | null;
+          percentual_medido: number;
+          valor_medido: number;
+          despesa_id: string | null;
+          created_at: string;
+        };
+        Insert: {
+          id?: string;
+          medicao_id: string;
+          etapa_id: string;
+          fornecedor_id?: string | null;
+          percentual_medido: number;
+          valor_medido: number;
+          despesa_id?: string | null;
+          created_at?: string;
+        };
+        Update: Partial<Database["public"]["Tables"]["medicao_itens"]["Insert"]>;
+        Relationships: [
+          {
+            foreignKeyName: "medicao_itens_medicao_id_fkey";
+            columns: ["medicao_id"];
+            isOneToOne: false;
+            referencedRelation: "medicoes";
+            referencedColumns: ["id"];
+          },
+          {
+            foreignKeyName: "medicao_itens_etapa_id_fkey";
+            columns: ["etapa_id"];
+            isOneToOne: false;
+            referencedRelation: "etapas";
+            referencedColumns: ["id"];
+          },
+          {
+            foreignKeyName: "medicao_itens_fornecedor_id_fkey";
+            columns: ["fornecedor_id"];
+            isOneToOne: false;
+            referencedRelation: "fornecedores";
+            referencedColumns: ["id"];
+          },
+          {
+            foreignKeyName: "medicao_itens_despesa_id_fkey";
+            columns: ["despesa_id"];
+            isOneToOne: false;
+            referencedRelation: "despesas";
             referencedColumns: ["id"];
           },
         ];

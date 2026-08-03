@@ -7,7 +7,7 @@ export type TipoDocumentoDespesa =
   | "comprovante_pagamento"
   | "outro";
 
-function hojeNoBrasil(): string {
+export function hojeNoBrasil(): string {
   const partes = new Intl.DateTimeFormat("pt-BR", {
     timeZone: "America/Fortaleza",
     year: "numeric",

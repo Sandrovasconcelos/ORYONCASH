@@ -4,7 +4,8 @@ import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
 import { formatBRL, parseValorBR } from "@/lib/conversation/format";
-import { upsertEtapasDeObra } from "@/lib/conversation/queries";
+import { hojeNoBrasil, upsertEtapasDeObra } from "@/lib/conversation/queries";
+import { calcularItensElegiveisParaMedicao } from "@/lib/dashboard/queries";
 import { extractSpreadsheetAsText } from "@/lib/orcamento/parseSpreadsheet";
 import { extractOrcamentoData } from "@/lib/gemini/extractOrcamento";
 import { registrarAtividade } from "@/lib/atividades";
@@ -1478,4 +1479,257 @@ export async function iniciarInspecaoAction(formData: FormData) {
   });
 
   revalidatePath("/dashboard/qualidade");
+}
+
+// ---------- Cronograma e Medições ----------
+
+export async function atualizarProgressoEtapaAction(formData: FormData) {
+  const etapaId = String(formData.get("etapa_id") ?? "");
+  const dataInicioPrevista = String(formData.get("data_inicio_prevista") ?? "") || null;
+  const dataFimPrevista = String(formData.get("data_fim_prevista") ?? "") || null;
+  const percentualExecutado = Math.min(
+    100,
+    Math.max(0, Number(formData.get("percentual_executado") ?? 0))
+  );
+  if (!etapaId) return;
+
+  const supabase = await createClient();
+  const { data: antes } = await supabase
+    .from("etapas")
+    .select("nome, obra_id, data_inicio_prevista, data_fim_prevista, percentual_executado")
+    .eq("id", etapaId)
+    .maybeSingle();
+
+  const depois = {
+    data_inicio_prevista: dataInicioPrevista,
+    data_fim_prevista: dataFimPrevista,
+    percentual_executado: percentualExecutado,
+  };
+  await supabase.from("etapas").update(depois).eq("id", etapaId);
+
+  const autorNome = await getAutorNomeDashboard();
+  await registrarAtividade({
+    tipo: "edicao",
+    entidade: "obra",
+    entidadeId: antes?.obra_id,
+    origem: "dashboard",
+    autorNome,
+    resumo: `Progresso da etapa "${antes?.nome ?? etapaId}" atualizado (${percentualExecutado}%) por ${autorNome}`,
+    dadosAntes: antes,
+    dadosDepois: depois,
+  });
+
+  revalidatePath("/dashboard/cronograma");
+}
+
+export async function prepararMedicaoAction(formData: FormData) {
+  const obraId = String(formData.get("obra_id") ?? "");
+  const categoriaId = String(formData.get("categoria_id") ?? "");
+  const periodoInicio = String(formData.get("periodo_inicio") ?? "");
+  const periodoFim = String(formData.get("periodo_fim") ?? "");
+  const observacao = String(formData.get("observacao") ?? "").trim() || null;
+  if (!obraId || !categoriaId || !periodoInicio || !periodoFim) return;
+
+  const supabase = await createClient();
+
+  const { data: etapas } = await supabase
+    .from("etapas")
+    .select("id, nome, valor_orcado, percentual_executado, situacao_qualidade, fornecedor_id")
+    .eq("obra_id", obraId);
+  if (!etapas || etapas.length === 0) return;
+
+  const idsEtapas = etapas.map((e) => e.id);
+  const { data: itensAnteriores } = await supabase
+    .from("medicao_itens")
+    .select("etapa_id, percentual_medido")
+    .in("etapa_id", idsEtapas);
+
+  const jaMedidoPorEtapa = new Map<string, number>();
+  for (const item of itensAnteriores ?? []) {
+    jaMedidoPorEtapa.set(
+      item.etapa_id,
+      (jaMedidoPorEtapa.get(item.etapa_id) ?? 0) + Number(item.percentual_medido)
+    );
+  }
+
+  const itensElegiveis = calcularItensElegiveisParaMedicao(
+    etapas.map((e) => ({
+      id: e.id,
+      nome: e.nome,
+      valorOrcado: Number(e.valor_orcado ?? 0),
+      percentualExecutado: Number(e.percentual_executado),
+      situacaoQualidade: e.situacao_qualidade,
+      fornecedorId: e.fornecedor_id,
+    })),
+    jaMedidoPorEtapa
+  );
+  if (itensElegiveis.length === 0) return;
+
+  const valorTotal = itensElegiveis.reduce((soma, item) => soma + item.valorMedido, 0);
+  const autorNome = await getAutorNomeDashboard();
+
+  const { data: medicao } = await supabase
+    .from("medicoes")
+    .insert({
+      obra_id: obraId,
+      categoria_id: categoriaId,
+      periodo_inicio: periodoInicio,
+      periodo_fim: periodoFim,
+      observacao,
+      valor_total: valorTotal,
+      criado_por: autorNome,
+    })
+    .select("id")
+    .single();
+  if (!medicao) return;
+
+  await supabase.from("medicao_itens").insert(
+    itensElegiveis.map((item) => ({
+      medicao_id: medicao.id,
+      etapa_id: item.etapaId,
+      fornecedor_id: item.fornecedorId,
+      percentual_medido: item.percentualMedido,
+      valor_medido: item.valorMedido,
+    }))
+  );
+
+  await registrarAtividade({
+    tipo: "criacao",
+    entidade: "obra",
+    entidadeId: obraId,
+    origem: "dashboard",
+    autorNome,
+    resumo: `Medição preparada (${formatBRL(valorTotal)}, ${itensElegiveis.length} etapa(s)) por ${autorNome}`,
+    dadosDepois: { periodoInicio, periodoFim, itens: itensElegiveis },
+  });
+
+  revalidatePath("/dashboard/cronograma");
+}
+
+export async function apagarMedicaoPreparadaAction(formData: FormData) {
+  const medicaoId = String(formData.get("id") ?? "");
+  if (!medicaoId) return;
+
+  const supabase = await createClient();
+  const { data: medicao } = await supabase
+    .from("medicoes")
+    .select("obra_id, status, valor_total")
+    .eq("id", medicaoId)
+    .eq("status", "preparada")
+    .maybeSingle();
+  if (!medicao) return;
+
+  await supabase.from("medicoes").delete().eq("id", medicaoId).eq("status", "preparada");
+
+  const autorNome = await getAutorNomeDashboard();
+  await registrarAtividade({
+    tipo: "exclusao",
+    entidade: "obra",
+    entidadeId: medicao.obra_id,
+    origem: "dashboard",
+    autorNome,
+    resumo: `Medição preparada (${formatBRL(Number(medicao.valor_total))}) apagada por ${autorNome}`,
+  });
+
+  revalidatePath("/dashboard/cronograma");
+}
+
+export async function aprovarMedicaoAction(formData: FormData) {
+  const medicaoId = String(formData.get("id") ?? "");
+  if (!medicaoId) return;
+
+  const supabase = await createClient();
+  const autorNome = await getAutorNomeDashboard();
+
+  const { data: medicao } = await supabase
+    .from("medicoes")
+    .update({ status: "aprovada", aprovado_por: autorNome, aprovado_em: new Date().toISOString() })
+    .eq("id", medicaoId)
+    .eq("status", "preparada")
+    .select("obra_id, valor_total")
+    .maybeSingle();
+  if (!medicao) return;
+
+  await registrarAtividade({
+    tipo: "edicao",
+    entidade: "obra",
+    entidadeId: medicao.obra_id,
+    origem: "dashboard",
+    autorNome,
+    resumo: `Medição de ${formatBRL(Number(medicao.valor_total))} aprovada por ${autorNome}`,
+  });
+
+  revalidatePath("/dashboard/cronograma");
+}
+
+export async function registrarPagamentoMedicaoAction(formData: FormData) {
+  const medicaoId = String(formData.get("id") ?? "");
+  if (!medicaoId) return;
+
+  const supabase = await createClient();
+  const { data: medicao } = await supabase
+    .from("medicoes")
+    .select("obra_id, categoria_id, periodo_inicio, periodo_fim, status, valor_total")
+    .eq("id", medicaoId)
+    .eq("status", "aprovada")
+    .maybeSingle();
+  if (!medicao) return;
+
+  const { data: itens } = await supabase
+    .from("medicao_itens")
+    .select("id, etapa_id, fornecedor_id, percentual_medido, valor_medido")
+    .eq("medicao_id", medicaoId);
+  if (!itens || itens.length === 0) return;
+
+  const { data: etapasNomes } = await supabase
+    .from("etapas")
+    .select("id, nome")
+    .in(
+      "id",
+      itens.map((i) => i.etapa_id)
+    );
+  const nomePorEtapa = new Map((etapasNomes ?? []).map((e) => [e.id, e.nome]));
+
+  const autorNome = await getAutorNomeDashboard();
+  const periodo = `${medicao.periodo_inicio} a ${medicao.periodo_fim}`;
+
+  for (const item of itens) {
+    const nomeEtapa = nomePorEtapa.get(item.etapa_id) ?? "etapa";
+    const { data: despesa } = await supabase
+      .from("despesas")
+      .insert({
+        obra_id: medicao.obra_id,
+        categoria_id: medicao.categoria_id,
+        etapa_id: item.etapa_id,
+        fornecedor_id: item.fornecedor_id,
+        valor: item.valor_medido,
+        descricao: `Medição ${periodo} — ${nomeEtapa} (${item.percentual_medido}% executado)`,
+        data: hojeNoBrasil(),
+        origem: "dashboard",
+      })
+      .select("id")
+      .single();
+
+    if (despesa) {
+      await supabase.from("medicao_itens").update({ despesa_id: despesa.id }).eq("id", item.id);
+    }
+  }
+
+  await supabase
+    .from("medicoes")
+    .update({ status: "paga", pago_em: new Date().toISOString() })
+    .eq("id", medicaoId);
+
+  await registrarAtividade({
+    tipo: "criacao",
+    entidade: "obra",
+    entidadeId: medicao.obra_id,
+    origem: "dashboard",
+    autorNome,
+    resumo: `Pagamento de medição registrado (${formatBRL(Number(medicao.valor_total))}, ${itens.length} despesa(s) geradas) por ${autorNome}`,
+  });
+
+  revalidatePath("/dashboard/cronograma");
+  revalidatePath("/dashboard/despesas");
+  revalidatePath("/dashboard");
 }

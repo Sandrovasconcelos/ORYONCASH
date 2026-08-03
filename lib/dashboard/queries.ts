@@ -346,3 +346,56 @@ export async function getDashboardData(
     tendenciaMensal,
   };
 }
+
+// ---------- Medições ----------
+
+export type EtapaParaMedicao = {
+  id: string;
+  nome: string;
+  valorOrcado: number;
+  percentualExecutado: number;
+  situacaoQualidade: string;
+  fornecedorId: string | null;
+};
+
+export type ItemMedicaoElegivel = {
+  etapaId: string;
+  etapaNome: string;
+  fornecedorId: string;
+  percentualMedido: number;
+  valorMedido: number;
+};
+
+/**
+ * So mede o que ja foi executado E aprovado pela qualidade. percentualMedido
+ * e sempre o delta desde a ultima medicao daquela etapa (nao o acumulado),
+ * senao a mesma execucao seria paga de novo a cada medicao.
+ */
+export function calcularItensElegiveisParaMedicao(
+  etapas: EtapaParaMedicao[],
+  percentualJaMedidoPorEtapa: Map<string, number>
+): ItemMedicaoElegivel[] {
+  const itens: ItemMedicaoElegivel[] = [];
+
+  for (const etapa of etapas) {
+    if (etapa.situacaoQualidade !== "aprovado") continue;
+    if (!etapa.fornecedorId) continue;
+
+    const jaMedido = percentualJaMedidoPorEtapa.get(etapa.id) ?? 0;
+    const delta = etapa.percentualExecutado - jaMedido;
+    if (delta <= 0) continue;
+
+    const valorMedido = Number(((etapa.valorOrcado * delta) / 100).toFixed(2));
+    if (valorMedido <= 0) continue;
+
+    itens.push({
+      etapaId: etapa.id,
+      etapaNome: etapa.nome,
+      fornecedorId: etapa.fornecedorId,
+      percentualMedido: delta,
+      valorMedido,
+    });
+  }
+
+  return itens;
+}
