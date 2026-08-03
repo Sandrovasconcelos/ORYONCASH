@@ -2,6 +2,7 @@
 import { createAdminClient } from "@/lib/supabase/admin";
 import { formatBRL } from "@/lib/conversation/format";
 import {
+  copiarEtapasAction,
   createEtapaAction,
   createObraAction,
   deleteEtapaAction,
@@ -393,6 +394,47 @@ export default async function ObrasPage() {
                                   </tbody>
                                 </table>
                               </div>
+
+                              {(etapas ?? []).filter((etapa) => etapa.obra_id === obra.id).length > 0 &&
+                                lista.length > 1 && (
+                                  <form
+                                    action={copiarEtapasAction}
+                                    className="rounded-card border border-brand-gray-300/70 bg-brand-gray-100/60 p-4"
+                                  >
+                                    <input type="hidden" name="obra_origem_id" value={obra.id} />
+                                    <p className="text-sm font-bold text-brand-black">
+                                      Copiar estas etapas para outra obra
+                                    </p>
+                                    <p className="mt-1 text-xs text-brand-gray-500">
+                                      Adiciona as etapas de {obra.nome} na(s) obra(s) marcada(s), sem apagar
+                                      etapas que já existirem lá.
+                                    </p>
+                                    <div className="mt-3 flex flex-col gap-2">
+                                      {lista
+                                        .filter((outra) => outra.id !== obra.id)
+                                        .map((outra) => (
+                                          <label
+                                            key={outra.id}
+                                            className="flex items-center gap-2 text-sm text-brand-gray-700"
+                                          >
+                                            <input
+                                              type="checkbox"
+                                              name="obra_destino_id"
+                                              value={outra.id}
+                                              className="h-4 w-4 rounded border-brand-gray-300 text-brand-red focus:ring-brand-red"
+                                            />
+                                            {outra.nome}
+                                          </label>
+                                        ))}
+                                    </div>
+                                    <button
+                                      type="submit"
+                                      className="oc-button oc-button-primary mt-3"
+                                    >
+                                      Copiar etapas
+                                    </button>
+                                  </form>
+                                )}
                             </div>
                           </CadastroModal>
                           {lixeiraIndisponivel ? (

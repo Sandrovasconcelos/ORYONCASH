@@ -410,6 +410,55 @@ export async function deleteEtapaAction(formData: FormData) {
   revalidatePath("/dashboard");
 }
 
+export async function copiarEtapasAction(formData: FormData) {
+  const obraOrigemId = String(formData.get("obra_origem_id") ?? "");
+  const obrasDestino = formData
+    .getAll("obra_destino_id")
+    .map(String)
+    .filter((id) => id && id !== obraOrigemId);
+  if (!obraOrigemId || obrasDestino.length === 0) return;
+
+  const supabase = await createClient();
+  const { data: etapasOrigem } = await supabase
+    .from("etapas")
+    .select("nome, ordem, valor_orcado")
+    .eq("obra_id", obraOrigemId)
+    .order("ordem");
+  if (!etapasOrigem || etapasOrigem.length === 0) return;
+
+  const autorNome = await getAutorNomeDashboard();
+
+  for (const obraDestinoId of obrasDestino) {
+    const { data: etapasExistentes } = await supabase
+      .from("etapas")
+      .select("ordem")
+      .eq("obra_id", obraDestinoId);
+    const maiorOrdemAtual = Math.max(0, ...(etapasExistentes ?? []).map((e) => e.ordem ?? 0));
+
+    const novasEtapas = etapasOrigem.map((etapa, indice) => ({
+      obra_id: obraDestinoId,
+      nome: etapa.nome,
+      ordem: maiorOrdemAtual + indice + 1,
+      valor_orcado: etapa.valor_orcado,
+    }));
+
+    await supabase.from("etapas").insert(novasEtapas);
+
+    await registrarAtividade({
+      tipo: "criacao",
+      entidade: "obra",
+      entidadeId: obraDestinoId,
+      origem: "dashboard",
+      autorNome,
+      resumo: `${novasEtapas.length} etapa(s) copiada(s) de outra obra por ${autorNome}`,
+      dadosDepois: { etapas: novasEtapas.map((e) => e.nome) },
+    });
+  }
+
+  revalidatePath("/dashboard/obras");
+  revalidatePath("/dashboard");
+}
+
 export async function createMaterialAction(formData: FormData) {
   const nome = String(formData.get("nome") ?? "").trim();
   const categoriaId = String(formData.get("categoria_id") ?? "") || null;
