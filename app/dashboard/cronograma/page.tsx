@@ -1,5 +1,6 @@
 import { createAdminClient } from "@/lib/supabase/admin";
 import { formatBRL } from "@/lib/conversation/format";
+import { hojeNoBrasil } from "@/lib/conversation/queries";
 import { calcularCurvaS } from "@/lib/dashboard/queries";
 import {
   apagarMedicaoPreparadaAction,
@@ -1147,6 +1148,7 @@ export default async function CronogramaPage({
         <div className="overflow-hidden rounded-card border border-brand-gray-300/60 bg-white p-5 shadow-card">
           <p className="mb-4 text-sm font-semibold text-brand-black">Linha do tempo</p>
           <GanttTimeline
+            hojeISO={hojeNoBrasil()}
             fases={fasesObra.map((f) => ({
               id: f.id,
               nome: f.nome,
