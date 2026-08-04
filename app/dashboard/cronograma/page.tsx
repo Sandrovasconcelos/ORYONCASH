@@ -130,7 +130,7 @@ export default async function CronogramaPage({
 
   const { data: obras } = await supabase
     .from("obras")
-    .select("id, nome, status")
+    .select("id, nome, status, orcamento_total")
     .is("deleted_at", null)
     .order("created_at", { ascending: false });
 
@@ -229,7 +229,7 @@ export default async function CronogramaPage({
     pagoPorFornecedor.set(d.fornecedor_id, (pagoPorFornecedor.get(d.fornecedor_id) ?? 0) + d.valor);
   }
 
-  const orcamentoTotalObra = etapas.reduce((soma, e) => soma + (e.valor_orcado ?? 0), 0);
+  const orcamentoTotalObra = Number(obraAtual?.orcamento_total ?? 0);
   const executadoFinanceiro = despesasObra.reduce((soma, d) => soma + d.valor, 0);
   const percentualFisico =
     orcamentoTotalObra > 0
