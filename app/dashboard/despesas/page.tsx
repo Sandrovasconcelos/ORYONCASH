@@ -12,6 +12,7 @@ import { CadastroModal } from "../cadastro-modal";
 import { ActionIcon } from "../action-icon";
 import { DeleteButton } from "./delete-button";
 import { OpenDespesaModalButton } from "./open-despesa-modal-button";
+import { SubmitButton } from "../submit-button";
 
 export const dynamic = "force-dynamic";
 
@@ -855,12 +856,9 @@ export default async function DespesasPage({
                               </div>
                           </div>
                           <input type="hidden" name="despesa_id" value={d.id} />
-                          <button
-                            type="submit"
-                            className="rounded-brand-sm bg-brand-red px-4 py-2 text-sm font-semibold text-white hover:bg-brand-red-700 sm:col-span-2"
-                          >
+                          <SubmitButton className="rounded-brand-sm bg-brand-red px-4 py-2 text-sm font-semibold text-white hover:bg-brand-red-700 sm:col-span-2">
                             Salvar edição
-                          </button>
+                          </SubmitButton>
                         </form>
                       </CadastroModal>
                       <DeleteButton despesaId={d.id} action={deleteDespesaAction} />
