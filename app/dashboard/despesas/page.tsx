@@ -23,6 +23,11 @@ function valorInputBR(valor: number) {
   });
 }
 
+function formatDataBR(data: string): string {
+  const [ano, mes, dia] = data.split("-");
+  return `${dia}/${mes}/${ano}`;
+}
+
 type ComprovanteQueryRow = {
   id: string;
   despesa_id: string | null;
@@ -363,6 +368,7 @@ export default async function DespesasPage({
         <table className="w-full min-w-[1120px] text-left text-sm">
           <thead className="bg-brand-gray-100 text-[11px] uppercase tracking-[0.12em] text-brand-gray-500">
             <tr>
+              <th className="px-5 py-3 font-extrabold">Data</th>
               <th className="px-5 py-3 font-extrabold">Lançamento</th>
               <th className="px-5 py-3 font-extrabold">Classificação</th>
               <th className="px-5 py-3 font-extrabold">Material / Fornecedor</th>
@@ -396,6 +402,9 @@ export default async function DespesasPage({
 
               return (
                 <tr key={d.id} className="align-top hover:bg-brand-gray-100/60">
+                  <td className="whitespace-nowrap px-5 py-4 font-semibold text-brand-black">
+                    {formatDataBR(d.data)}
+                  </td>
                   <td className="px-5 py-4">
                     <OpenDespesaModalButton despesaId={d.id}>
                       <div className="flex items-start gap-3">
@@ -870,7 +879,7 @@ export default async function DespesasPage({
 
             {despesas.length === 0 && (
               <tr>
-                <td colSpan={8} className="px-5 py-10 text-center text-sm text-brand-gray-500">
+                <td colSpan={9} className="px-5 py-10 text-center text-sm text-brand-gray-500">
                   Nenhum lançamento encontrado para os filtros atuais.
                 </td>
               </tr>
