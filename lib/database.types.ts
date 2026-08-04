@@ -806,6 +806,49 @@ export interface Database {
           },
         ];
       };
+      contratos_fornecedor: {
+        Row: {
+          id: string;
+          obra_id: string;
+          fornecedor_id: string;
+          descricao: string | null;
+          valor_contrato: number;
+          created_at: string;
+          deleted_at: string | null;
+          deleted_by: string | null;
+          deleted_reason: string | null;
+        };
+        Insert: {
+          id?: string;
+          obra_id: string;
+          fornecedor_id: string;
+          descricao?: string | null;
+          valor_contrato?: number;
+          created_at?: string;
+          deleted_at?: string | null;
+          deleted_by?: string | null;
+          deleted_reason?: string | null;
+        };
+        Update: Partial<
+          Database["public"]["Tables"]["contratos_fornecedor"]["Insert"]
+        >;
+        Relationships: [
+          {
+            foreignKeyName: "contratos_fornecedor_obra_id_fkey";
+            columns: ["obra_id"];
+            isOneToOne: false;
+            referencedRelation: "obras";
+            referencedColumns: ["id"];
+          },
+          {
+            foreignKeyName: "contratos_fornecedor_fornecedor_id_fkey";
+            columns: ["fornecedor_id"];
+            isOneToOne: false;
+            referencedRelation: "fornecedores";
+            referencedColumns: ["id"];
+          },
+        ];
+      };
     };
     Views: Record<string, never>;
     Functions: Record<string, never>;

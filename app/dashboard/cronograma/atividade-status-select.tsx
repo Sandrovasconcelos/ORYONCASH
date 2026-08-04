@@ -13,6 +13,7 @@ export function AtividadeStatusSelect({
     <form action={atualizarStatusAtividadeAction}>
       <input type="hidden" name="atividade_id" value={atividadeId} />
       <select
+        key={status}
         name="status"
         defaultValue={status}
         className="oc-input py-1.5 text-xs"

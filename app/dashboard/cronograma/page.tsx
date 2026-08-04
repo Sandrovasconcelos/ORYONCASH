@@ -7,15 +7,19 @@ import {
   aprovarMedicaoAction,
   atualizarProgressoEtapaAction,
   createAtividadeTemplateAction,
+  createContratoFornecedorAction,
   createCronogramaTemplateAction,
   createFaseTemplateAction,
   deleteAtividadeTemplateAction,
+  deleteContratoFornecedorAction,
   deleteCronogramaTemplateAction,
   deleteFaseTemplateAction,
   prepararMedicaoAction,
   registrarPagamentoMedicaoAction,
   removerCronogramaObraAction,
+  updateContratoFornecedorAction,
   updateCronogramaTemplateAction,
+  updateMedicaoAction,
 } from "../actions";
 import { CadastroModal } from "../cadastro-modal";
 import { DeleteCadastroButton } from "../delete-cadastro-button";
@@ -166,9 +170,16 @@ export default async function CronogramaPage({
 
   let medicoes: Medicao[] = [];
   let itensPorMedicao = new Map<string, MedicaoItem[]>();
-  let despesasObra: { valor: number; data: string }[] = [];
+  let despesasObra: { valor: number; data: string; fornecedor_id: string | null }[] = [];
+  let contratosObra: {
+    id: string;
+    obra_id: string;
+    fornecedor_id: string;
+    descricao: string | null;
+    valor_contrato: number;
+  }[] = [];
   if (obraAtual) {
-    const [{ data: medicoesData }, { data: despesasData }] = await Promise.all([
+    const [{ data: medicoesData }, { data: despesasData }, { data: contratosData }] = await Promise.all([
       supabase
         .from("medicoes")
         .select(
@@ -179,12 +190,19 @@ export default async function CronogramaPage({
         .order("created_at", { ascending: false }),
       supabase
         .from("despesas")
-        .select("valor, data")
+        .select("valor, data, fornecedor_id")
         .eq("obra_id", obraAtual.id)
         .is("deleted_at", null),
+      supabase
+        .from("contratos_fornecedor")
+        .select("id, obra_id, fornecedor_id, descricao, valor_contrato")
+        .eq("obra_id", obraAtual.id)
+        .is("deleted_at", null)
+        .order("created_at", { ascending: false }),
     ]);
     medicoes = (medicoesData ?? []) as Medicao[];
     despesasObra = despesasData ?? [];
+    contratosObra = contratosData ?? [];
 
     if (medicoes.length > 0) {
       const { data: itensData } = await supabase
@@ -204,6 +222,12 @@ export default async function CronogramaPage({
 
   const nomesEtapa = new Map(todasEtapas.map((e) => [e.id, e.nome]));
   const categoriasPorId = new Map(listaCategorias.map((c) => [c.id, c.nome]));
+
+  const pagoPorFornecedor = new Map<string, number>();
+  for (const d of despesasObra) {
+    if (!d.fornecedor_id) continue;
+    pagoPorFornecedor.set(d.fornecedor_id, (pagoPorFornecedor.get(d.fornecedor_id) ?? 0) + d.valor);
+  }
 
   const orcamentoTotalObra = etapas.reduce((soma, e) => soma + (e.valor_orcado ?? 0), 0);
   const executadoFinanceiro = despesasObra.reduce((soma, d) => soma + d.valor, 0);
@@ -559,6 +583,167 @@ export default async function CronogramaPage({
       </div>
 
       <div className="overflow-hidden rounded-card border border-brand-gray-300/60 bg-white shadow-card">
+        <div className="flex flex-col gap-3 border-b border-brand-gray-300/60 px-5 py-4 sm:flex-row sm:items-center sm:justify-between">
+          <div>
+            <p className="text-sm font-semibold text-brand-black">Contratos de fornecedores</p>
+            <p className="mt-1 text-xs text-brand-gray-500">
+              Valor contratado x já pago (soma de todas as despesas do fornecedor nesta obra).
+            </p>
+          </div>
+          <CadastroModal
+            titulo="Novo contrato de fornecedor"
+            descricao="Ex: Mão de obra — Alex, R$ 315.000,00."
+            botao="+ Novo contrato"
+            variante="primario"
+          >
+            <form action={createContratoFornecedorAction} className="flex flex-col gap-4">
+              <input type="hidden" name="obra_id" value={obraAtual.id} />
+              <label className="flex flex-col gap-1 text-sm text-brand-gray-700">
+                Fornecedor
+                <select name="fornecedor_id" required className="oc-input">
+                  <option value="">Selecione</option>
+                  {listaFornecedores.map((f) => (
+                    <option key={f.id} value={f.id}>
+                      {f.nome}
+                    </option>
+                  ))}
+                </select>
+              </label>
+              <label className="flex flex-col gap-1 text-sm text-brand-gray-700">
+                Descrição
+                <input name="descricao" placeholder="Ex: Mão de obra" className="oc-input" />
+              </label>
+              <label className="flex flex-col gap-1 text-sm text-brand-gray-700">
+                Valor do contrato
+                <input name="valor_contrato" placeholder="0,00" required className="oc-input" />
+              </label>
+              <button type="submit" className="oc-button oc-button-primary">
+                Salvar contrato
+              </button>
+            </form>
+          </CadastroModal>
+        </div>
+
+        <div className="overflow-x-auto">
+          <table className="oc-table min-w-[760px]">
+            <thead>
+              <tr>
+                <th>Fornecedor</th>
+                <th>Descrição</th>
+                <th className="text-right">Contrato</th>
+                <th className="text-right">Pago</th>
+                <th className="text-right">Saldo</th>
+                <th>%</th>
+                <th className="text-right">Ações</th>
+              </tr>
+            </thead>
+            <tbody>
+              {contratosObra.map((contrato) => {
+                const pago = pagoPorFornecedor.get(contrato.fornecedor_id) ?? 0;
+                const saldo = contrato.valor_contrato - pago;
+                const percentual =
+                  contrato.valor_contrato > 0
+                    ? Math.round((pago / contrato.valor_contrato) * 100)
+                    : 0;
+                const estourou = pago > contrato.valor_contrato;
+                return (
+                  <tr key={contrato.id}>
+                    <td className="font-semibold text-brand-black">
+                      {nomesFornecedor.get(contrato.fornecedor_id) ?? "—"}
+                    </td>
+                    <td className="text-brand-gray-700">{contrato.descricao || "—"}</td>
+                    <td className="text-right text-brand-gray-700">{formatBRL(contrato.valor_contrato)}</td>
+                    <td className="text-right text-brand-gray-700">{formatBRL(pago)}</td>
+                    <td className={`text-right ${estourou ? "font-bold text-status-danger" : "text-brand-gray-700"}`}>
+                      {formatBRL(saldo)}
+                    </td>
+                    <td>
+                      <div className="flex items-center gap-2">
+                        <div className="h-2 w-16 overflow-hidden rounded-full bg-brand-gray-100">
+                          <div
+                            className={`h-full rounded-full ${estourou ? "bg-status-danger" : "bg-[color:var(--status-success)]"}`}
+                            style={{ width: `${Math.min(100, percentual)}%` }}
+                          />
+                        </div>
+                        <span className="text-xs font-bold text-brand-gray-700">{percentual}%</span>
+                      </div>
+                    </td>
+                    <td>
+                      <div className="flex items-center justify-end gap-2">
+                        <CadastroModal
+                          titulo="Editar contrato"
+                          descricao="Atualize fornecedor, descrição e valor."
+                          botao="Editar"
+                          icone={<ActionIcon name="edit" />}
+                          variante="icone"
+                        >
+                          <form action={updateContratoFornecedorAction} className="flex flex-col gap-4">
+                            <input type="hidden" name="id" value={contrato.id} />
+                            <label className="flex flex-col gap-1 text-sm text-brand-gray-700">
+                              Fornecedor
+                              <select
+                                name="fornecedor_id"
+                                required
+                                defaultValue={contrato.fornecedor_id}
+                                className="oc-input"
+                              >
+                                {listaFornecedores.map((f) => (
+                                  <option key={f.id} value={f.id}>
+                                    {f.nome}
+                                  </option>
+                                ))}
+                              </select>
+                            </label>
+                            <label className="flex flex-col gap-1 text-sm text-brand-gray-700">
+                              Descrição
+                              <input
+                                name="descricao"
+                                defaultValue={contrato.descricao ?? ""}
+                                placeholder="Ex: Mão de obra"
+                                className="oc-input"
+                              />
+                            </label>
+                            <label className="flex flex-col gap-1 text-sm text-brand-gray-700">
+                              Valor do contrato
+                              <input
+                                name="valor_contrato"
+                                defaultValue={contrato.valor_contrato.toFixed(2).replace(".", ",")}
+                                required
+                                className="oc-input"
+                              />
+                            </label>
+                            <button type="submit" className="oc-button oc-button-primary">
+                              Salvar edição
+                            </button>
+                          </form>
+                        </CadastroModal>
+
+                        <DeleteCadastroButton
+                          id={contrato.id}
+                          nome={`Contrato de ${nomesFornecedor.get(contrato.fornecedor_id) ?? "fornecedor"}`}
+                          entidade="Contrato de fornecedor"
+                          usadoEm={0}
+                          action={deleteContratoFornecedorAction}
+                        />
+                      </div>
+                    </td>
+                  </tr>
+                );
+              })}
+
+              {contratosObra.length === 0 && (
+                <tr>
+                  <td colSpan={7} className="oc-empty">
+                    Nenhum contrato cadastrado pra esta obra ainda.
+                  </td>
+                </tr>
+              )}
+            </tbody>
+          </table>
+        </div>
+      </div>
+
+      <div className="overflow-hidden rounded-card border border-brand-gray-300/60 bg-white shadow-card">
         <div className="border-b border-brand-gray-300/60 px-5 py-4">
           <p className="text-sm font-semibold text-brand-black">Etapas de {obraAtual.nome}</p>
           <p className="mt-1 text-xs text-brand-gray-500">
@@ -779,6 +964,67 @@ export default async function CronogramaPage({
                     </td>
                     <td>
                       <div className="flex items-center justify-end gap-2">
+                        <CadastroModal
+                          titulo="Editar medição"
+                          descricao="Período, categoria e observação. Não recalcula os itens já gerados."
+                          botao="Editar"
+                          icone={<ActionIcon name="edit" />}
+                          variante="icone"
+                        >
+                          <form action={updateMedicaoAction} className="flex flex-col gap-4">
+                            <input type="hidden" name="id" value={medicao.id} />
+                            <label className="flex flex-col gap-1 text-sm text-brand-gray-700">
+                              Categoria
+                              <select
+                                name="categoria_id"
+                                required
+                                defaultValue={medicao.categoria_id}
+                                className="oc-input"
+                              >
+                                {listaCategorias.map((c) => (
+                                  <option key={c.id} value={c.id}>
+                                    {c.nome}
+                                  </option>
+                                ))}
+                              </select>
+                            </label>
+                            <div className="grid grid-cols-2 gap-3">
+                              <label className="flex flex-col gap-1 text-sm text-brand-gray-700">
+                                Período — início
+                                <input
+                                  type="date"
+                                  name="periodo_inicio"
+                                  required
+                                  defaultValue={medicao.periodo_inicio}
+                                  className="oc-input"
+                                />
+                              </label>
+                              <label className="flex flex-col gap-1 text-sm text-brand-gray-700">
+                                Período — fim
+                                <input
+                                  type="date"
+                                  name="periodo_fim"
+                                  required
+                                  defaultValue={medicao.periodo_fim}
+                                  className="oc-input"
+                                />
+                              </label>
+                            </div>
+                            <label className="flex flex-col gap-1 text-sm text-brand-gray-700">
+                              Observação
+                              <textarea
+                                name="observacao"
+                                rows={2}
+                                defaultValue={medicao.observacao ?? ""}
+                                className="oc-input"
+                              />
+                            </label>
+                            <button type="submit" className="oc-button oc-button-primary">
+                              Salvar edição
+                            </button>
+                          </form>
+                        </CadastroModal>
+
                         {medicao.status === "preparada" && (
                           <>
                             <form action={apagarMedicaoPreparadaAction}>

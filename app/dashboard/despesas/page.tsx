@@ -4,6 +4,7 @@ import { formatBRL } from "@/lib/conversation/format";
 import { formatDataHoraBrasil } from "@/lib/format-date";
 import {
   deleteDespesaAction,
+  excluirComprovanteDespesaAction,
   reclassificarComprovanteDespesaAction,
   updateDespesaAction,
 } from "../actions";
@@ -775,18 +776,29 @@ export default async function DespesasPage({
                                                   </p>
                                                 )}
                                               </div>
-                                              {comprovante.url && (
-                                                <Link
-                                                  href={comprovante.url}
-                                                  target="_blank"
-                                                  rel="noreferrer"
-                                                  className="inline-flex h-9 w-9 shrink-0 items-center justify-center rounded-brand-sm border border-brand-gray-300 bg-white text-brand-gray-700 hover:border-brand-red/40 hover:text-brand-red"
-                                                  aria-label={`Ver ${grupo.titulo.toLowerCase()}`}
-                                                  title={`Ver ${grupo.titulo.toLowerCase()}`}
+                                              <div className="flex shrink-0 items-center gap-2">
+                                                {comprovante.url && (
+                                                  <Link
+                                                    href={comprovante.url}
+                                                    target="_blank"
+                                                    rel="noreferrer"
+                                                    className="inline-flex h-9 w-9 shrink-0 items-center justify-center rounded-brand-sm border border-brand-gray-300 bg-white text-brand-gray-700 hover:border-brand-red/40 hover:text-brand-red"
+                                                    aria-label={`Ver ${grupo.titulo.toLowerCase()}`}
+                                                    title={`Ver ${grupo.titulo.toLowerCase()}`}
+                                                  >
+                                                    <ActionIcon name="file" />
+                                                  </Link>
+                                                )}
+                                                <button
+                                                  type="submit"
+                                                  formAction={excluirComprovanteDespesaAction.bind(null, comprovante.id)}
+                                                  className="inline-flex h-9 w-9 shrink-0 items-center justify-center rounded-brand-sm border border-status-danger/30 bg-white text-status-danger hover:bg-status-danger/10"
+                                                  aria-label={`Excluir ${grupo.titulo.toLowerCase()}`}
+                                                  title={`Excluir (pra substituir, anexe o correto abaixo depois)`}
                                                 >
-                                                  <ActionIcon name="file" />
-                                                </Link>
-                                              )}
+                                                  <ActionIcon name="trash" />
+                                                </button>
+                                              </div>
                                             </div>
                                           ))
                                         ) : (
@@ -806,9 +818,11 @@ export default async function DespesasPage({
                                               <button
                                                 key={comprovante.id}
                                                 type="submit"
-                                                formAction={reclassificarComprovanteDespesaAction}
-                                                name="reclassificar_comprovante"
-                                                value={`${comprovante.id}|${grupo.tipo}`}
+                                                formAction={reclassificarComprovanteDespesaAction.bind(
+                                                  null,
+                                                  comprovante.id,
+                                                  grupo.tipo
+                                                )}
                                                 className={`inline-flex items-center gap-2 rounded-brand-sm border ${grupo.borda} bg-white px-3 py-2 text-xs font-bold ${grupo.cor} hover:bg-brand-gray-100`}
                                               >
                                                 <ActionIcon name={grupo.icone} />

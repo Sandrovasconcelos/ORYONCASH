@@ -890,15 +890,14 @@ export async function updateDespesaAction(formData: FormData) {
   redirect("/dashboard/despesas");
 }
 
-export async function reclassificarComprovanteDespesaAction(formData: FormData) {
-  const [id, tipoDocumento] = String(formData.get("reclassificar_comprovante") ?? "").split("|");
+export async function reclassificarComprovanteDespesaAction(
+  comprovanteId: string,
+  tipoDocumento: string,
+  formData: FormData
+) {
   const despesaId = String(formData.get("despesa_id") ?? "");
 
-  if (
-    !id ||
-    !despesaId ||
-    !isTipoDocumentoComprovante(tipoDocumento)
-  ) {
+  if (!comprovanteId || !despesaId || !isTipoDocumentoComprovante(tipoDocumento)) {
     return;
   }
 
@@ -906,13 +905,13 @@ export async function reclassificarComprovanteDespesaAction(formData: FormData) 
   const { data: antes } = await supabase
     .from("despesa_comprovantes")
     .select("*")
-    .eq("id", id)
+    .eq("id", comprovanteId)
     .maybeSingle();
 
   await supabase
     .from("despesa_comprovantes")
     .update({ tipo_documento: tipoDocumento })
-    .eq("id", id);
+    .eq("id", comprovanteId);
 
   const autorNome = await getAutorNomeDashboard();
   const label =
@@ -931,6 +930,48 @@ export async function reclassificarComprovanteDespesaAction(formData: FormData) 
     resumo: `Comprovante reclassificado como ${label} por ${autorNome}`,
     dadosAntes: antes,
     dadosDepois: { tipo_documento: tipoDocumento },
+  });
+
+  revalidatePath("/dashboard/despesas");
+  revalidatePath("/dashboard/atividades");
+}
+
+export async function excluirComprovanteDespesaAction(
+  comprovanteId: string,
+  formData: FormData
+) {
+  const despesaId = String(formData.get("despesa_id") ?? "");
+  if (!comprovanteId) return;
+
+  const supabase = await createClient();
+  const { data: comprovante } = await supabase
+    .from("despesa_comprovantes")
+    .select("*")
+    .eq("id", comprovanteId)
+    .maybeSingle();
+  if (!comprovante) return;
+
+  if (comprovante.storage_bucket && comprovante.storage_path) {
+    await supabase.storage.from(comprovante.storage_bucket).remove([comprovante.storage_path]);
+  }
+  await supabase.from("despesa_comprovantes").delete().eq("id", comprovanteId);
+
+  const autorNome = await getAutorNomeDashboard();
+  const label =
+    comprovante.tipo_documento === "comprovante_pagamento"
+      ? "Comprovante de pagamento"
+      : comprovante.tipo_documento === "documento_cobranca"
+        ? "Conta/nota"
+        : "Documento";
+
+  await registrarAtividade({
+    tipo: "exclusao",
+    entidade: "despesa",
+    entidadeId: despesaId || comprovante.despesa_id,
+    origem: "dashboard",
+    autorNome,
+    resumo: `${label} removido do lançamento por ${autorNome} (pode ser reanexado)`,
+    dadosAntes: comprovante,
   });
 
   revalidatePath("/dashboard/despesas");
@@ -1606,6 +1647,45 @@ export async function prepararMedicaoAction(formData: FormData) {
   revalidatePath("/dashboard/cronograma");
 }
 
+export async function updateMedicaoAction(formData: FormData) {
+  const id = String(formData.get("id") ?? "");
+  const categoriaId = String(formData.get("categoria_id") ?? "");
+  const periodoInicio = String(formData.get("periodo_inicio") ?? "");
+  const periodoFim = String(formData.get("periodo_fim") ?? "");
+  const observacao = String(formData.get("observacao") ?? "").trim() || null;
+  if (!id || !categoriaId || !periodoInicio || !periodoFim) return;
+
+  const supabase = await createClient();
+  const { data: antes } = await supabase
+    .from("medicoes")
+    .select("*")
+    .eq("id", id)
+    .maybeSingle();
+  if (!antes) return;
+
+  const depois = {
+    categoria_id: categoriaId,
+    periodo_inicio: periodoInicio,
+    periodo_fim: periodoFim,
+    observacao,
+  };
+  await supabase.from("medicoes").update(depois).eq("id", id);
+
+  const autorNome = await getAutorNomeDashboard();
+  await registrarAtividade({
+    tipo: "edicao",
+    entidade: "obra",
+    entidadeId: antes.obra_id,
+    origem: "dashboard",
+    autorNome,
+    resumo: `Medição de ${formatBRL(Number(antes.valor_total))} editada por ${autorNome}`,
+    dadosAntes: antes,
+    dadosDepois: depois,
+  });
+
+  revalidatePath("/dashboard/cronograma");
+}
+
 export async function apagarMedicaoPreparadaAction(formData: FormData) {
   const medicaoId = String(formData.get("id") ?? "");
   if (!medicaoId) return;
@@ -2071,6 +2151,104 @@ export async function atualizarStatusAtividadeAction(formData: FormData) {
       concluida_em: status === "concluida" ? new Date().toISOString() : null,
     })
     .eq("id", atividadeId);
+
+  revalidatePath("/dashboard/cronograma");
+}
+
+// ---------- Contratos de fornecedor ----------
+
+export async function createContratoFornecedorAction(formData: FormData) {
+  const obraId = String(formData.get("obra_id") ?? "");
+  const fornecedorId = String(formData.get("fornecedor_id") ?? "");
+  const descricao = String(formData.get("descricao") ?? "").trim() || null;
+  const valorContrato = parseValorBR(String(formData.get("valor_contrato") ?? "0")) ?? 0;
+  if (!obraId || !fornecedorId) return;
+
+  const supabase = await createClient();
+  const { data: contrato } = await supabase
+    .from("contratos_fornecedor")
+    .insert({
+      obra_id: obraId,
+      fornecedor_id: fornecedorId,
+      descricao,
+      valor_contrato: valorContrato,
+    })
+    .select("id")
+    .single();
+
+  const autorNome = await getAutorNomeDashboard();
+  await registrarAtividade({
+    tipo: "criacao",
+    entidade: "obra",
+    entidadeId: obraId,
+    origem: "dashboard",
+    autorNome,
+    resumo: `Contrato de fornecedor cadastrado (${formatBRL(valorContrato)}) por ${autorNome}`,
+    dadosDepois: { id: contrato?.id, fornecedorId, descricao, valorContrato },
+  });
+
+  revalidatePath("/dashboard/cronograma");
+}
+
+export async function updateContratoFornecedorAction(formData: FormData) {
+  const id = String(formData.get("id") ?? "");
+  const fornecedorId = String(formData.get("fornecedor_id") ?? "");
+  const descricao = String(formData.get("descricao") ?? "").trim() || null;
+  const valorContrato = parseValorBR(String(formData.get("valor_contrato") ?? "0")) ?? 0;
+  if (!id || !fornecedorId) return;
+
+  const supabase = await createClient();
+  const { data: antes } = await supabase
+    .from("contratos_fornecedor")
+    .select("*")
+    .eq("id", id)
+    .maybeSingle();
+
+  const depois = { fornecedor_id: fornecedorId, descricao, valor_contrato: valorContrato };
+  await supabase.from("contratos_fornecedor").update(depois).eq("id", id);
+
+  const autorNome = await getAutorNomeDashboard();
+  await registrarAtividade({
+    tipo: "edicao",
+    entidade: "obra",
+    entidadeId: antes?.obra_id,
+    origem: "dashboard",
+    autorNome,
+    resumo: `Contrato de fornecedor editado (${formatBRL(valorContrato)}) por ${autorNome}`,
+    dadosAntes: antes,
+    dadosDepois: depois,
+  });
+
+  revalidatePath("/dashboard/cronograma");
+}
+
+export async function deleteContratoFornecedorAction(formData: FormData) {
+  const id = String(formData.get("id") ?? "");
+  if (!id) return;
+
+  const supabase = await createClient();
+  const { data: contrato } = await supabase
+    .from("contratos_fornecedor")
+    .select("*")
+    .eq("id", id)
+    .maybeSingle();
+  if (!contrato) return;
+
+  const autorNome = await getAutorNomeDashboard();
+  await supabase
+    .from("contratos_fornecedor")
+    .update({ deleted_at: new Date().toISOString(), deleted_by: autorNome })
+    .eq("id", id);
+
+  await registrarAtividade({
+    tipo: "exclusao",
+    entidade: "obra",
+    entidadeId: contrato.obra_id,
+    origem: "dashboard",
+    autorNome,
+    resumo: `Contrato de fornecedor (${formatBRL(Number(contrato.valor_contrato))}) apagado por ${autorNome}`,
+    dadosAntes: contrato,
+  });
 
   revalidatePath("/dashboard/cronograma");
 }
