@@ -1733,3 +1733,344 @@ export async function registrarPagamentoMedicaoAction(formData: FormData) {
   revalidatePath("/dashboard/despesas");
   revalidatePath("/dashboard");
 }
+
+// ---------- Cronograma detalhado (fases + atividades por mês) ----------
+
+function addMesesISO(dataISO: string, meses: number): string {
+  const [ano, mes, dia] = dataISO.split("-").map(Number);
+  const data = new Date(Date.UTC(ano, mes - 1 + meses, dia));
+  return data.toISOString().slice(0, 10);
+}
+
+function subtrairDiaISO(dataISO: string): string {
+  const [ano, mes, dia] = dataISO.split("-").map(Number);
+  const data = new Date(Date.UTC(ano, mes - 1, dia));
+  data.setUTCDate(data.getUTCDate() - 1);
+  return data.toISOString().slice(0, 10);
+}
+
+export async function createCronogramaTemplateAction(formData: FormData) {
+  const nome = String(formData.get("nome") ?? "").trim();
+  const descricao = String(formData.get("descricao") ?? "").trim() || null;
+  if (!nome) return;
+
+  const supabase = await createClient();
+  const { data: template } = await supabase
+    .from("cronograma_templates")
+    .insert({ nome, descricao })
+    .select("id")
+    .single();
+
+  const autorNome = await getAutorNomeDashboard();
+  await registrarAtividade({
+    tipo: "criacao",
+    entidade: "categoria",
+    entidadeId: template?.id,
+    origem: "dashboard",
+    autorNome,
+    resumo: `Modelo de cronograma "${nome}" cadastrado por ${autorNome}`,
+    dadosDepois: { nome, descricao },
+  });
+
+  revalidatePath("/dashboard/cronograma");
+}
+
+export async function updateCronogramaTemplateAction(formData: FormData) {
+  const id = String(formData.get("id") ?? "");
+  const nome = String(formData.get("nome") ?? "").trim();
+  const descricao = String(formData.get("descricao") ?? "").trim() || null;
+  if (!id || !nome) return;
+
+  const supabase = await createClient();
+  const { data: antes } = await supabase
+    .from("cronograma_templates")
+    .select("*")
+    .eq("id", id)
+    .maybeSingle();
+
+  const depois = { nome, descricao };
+  await supabase.from("cronograma_templates").update(depois).eq("id", id);
+
+  const autorNome = await getAutorNomeDashboard();
+  await registrarAtividade({
+    tipo: "edicao",
+    entidade: "categoria",
+    entidadeId: id,
+    origem: "dashboard",
+    autorNome,
+    resumo: `Modelo de cronograma "${nome}" editado por ${autorNome}`,
+    dadosAntes: antes,
+    dadosDepois: depois,
+  });
+
+  revalidatePath("/dashboard/cronograma");
+}
+
+export async function deleteCronogramaTemplateAction(formData: FormData) {
+  const id = String(formData.get("id") ?? "");
+  if (!id) return;
+
+  const supabase = await createClient();
+  const { data: template } = await supabase
+    .from("cronograma_templates")
+    .select("*")
+    .eq("id", id)
+    .maybeSingle();
+
+  const autorNome = await getAutorNomeDashboard();
+  await supabase
+    .from("cronograma_templates")
+    .update({ deleted_at: new Date().toISOString(), deleted_by: autorNome })
+    .eq("id", id);
+
+  await registrarAtividade({
+    tipo: "exclusao",
+    entidade: "categoria",
+    entidadeId: id,
+    origem: "dashboard",
+    autorNome,
+    resumo: `Modelo de cronograma "${template?.nome ?? id}" apagado por ${autorNome}`,
+    dadosAntes: template,
+  });
+
+  revalidatePath("/dashboard/cronograma");
+}
+
+export async function createFaseTemplateAction(formData: FormData) {
+  const templateId = String(formData.get("template_id") ?? "");
+  const nome = String(formData.get("nome") ?? "").trim();
+  const mesInicio = Number(formData.get("mes_inicio") ?? 0) || 1;
+  const duracaoMeses = Number(formData.get("duracao_meses") ?? 0) || 1;
+  const ordem = Number(formData.get("ordem") ?? 0) || 1;
+  if (!templateId || !nome) return;
+
+  const supabase = await createClient();
+  await supabase.from("cronograma_template_fases").insert({
+    template_id: templateId,
+    nome,
+    ordem,
+    mes_inicio: mesInicio,
+    duracao_meses: duracaoMeses,
+  });
+
+  const autorNome = await getAutorNomeDashboard();
+  await registrarAtividade({
+    tipo: "criacao",
+    entidade: "categoria",
+    entidadeId: templateId,
+    origem: "dashboard",
+    autorNome,
+    resumo: `Fase "${nome}" adicionada ao modelo de cronograma por ${autorNome}`,
+    dadosDepois: { nome, mesInicio, duracaoMeses, ordem },
+  });
+
+  revalidatePath("/dashboard/cronograma");
+}
+
+export async function deleteFaseTemplateAction(formData: FormData) {
+  const id = String(formData.get("id") ?? "");
+  const templateId = String(formData.get("template_id") ?? "");
+  if (!id) return;
+
+  const supabase = await createClient();
+  const { data: fase } = await supabase
+    .from("cronograma_template_fases")
+    .select("*")
+    .eq("id", id)
+    .maybeSingle();
+
+  await supabase.from("cronograma_template_fases").delete().eq("id", id);
+
+  const autorNome = await getAutorNomeDashboard();
+  await registrarAtividade({
+    tipo: "exclusao",
+    entidade: "categoria",
+    entidadeId: templateId || fase?.template_id,
+    origem: "dashboard",
+    autorNome,
+    resumo: `Fase "${fase?.nome ?? id}" apagada do modelo de cronograma por ${autorNome}`,
+    dadosAntes: fase,
+  });
+
+  revalidatePath("/dashboard/cronograma");
+}
+
+export async function createAtividadeTemplateAction(formData: FormData) {
+  const faseId = String(formData.get("fase_id") ?? "");
+  const templateId = String(formData.get("template_id") ?? "");
+  const descricao = String(formData.get("descricao") ?? "").trim();
+  const ordem = Number(formData.get("ordem") ?? 0) || 1;
+  if (!faseId || !descricao) return;
+
+  const supabase = await createClient();
+  await supabase.from("cronograma_template_atividades").insert({
+    fase_id: faseId,
+    descricao,
+    ordem,
+  });
+
+  const autorNome = await getAutorNomeDashboard();
+  await registrarAtividade({
+    tipo: "criacao",
+    entidade: "categoria",
+    entidadeId: templateId || faseId,
+    origem: "dashboard",
+    autorNome,
+    resumo: `Atividade "${descricao}" adicionada ao modelo de cronograma por ${autorNome}`,
+    dadosDepois: { descricao, ordem },
+  });
+
+  revalidatePath("/dashboard/cronograma");
+}
+
+export async function deleteAtividadeTemplateAction(formData: FormData) {
+  const id = String(formData.get("id") ?? "");
+  const templateId = String(formData.get("template_id") ?? "");
+  if (!id) return;
+
+  const supabase = await createClient();
+  const { data: atividade } = await supabase
+    .from("cronograma_template_atividades")
+    .select("*")
+    .eq("id", id)
+    .maybeSingle();
+
+  await supabase.from("cronograma_template_atividades").delete().eq("id", id);
+
+  const autorNome = await getAutorNomeDashboard();
+  await registrarAtividade({
+    tipo: "exclusao",
+    entidade: "categoria",
+    entidadeId: templateId,
+    origem: "dashboard",
+    autorNome,
+    resumo: `Atividade "${atividade?.descricao ?? id}" apagada do modelo de cronograma por ${autorNome}`,
+    dadosAntes: atividade,
+  });
+
+  revalidatePath("/dashboard/cronograma");
+}
+
+export async function aplicarCronogramaTemplateAction(formData: FormData) {
+  const obraId = String(formData.get("obra_id") ?? "");
+  const templateId = String(formData.get("template_id") ?? "");
+  if (!obraId || !templateId) return;
+
+  const supabase = await createClient();
+
+  const { count: fasesExistentes } = await supabase
+    .from("obra_cronograma_fases")
+    .select("id", { count: "exact", head: true })
+    .eq("obra_id", obraId);
+  if ((fasesExistentes ?? 0) > 0) return;
+
+  const [{ data: obra }, { data: fasesTemplate }] = await Promise.all([
+    supabase.from("obras").select("data_inicio").eq("id", obraId).maybeSingle(),
+    supabase
+      .from("cronograma_template_fases")
+      .select(
+        "id, nome, ordem, mes_inicio, duracao_meses, cronograma_template_atividades(id, descricao, ordem)"
+      )
+      .eq("template_id", templateId)
+      .order("ordem"),
+  ]);
+  if (!fasesTemplate || fasesTemplate.length === 0) return;
+
+  const dataInicioObra = obra?.data_inicio ?? hojeNoBrasil();
+  const autorNome = await getAutorNomeDashboard();
+
+  let totalAtividades = 0;
+  for (const fase of fasesTemplate) {
+    const dataInicioFase = addMesesISO(dataInicioObra, fase.mes_inicio - 1);
+    const dataFimExclusiva = addMesesISO(dataInicioFase, fase.duracao_meses);
+    const dataFimFase = subtrairDiaISO(dataFimExclusiva);
+
+    const { data: faseObra } = await supabase
+      .from("obra_cronograma_fases")
+      .insert({
+        obra_id: obraId,
+        nome: fase.nome,
+        ordem: fase.ordem,
+        data_inicio_prevista: dataInicioFase,
+        data_fim_prevista: dataFimFase,
+      })
+      .select("id")
+      .single();
+    if (!faseObra) continue;
+
+    const atividades = [...(fase.cronograma_template_atividades ?? [])].sort(
+      (a, b) => a.ordem - b.ordem
+    );
+    if (atividades.length > 0) {
+      await supabase.from("obra_cronograma_atividades").insert(
+        atividades.map((a) => ({
+          fase_id: faseObra.id,
+          descricao: a.descricao,
+          ordem: a.ordem,
+        }))
+      );
+      totalAtividades += atividades.length;
+    }
+  }
+
+  const { data: template } = await supabase
+    .from("cronograma_templates")
+    .select("nome")
+    .eq("id", templateId)
+    .maybeSingle();
+
+  await registrarAtividade({
+    tipo: "criacao",
+    entidade: "obra",
+    entidadeId: obraId,
+    origem: "dashboard",
+    autorNome,
+    resumo: `Cronograma aplicado a partir do modelo "${template?.nome ?? templateId}" (${fasesTemplate.length} fase(s), ${totalAtividades} atividade(s)) por ${autorNome}`,
+    dadosDepois: { templateId, fases: fasesTemplate.length, atividades: totalAtividades },
+  });
+
+  revalidatePath("/dashboard/cronograma");
+}
+
+export async function removerCronogramaObraAction(formData: FormData) {
+  const obraId = String(formData.get("obra_id") ?? "");
+  if (!obraId) return;
+
+  const supabase = await createClient();
+  const { count } = await supabase
+    .from("obra_cronograma_fases")
+    .select("id", { count: "exact", head: true })
+    .eq("obra_id", obraId);
+  if (!count) return;
+
+  await supabase.from("obra_cronograma_fases").delete().eq("obra_id", obraId);
+
+  const autorNome = await getAutorNomeDashboard();
+  await registrarAtividade({
+    tipo: "exclusao",
+    entidade: "obra",
+    entidadeId: obraId,
+    origem: "dashboard",
+    autorNome,
+    resumo: `Cronograma detalhado removido da obra por ${autorNome}`,
+  });
+
+  revalidatePath("/dashboard/cronograma");
+}
+
+export async function atualizarStatusAtividadeAction(formData: FormData) {
+  const atividadeId = String(formData.get("atividade_id") ?? "");
+  const status = String(formData.get("status") ?? "");
+  if (!atividadeId || !["a_fazer", "em_andamento", "concluida"].includes(status)) return;
+
+  const supabase = await createClient();
+  await supabase
+    .from("obra_cronograma_atividades")
+    .update({
+      status: status as "a_fazer" | "em_andamento" | "concluida",
+      concluida_em: status === "concluida" ? new Date().toISOString() : null,
+    })
+    .eq("id", atividadeId);
+
+  revalidatePath("/dashboard/cronograma");
+}

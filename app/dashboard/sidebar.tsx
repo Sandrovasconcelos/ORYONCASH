@@ -6,19 +6,39 @@ import { usePathname, useRouter } from "next/navigation";
 import { useEffect, useState, useTransition } from "react";
 import { signOutAction } from "./actions";
 
-const NAV_ITEMS = [
-  { href: "/dashboard", label: "Visão geral", icon: "dashboard" },
-  { href: "/dashboard/despesas", label: "Lançamentos", icon: "receipt" },
-  { href: "/dashboard/obras", label: "Obras", icon: "building" },
-  { href: "/dashboard/qualidade", label: "Qualidade", icon: "check" },
-  { href: "/dashboard/cronograma", label: "Cronograma", icon: "calendar" },
-  { href: "/dashboard/categorias", label: "Categorias", icon: "tag" },
-  { href: "/dashboard/materiais", label: "Materiais", icon: "box" },
-  { href: "/dashboard/fornecedores", label: "Fornecedores", icon: "truck" },
-  { href: "/dashboard/atividades", label: "Atividades", icon: "clock" },
-  { href: "/dashboard/lixeira", label: "Lixeira", icon: "trash" },
-  { href: "/dashboard/numeros", label: "Acessos WhatsApp", icon: "phone" },
+const NAV_GROUPS = [
+  {
+    titulo: null,
+    itens: [{ href: "/dashboard", label: "Visão geral", icon: "dashboard" }],
+  },
+  {
+    titulo: "Obra",
+    itens: [
+      { href: "/dashboard/obras", label: "Obras", icon: "building" },
+      { href: "/dashboard/qualidade", label: "Qualidade", icon: "check" },
+      { href: "/dashboard/cronograma", label: "Cronograma", icon: "calendar" },
+    ],
+  },
+  {
+    titulo: "Financeiro",
+    itens: [
+      { href: "/dashboard/despesas", label: "Lançamentos", icon: "receipt" },
+      { href: "/dashboard/categorias", label: "Categorias", icon: "tag" },
+      { href: "/dashboard/materiais", label: "Materiais", icon: "box" },
+      { href: "/dashboard/fornecedores", label: "Fornecedores", icon: "truck" },
+    ],
+  },
+  {
+    titulo: "Sistema",
+    itens: [
+      { href: "/dashboard/atividades", label: "Atividades", icon: "clock" },
+      { href: "/dashboard/lixeira", label: "Lixeira", icon: "trash" },
+      { href: "/dashboard/numeros", label: "Acessos WhatsApp", icon: "phone" },
+    ],
+  },
 ];
+
+const NAV_ITEMS = NAV_GROUPS.flatMap((grupo) => grupo.itens);
 
 function NavIcon({ name }: { name: string }) {
   const paths: Record<string, React.ReactNode> = {
@@ -159,52 +179,58 @@ function NavLinks({ onNavigate }: { onNavigate?: () => void }) {
   }, [pathname, router]);
 
   return (
-    <nav aria-label="Navegação principal" className="flex flex-1 flex-col gap-1 overflow-y-auto">
-      <p className="px-3 pb-2 pt-1 text-[9px] font-black uppercase tracking-[0.18em] text-[#666c76]">
-        Módulo WhatsApp
-      </p>
-      {NAV_ITEMS.map((item) => {
-        const ativo =
-          destinoPendente === item.href ||
-          (destinoPendente === null &&
-            (item.href === "/dashboard"
-              ? pathname === "/dashboard"
-              : pathname.startsWith(item.href)));
-        const carregando = destinoPendente === item.href && pathname !== item.href;
+    <nav aria-label="Navegação principal" className="flex flex-1 flex-col gap-4 overflow-y-auto">
+      {NAV_GROUPS.map((grupo) => (
+        <div key={grupo.titulo ?? "principal"} className="flex flex-col gap-1">
+          {grupo.titulo && (
+            <p className="px-3 pb-1 pt-1 text-[9px] font-black uppercase tracking-[0.18em] text-[#666c76]">
+              {grupo.titulo}
+            </p>
+          )}
+          {grupo.itens.map((item) => {
+            const ativo =
+              destinoPendente === item.href ||
+              (destinoPendente === null &&
+                (item.href === "/dashboard"
+                  ? pathname === "/dashboard"
+                  : pathname.startsWith(item.href)));
+            const carregando = destinoPendente === item.href && pathname !== item.href;
 
-        return (
-          <Link
-            key={item.href}
-            href={item.href}
-            prefetch
-            onClick={(event) => {
-              if (pathname === item.href) return;
-              event.preventDefault();
-              setNavegacao({ destino: item.href, origem: pathname });
-              onNavigate?.();
-              startTransition(() => {
-                router.push(item.href);
-              });
-            }}
-            aria-current={ativo ? "page" : undefined}
-            aria-busy={carregando || isPending || undefined}
-            className={
-              ativo
-                ? "flex min-h-11 items-center gap-3 rounded-brand-sm bg-[linear-gradient(90deg,rgba(225,27,34,.24),rgba(225,27,34,.07))] px-3 py-2 text-xs font-extrabold text-white shadow-[inset_3px_0_0_var(--brand-red)]"
-                : "flex min-h-11 items-center gap-3 rounded-brand-sm px-3 py-2 text-xs font-bold text-[#aab0b9] hover:bg-white/[.055] hover:text-white"
-            }
-          >
-            <NavIcon name={item.icon} />
-            <span className="flex-1">{item.label}</span>
-            {carregando && (
-              <span
-                aria-hidden="true"
-                className="h-3.5 w-3.5 animate-spin rounded-full border-2 border-white/30 border-t-white"
-              />
-            )}
-          </Link>
-        );
-      })}
+            return (
+              <Link
+                key={item.href}
+                href={item.href}
+                prefetch
+                onClick={(event) => {
+                  if (pathname === item.href) return;
+                  event.preventDefault();
+                  setNavegacao({ destino: item.href, origem: pathname });
+                  onNavigate?.();
+                  startTransition(() => {
+                    router.push(item.href);
+                  });
+                }}
+                aria-current={ativo ? "page" : undefined}
+                aria-busy={carregando || isPending || undefined}
+                className={
+                  ativo
+                    ? "flex min-h-11 items-center gap-3 rounded-brand-sm bg-[linear-gradient(90deg,rgba(225,27,34,.24),rgba(225,27,34,.07))] px-3 py-2 text-xs font-extrabold text-white shadow-[inset_3px_0_0_var(--brand-red)]"
+                    : "flex min-h-11 items-center gap-3 rounded-brand-sm px-3 py-2 text-xs font-bold text-[#aab0b9] hover:bg-white/[.055] hover:text-white"
+                }
+              >
+                <NavIcon name={item.icon} />
+                <span className="flex-1">{item.label}</span>
+                {carregando && (
+                  <span
+                    aria-hidden="true"
+                    className="h-3.5 w-3.5 animate-spin rounded-full border-2 border-white/30 border-t-white"
+                  />
+                )}
+              </Link>
+            );
+          })}
+        </div>
+      ))}
     </nav>
   );
 }
@@ -256,20 +282,11 @@ export function Sidebar() {
 
         <NavLinks onNavigate={() => setAberto(false)} />
 
-        <div className="hidden rounded-2xl border border-white/[.08] bg-white/[.035] p-4 md:block">
-          <div className="flex items-center gap-2">
-            <span className="h-2.5 w-2.5 rounded-full bg-[#4bd18a] shadow-[0_0_0_4px_rgba(75,209,138,.12)]" />
-            <p className="text-[10px] font-black uppercase tracking-[0.16em] text-[#aab0b9]">
-              Sessão protegida
-            </p>
-          </div>
-          <p className="mt-2 text-[11px] leading-5 text-[#737985]">
-            Dados sincronizados pelo módulo central do WhatsApp.
-          </p>
+        <div className="hidden border-t border-white/[.08] pt-3 md:block">
           <form action={signOutAction}>
             <button
               type="submit"
-              className="mt-3 flex min-h-10 w-full items-center gap-3 rounded-brand-sm px-3 py-2 text-left text-xs font-bold text-[#aab0b9] hover:bg-white/[.055] hover:text-white"
+              className="flex min-h-10 w-full items-center gap-3 rounded-brand-sm px-3 py-2 text-left text-xs font-bold text-[#aab0b9] hover:bg-white/[.055] hover:text-white"
             >
               <span aria-hidden="true">↪</span> Encerrar sessão
             </button>

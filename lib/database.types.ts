@@ -649,6 +649,163 @@ export interface Database {
           },
         ];
       };
+      cronograma_templates: {
+        Row: {
+          id: string;
+          nome: string;
+          descricao: string | null;
+          created_at: string;
+          deleted_at: string | null;
+          deleted_by: string | null;
+          deleted_reason: string | null;
+        };
+        Insert: {
+          id?: string;
+          nome: string;
+          descricao?: string | null;
+          created_at?: string;
+          deleted_at?: string | null;
+          deleted_by?: string | null;
+          deleted_reason?: string | null;
+        };
+        Update: Partial<
+          Database["public"]["Tables"]["cronograma_templates"]["Insert"]
+        >;
+        Relationships: [];
+      };
+      cronograma_template_fases: {
+        Row: {
+          id: string;
+          template_id: string;
+          nome: string;
+          ordem: number;
+          mes_inicio: number;
+          duracao_meses: number;
+          created_at: string;
+        };
+        Insert: {
+          id?: string;
+          template_id: string;
+          nome: string;
+          ordem?: number;
+          mes_inicio?: number;
+          duracao_meses?: number;
+          created_at?: string;
+        };
+        Update: Partial<
+          Database["public"]["Tables"]["cronograma_template_fases"]["Insert"]
+        >;
+        Relationships: [
+          {
+            foreignKeyName: "cronograma_template_fases_template_id_fkey";
+            columns: ["template_id"];
+            isOneToOne: false;
+            referencedRelation: "cronograma_templates";
+            referencedColumns: ["id"];
+          },
+        ];
+      };
+      cronograma_template_atividades: {
+        Row: {
+          id: string;
+          fase_id: string;
+          descricao: string;
+          ordem: number;
+          created_at: string;
+        };
+        Insert: {
+          id?: string;
+          fase_id: string;
+          descricao: string;
+          ordem?: number;
+          created_at?: string;
+        };
+        Update: Partial<
+          Database["public"]["Tables"]["cronograma_template_atividades"]["Insert"]
+        >;
+        Relationships: [
+          {
+            foreignKeyName: "cronograma_template_atividades_fase_id_fkey";
+            columns: ["fase_id"];
+            isOneToOne: false;
+            referencedRelation: "cronograma_template_fases";
+            referencedColumns: ["id"];
+          },
+        ];
+      };
+      obra_cronograma_fases: {
+        Row: {
+          id: string;
+          obra_id: string;
+          nome: string;
+          ordem: number;
+          data_inicio_prevista: string;
+          data_fim_prevista: string;
+          created_at: string;
+        };
+        Insert: {
+          id?: string;
+          obra_id: string;
+          nome: string;
+          ordem?: number;
+          data_inicio_prevista: string;
+          data_fim_prevista: string;
+          created_at?: string;
+        };
+        Update: Partial<
+          Database["public"]["Tables"]["obra_cronograma_fases"]["Insert"]
+        >;
+        Relationships: [
+          {
+            foreignKeyName: "obra_cronograma_fases_obra_id_fkey";
+            columns: ["obra_id"];
+            isOneToOne: false;
+            referencedRelation: "obras";
+            referencedColumns: ["id"];
+          },
+        ];
+      };
+      obra_cronograma_atividades: {
+        Row: {
+          id: string;
+          fase_id: string;
+          etapa_id: string | null;
+          descricao: string;
+          ordem: number;
+          status: "a_fazer" | "em_andamento" | "concluida";
+          concluida_em: string | null;
+          created_at: string;
+        };
+        Insert: {
+          id?: string;
+          fase_id: string;
+          etapa_id?: string | null;
+          descricao: string;
+          ordem?: number;
+          status?: "a_fazer" | "em_andamento" | "concluida";
+          concluida_em?: string | null;
+          created_at?: string;
+        };
+        Update: Partial<
+          Database["public"]["Tables"]["obra_cronograma_atividades"]["Insert"]
+        >;
+        Relationships: [
+          {
+            foreignKeyName: "obra_cronograma_atividades_fase_id_fkey";
+            columns: ["fase_id"];
+            isOneToOne: false;
+            referencedRelation: "obra_cronograma_fases";
+            referencedColumns: ["id"];
+          },
+          {
+            foreignKeyName: "obra_cronograma_atividades_etapa_id_fkey";
+            columns: ["etapa_id"];
+            isOneToOne: false;
+            referencedRelation: "etapas";
+            referencedColumns: ["id"];
+          },
+        ];
+      };
     };
     Views: Record<string, never>;
     Functions: Record<string, never>;
