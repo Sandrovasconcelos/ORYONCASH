@@ -183,6 +183,7 @@ export interface Database {
           etapa_id: string | null;
           material_id: string | null;
           fornecedor_id: string | null;
+          conta_bancaria_id: string | null;
           descricao: string | null;
           valor: number;
           data: string;
@@ -201,6 +202,7 @@ export interface Database {
           etapa_id?: string | null;
           material_id?: string | null;
           fornecedor_id?: string | null;
+          conta_bancaria_id?: string | null;
           descricao?: string | null;
           valor: number;
           data?: string;
@@ -249,7 +251,44 @@ export interface Database {
             referencedRelation: "fornecedores";
             referencedColumns: ["id"];
           },
+          {
+            foreignKeyName: "despesas_conta_bancaria_id_fkey";
+            columns: ["conta_bancaria_id"];
+            isOneToOne: false;
+            referencedRelation: "contas_bancarias";
+            referencedColumns: ["id"];
+          },
         ];
+      };
+      contas_bancarias: {
+        Row: {
+          id: string;
+          nome: string;
+          banco: string | null;
+          agencia: string | null;
+          numero: string | null;
+          saldo_inicial: number;
+          created_at: string;
+          deleted_at: string | null;
+          deleted_by: string | null;
+          deleted_reason: string | null;
+        };
+        Insert: {
+          id?: string;
+          nome: string;
+          banco?: string | null;
+          agencia?: string | null;
+          numero?: string | null;
+          saldo_inicial?: number;
+          created_at?: string;
+          deleted_at?: string | null;
+          deleted_by?: string | null;
+          deleted_reason?: string | null;
+        };
+        Update: Partial<
+          Database["public"]["Tables"]["contas_bancarias"]["Insert"]
+        >;
+        Relationships: [];
       };
       despesa_comprovantes: {
         Row: {

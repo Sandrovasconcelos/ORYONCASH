@@ -1,4 +1,5 @@
 import { createAdminClient } from "@/lib/supabase/admin";
+import { encontrarContaBancariaCorrespondente } from "@/lib/dashboard/queries";
 
 const COMPROVANTES_BUCKET = "comprovantes";
 
@@ -202,29 +203,72 @@ export async function vincularComprovanteDespesa(input: {
     .from("despesa_comprovantes")
     .insert(dadosComContaOrigem);
 
-  if (!error) return;
+  if (error) {
+    const mensagem = error.message.toLowerCase();
+    const erroDeColunaContaOrigem =
+      mensagem.includes("conta_origem") ||
+      mensagem.includes("metodo_pagamento") ||
+      mensagem.includes("numero_documento") ||
+      mensagem.includes("column");
 
-  const mensagem = error.message.toLowerCase();
-  const erroDeColunaContaOrigem =
-    mensagem.includes("conta_origem") ||
-    mensagem.includes("metodo_pagamento") ||
-    mensagem.includes("numero_documento") ||
-    mensagem.includes("column");
+    if (!erroDeColunaContaOrigem) throw error;
 
-  if (!erroDeColunaContaOrigem) throw error;
+    const { error: fallbackError } = await supabase.from("despesa_comprovantes").insert({
+      despesa_id: input.despesaId,
+      tipo_documento: input.comprovante.tipoDocumento ?? "documento_cobranca",
+      whatsapp_media_id: input.comprovante.mediaId ?? null,
+      storage_bucket: input.comprovante.bucket,
+      storage_path: input.comprovante.path,
+      mime_type: input.comprovante.mimeType,
+      nome_arquivo: input.comprovante.nomeArquivo ?? null,
+      origem: "whatsapp",
+    });
 
-  const { error: fallbackError } = await supabase.from("despesa_comprovantes").insert({
-    despesa_id: input.despesaId,
-    tipo_documento: input.comprovante.tipoDocumento ?? "documento_cobranca",
-    whatsapp_media_id: input.comprovante.mediaId ?? null,
-    storage_bucket: input.comprovante.bucket,
-    storage_path: input.comprovante.path,
-    mime_type: input.comprovante.mimeType,
-    nome_arquivo: input.comprovante.nomeArquivo ?? null,
-    origem: "whatsapp",
-  });
+    if (fallbackError) throw fallbackError;
+  }
 
-  if (fallbackError) throw fallbackError;
+  if (input.comprovante.tipoDocumento === "comprovante_pagamento") {
+    await tentarVincularContaBancaria(
+      input.despesaId,
+      input.comprovante.contaOrigemBanco ?? null,
+      input.comprovante.contaOrigemNumero ?? null
+    );
+  }
+}
+
+/**
+ * So vincula quando ha exatamente uma conta cadastrada batendo com o que a
+ * IA extraiu do comprovante. E so uma conveniencia - nunca deve quebrar o
+ * lancamento da despesa, entao qualquer erro (inclusive a tabela ainda nao
+ * existir) e silenciosamente ignorado.
+ */
+async function tentarVincularContaBancaria(
+  despesaId: string,
+  banco: string | null,
+  numero: string | null
+) {
+  if (!banco && !numero) return;
+
+  try {
+    const supabase = createAdminClient();
+    const { data: contas, error } = await supabase
+      .from("contas_bancarias")
+      .select("id, banco, numero")
+      .is("deleted_at", null);
+    if (error || !contas || contas.length === 0) return;
+
+    const contaId = encontrarContaBancariaCorrespondente({ banco, numero }, contas);
+    if (!contaId) return;
+
+    await supabase
+      .from("despesas")
+      .update({ conta_bancaria_id: contaId })
+      .eq("id", despesaId)
+      .is("conta_bancaria_id", null);
+  } catch {
+    // vinculo automatico de conta bancaria e opcional - falha aqui nao pode
+    // impedir o lancamento da despesa.
+  }
 }
 
 export async function findObraById(id: string) {

@@ -76,6 +76,7 @@ export default async function DespesasPage({
     { data: materiais },
     { data: fornecedores },
     { data: etapas },
+    { data: contasBancarias },
     despesasQuery,
   ] = await Promise.all([
     supabase.from("obras").select("id, nome").is("deleted_at", null).order("nome"),
@@ -83,11 +84,17 @@ export default async function DespesasPage({
     supabase.from("materiais").select("id, nome").is("deleted_at", null).order("nome"),
     supabase.from("fornecedores").select("id, nome").is("deleted_at", null).order("nome"),
     supabase.from("etapas").select("id, nome, obra_id").order("ordem"),
+    supabase
+      .from("contas_bancarias")
+      .select("id, nome")
+      .is("deleted_at", null)
+      .order("nome")
+      .then((res) => (res.error ? { data: [] } : res)),
     (async () => {
       let queryCompleta = supabase
         .from("despesas")
         .select(
-          "id, obra_id, categoria_id, etapa_id, material_id, fornecedor_id, valor, descricao, data, origem, created_at, criado_por_nome, criado_por_telefone, obras(nome), categorias(nome), etapas(nome), materiais(nome), fornecedores(nome, cnpj, cpf, chave_pix, conta_banco, conta_agencia, conta_numero)"
+          "id, obra_id, categoria_id, etapa_id, material_id, fornecedor_id, conta_bancaria_id, valor, descricao, data, origem, created_at, criado_por_nome, criado_por_telefone, obras(nome), categorias(nome), etapas(nome), materiais(nome), fornecedores(nome, cnpj, cpf, chave_pix, conta_banco, conta_agencia, conta_numero), contas_bancarias(nome)"
         )
         .is("deleted_at", null)
         .order("data", { ascending: false })
@@ -102,8 +109,29 @@ export default async function DespesasPage({
       const resultadoCompleto = await queryCompleta;
       if (!resultadoCompleto.error) return resultadoCompleto;
 
-      // Colunas novas do fornecedor (cpf/chave_pix/conta_*) podem nao existir
-      // ainda (migration pendente) - refaz so com os campos ja garantidos.
+      // Ou as colunas novas do fornecedor (cpf/chave_pix/conta_*) ou a
+      // migration de contas bancarias podem nao existir ainda - tenta sem
+      // conta bancaria primeiro (preserva os dados do fornecedor).
+      let querySemContaBancaria = supabase
+        .from("despesas")
+        .select(
+          "id, obra_id, categoria_id, etapa_id, material_id, fornecedor_id, valor, descricao, data, origem, created_at, criado_por_nome, criado_por_telefone, obras(nome), categorias(nome), etapas(nome), materiais(nome), fornecedores(nome, cnpj, cpf, chave_pix, conta_banco, conta_agencia, conta_numero)"
+        )
+        .is("deleted_at", null)
+        .order("data", { ascending: false })
+        .order("created_at", { ascending: false })
+        .limit(200);
+      if (params.obra) querySemContaBancaria = querySemContaBancaria.eq("obra_id", params.obra);
+      if (params.categoria) querySemContaBancaria = querySemContaBancaria.eq("categoria_id", params.categoria);
+      if (params.etapa) querySemContaBancaria = querySemContaBancaria.eq("etapa_id", params.etapa);
+      if (params.material) querySemContaBancaria = querySemContaBancaria.eq("material_id", params.material);
+      if (params.fornecedor) querySemContaBancaria = querySemContaBancaria.eq("fornecedor_id", params.fornecedor);
+
+      const resultadoSemContaBancaria = await querySemContaBancaria;
+      if (!resultadoSemContaBancaria.error) return resultadoSemContaBancaria;
+
+      // Colunas novas do fornecedor (cpf/chave_pix/conta_*) tambem podem nao
+      // existir ainda - refaz so com os campos ja garantidos.
       let queryReduzida = supabase
         .from("despesas")
         .select(
@@ -374,6 +402,7 @@ export default async function DespesasPage({
               <th className="px-5 py-3 font-extrabold">Material / Fornecedor</th>
               <th className="px-5 py-3 text-right font-extrabold">Valor</th>
               <th className="px-5 py-3 font-extrabold">Comprovante</th>
+              <th className="px-5 py-3 font-extrabold">Conta</th>
               <th className="px-5 py-3 font-extrabold">Origem</th>
               <th className="px-5 py-3 font-extrabold">Registrado</th>
               <th className="px-5 py-3 text-right font-extrabold">Ações</th>
@@ -389,6 +418,10 @@ export default async function DespesasPage({
                 (d.materiais as unknown as { nome: string } | null)?.nome ?? "-";
               const fornecedorDados = d.fornecedores as unknown as FornecedorDados;
               const fornecedorNome = fornecedorDados?.nome ?? "-";
+              const contaBancariaInfo = d as unknown as {
+                conta_bancaria_id: string | null;
+                contas_bancarias: { nome: string } | null;
+              };
               const comprovantesDaDespesa = comprovantesPorDespesa.get(d.id) ?? [];
               const documentosCobranca = comprovantesDaDespesa.filter(
                 (item) => item.tipo_documento === "documento_cobranca"
@@ -485,6 +518,17 @@ export default async function DespesasPage({
                         </span>
                       )}
                     </div>
+                  </td>
+                  <td className="px-5 py-4">
+                    {contaBancariaInfo.contas_bancarias?.nome ? (
+                      <span className="inline-flex w-fit rounded-full bg-status-info/10 px-3 py-1 text-xs font-bold text-status-info">
+                        {contaBancariaInfo.contas_bancarias.nome}
+                      </span>
+                    ) : (
+                      <span className="inline-flex w-fit rounded-full bg-brand-gray-100 px-3 py-1 text-xs font-bold text-brand-gray-500">
+                        Sem conta
+                      </span>
+                    )}
                   </td>
                   <td className="px-5 py-4">
                     <div className="flex flex-col gap-1">
@@ -657,6 +701,21 @@ export default async function DespesasPage({
                               {(fornecedores ?? []).map((fornecedor) => (
                                 <option key={fornecedor.id} value={fornecedor.id}>
                                   {fornecedor.nome}
+                                </option>
+                              ))}
+                            </select>
+                          </label>
+                          <label className="flex flex-col gap-1 text-sm text-brand-gray-700">
+                            Conta bancária
+                            <select
+                              name="conta_bancaria_id"
+                              defaultValue={contaBancariaInfo.conta_bancaria_id ?? ""}
+                              className="rounded-brand-sm border border-brand-gray-300 bg-white px-3 py-2 text-sm outline-none focus:border-brand-red"
+                            >
+                              <option value="">Sem conta</option>
+                              {(contasBancarias ?? []).map((conta) => (
+                                <option key={conta.id} value={conta.id}>
+                                  {conta.nome}
                                 </option>
                               ))}
                             </select>
@@ -879,7 +938,7 @@ export default async function DespesasPage({
 
             {despesas.length === 0 && (
               <tr>
-                <td colSpan={9} className="px-5 py-10 text-center text-sm text-brand-gray-500">
+                <td colSpan={10} className="px-5 py-10 text-center text-sm text-brand-gray-500">
                   Nenhum lançamento encontrado para os filtros atuais.
                 </td>
               </tr>

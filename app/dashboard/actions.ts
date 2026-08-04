@@ -845,6 +845,7 @@ export async function updateDespesaAction(formData: FormData) {
   const etapaId = String(formData.get("etapa_id") ?? "") || null;
   const materialId = String(formData.get("material_id") ?? "") || null;
   const fornecedorId = String(formData.get("fornecedor_id") ?? "") || null;
+  const contaBancariaId = String(formData.get("conta_bancaria_id") ?? "") || null;
 
   const supabase = await createClient();
   const { data: antes } = await supabase
@@ -859,12 +860,18 @@ export async function updateDespesaAction(formData: FormData) {
     etapa_id: etapaId,
     material_id: materialId,
     fornecedor_id: fornecedorId,
+    conta_bancaria_id: contaBancariaId,
     valor,
     data: String(formData.get("data") ?? ""),
     descricao: String(formData.get("descricao") ?? "").trim() || null,
   };
 
-  await supabase.from("despesas").update(depois).eq("id", id);
+  const { error: updateError } = await supabase.from("despesas").update(depois).eq("id", id);
+  if (updateError?.message.toLowerCase().includes("conta_bancaria_id")) {
+    const { conta_bancaria_id: _contaBancariaIdIgnorado, ...depoisSemContaBancaria } = depois;
+    void _contaBancariaIdIgnorado;
+    await supabase.from("despesas").update(depoisSemContaBancaria).eq("id", id);
+  }
 
   const autorNome = await getAutorNomeDashboard();
   await anexarArquivosSelecionadosNoFormulario({
@@ -2251,4 +2258,102 @@ export async function deleteContratoFornecedorAction(formData: FormData) {
   });
 
   revalidatePath("/dashboard/cronograma");
+}
+
+// ---------- Contas bancárias ----------
+
+export async function createContaBancariaAction(formData: FormData) {
+  const nome = String(formData.get("nome") ?? "").trim();
+  const banco = String(formData.get("banco") ?? "").trim() || null;
+  const agencia = String(formData.get("agencia") ?? "").trim() || null;
+  const numero = String(formData.get("numero") ?? "").trim() || null;
+  const saldoInicial = parseValorBR(String(formData.get("saldo_inicial") ?? "0")) ?? 0;
+  if (!nome) return;
+
+  const supabase = await createClient();
+  const { data: conta } = await supabase
+    .from("contas_bancarias")
+    .insert({ nome, banco, agencia, numero, saldo_inicial: saldoInicial })
+    .select("id")
+    .single();
+
+  const autorNome = await getAutorNomeDashboard();
+  await registrarAtividade({
+    tipo: "criacao",
+    entidade: "categoria",
+    entidadeId: conta?.id,
+    origem: "dashboard",
+    autorNome,
+    resumo: `Conta bancária "${nome}" cadastrada por ${autorNome}`,
+    dadosDepois: { nome, banco, agencia, numero, saldoInicial },
+  });
+
+  revalidatePath("/dashboard/contas");
+}
+
+export async function updateContaBancariaAction(formData: FormData) {
+  const id = String(formData.get("id") ?? "");
+  const nome = String(formData.get("nome") ?? "").trim();
+  const banco = String(formData.get("banco") ?? "").trim() || null;
+  const agencia = String(formData.get("agencia") ?? "").trim() || null;
+  const numero = String(formData.get("numero") ?? "").trim() || null;
+  const saldoInicial = parseValorBR(String(formData.get("saldo_inicial") ?? "0")) ?? 0;
+  if (!id || !nome) return;
+
+  const supabase = await createClient();
+  const { data: antes } = await supabase
+    .from("contas_bancarias")
+    .select("*")
+    .eq("id", id)
+    .maybeSingle();
+
+  const depois = { nome, banco, agencia, numero, saldo_inicial: saldoInicial };
+  await supabase.from("contas_bancarias").update(depois).eq("id", id);
+
+  const autorNome = await getAutorNomeDashboard();
+  await registrarAtividade({
+    tipo: "edicao",
+    entidade: "categoria",
+    entidadeId: id,
+    origem: "dashboard",
+    autorNome,
+    resumo: `Conta bancária "${nome}" editada por ${autorNome}`,
+    dadosAntes: antes,
+    dadosDepois: depois,
+  });
+
+  revalidatePath("/dashboard/contas");
+  revalidatePath("/dashboard/despesas");
+}
+
+export async function deleteContaBancariaAction(formData: FormData) {
+  const id = String(formData.get("id") ?? "");
+  if (!id) return;
+
+  const supabase = await createClient();
+  const { data: conta } = await supabase
+    .from("contas_bancarias")
+    .select("*")
+    .eq("id", id)
+    .maybeSingle();
+  if (!conta) return;
+
+  const autorNome = await getAutorNomeDashboard();
+  await supabase
+    .from("contas_bancarias")
+    .update({ deleted_at: new Date().toISOString(), deleted_by: autorNome })
+    .eq("id", id);
+
+  await registrarAtividade({
+    tipo: "exclusao",
+    entidade: "categoria",
+    entidadeId: id,
+    origem: "dashboard",
+    autorNome,
+    resumo: `Conta bancária "${conta.nome}" apagada por ${autorNome}`,
+    dadosAntes: conta,
+  });
+
+  revalidatePath("/dashboard/contas");
+  revalidatePath("/dashboard/despesas");
 }

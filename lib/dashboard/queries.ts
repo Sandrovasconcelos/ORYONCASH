@@ -483,3 +483,61 @@ export function calcularCurvaS(
 
   return pontos;
 }
+
+// ---------- Contas bancárias ----------
+
+export type ContaOrigemExtraida = {
+  banco: string | null;
+  numero: string | null;
+};
+
+export type ContaBancariaCadastrada = {
+  id: string;
+  banco: string | null;
+  numero: string | null;
+};
+
+function normalizarTextoConta(texto: string): string {
+  return texto
+    .normalize("NFD")
+    .replace(/[̀-ͯ]/g, "")
+    .toLowerCase()
+    .replace(/[^a-z0-9]/g, "");
+}
+
+function normalizarNumeroConta(numero: string): string {
+  return numero.replace(/\D/g, "");
+}
+
+/**
+ * So vincula automaticamente quando ha exatamente uma conta cadastrada que
+ * bate com o que foi extraido do comprovante (numero da conta, ou banco
+ * como fallback mais fraco). Ambiguo ou sem nenhuma batida => null, fica
+ * pendente de atribuicao manual no dashboard (nunca adivinha).
+ */
+export function encontrarContaBancariaCorrespondente(
+  origem: ContaOrigemExtraida,
+  contas: ContaBancariaCadastrada[]
+): string | null {
+  const bancoExtraido = origem.banco ? normalizarTextoConta(origem.banco) : null;
+  const numeroExtraido = origem.numero ? normalizarNumeroConta(origem.numero) : null;
+  if (!bancoExtraido && !numeroExtraido) return null;
+
+  const candidatos = contas.filter((conta) => {
+    const numeroConta = conta.numero ? normalizarNumeroConta(conta.numero) : null;
+    const bancoConta = conta.banco ? normalizarTextoConta(conta.banco) : null;
+
+    const numeroBate = Boolean(
+      numeroExtraido && numeroConta && numeroExtraido === numeroConta
+    );
+    const bancoBate = Boolean(
+      bancoExtraido &&
+        bancoConta &&
+        (bancoConta.includes(bancoExtraido) || bancoExtraido.includes(bancoConta))
+    );
+
+    return numeroBate || bancoBate;
+  });
+
+  return candidatos.length === 1 ? candidatos[0].id : null;
+}

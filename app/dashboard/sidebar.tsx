@@ -26,6 +26,7 @@ const NAV_GROUPS = [
       { href: "/dashboard/categorias", label: "Categorias", icon: "tag" },
       { href: "/dashboard/materiais", label: "Materiais", icon: "box" },
       { href: "/dashboard/fornecedores", label: "Fornecedores", icon: "truck" },
+      { href: "/dashboard/contas", label: "Contas bancárias", icon: "wallet" },
     ],
   },
   {
@@ -105,6 +106,12 @@ function NavIcon({ name }: { name: string }) {
         <path d="M10 11v6M14 11v6" />
         <path d="M6 7l1 14h10l1-14" />
         <path d="M9 7V4h6v3" />
+      </>
+    ),
+    wallet: (
+      <>
+        <path d="M3 7a2 2 0 0 1 2-2h12a2 2 0 0 1 2 2v10a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2Z" />
+        <path d="M16 12h3M3 10h18" />
       </>
     ),
     phone: (
