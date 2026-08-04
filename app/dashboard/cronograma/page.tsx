@@ -1,5 +1,6 @@
 import { createAdminClient } from "@/lib/supabase/admin";
 import { formatBRL } from "@/lib/conversation/format";
+import { calcularCurvaS } from "@/lib/dashboard/queries";
 import {
   apagarMedicaoPreparadaAction,
   aplicarCronogramaTemplateAction,
@@ -23,6 +24,7 @@ import { ObraSelector } from "../obra-selector";
 import { CronogramaTabs } from "./cronograma-tabs";
 import { GanttTimeline } from "./gantt-timeline";
 import { StatusAtividadesChart } from "../charts/status-atividades-chart";
+import { CurvaSChart } from "../charts/curva-s-chart";
 
 export const dynamic = "force-dynamic";
 
@@ -30,6 +32,7 @@ type EtapaCronograma = {
   id: string;
   nome: string;
   obra_id: string;
+  valor_orcado: number;
   fornecedor_id: string | null;
   situacao_qualidade: string;
   data_inicio_prevista: string | null;
@@ -102,6 +105,17 @@ const PESO_STATUS_ATIVIDADE: Record<string, number> = {
   a_fazer: 0,
 };
 
+function KpiTile({ label, valor, destaque }: { label: string; valor: string; destaque?: boolean }) {
+  return (
+    <div className="rounded-brand-sm border border-brand-gray-300/60 bg-white p-4">
+      <p className="text-[10px] font-bold uppercase tracking-[0.08em] text-brand-gray-500">{label}</p>
+      <p className={`mt-1 text-xl font-extrabold ${destaque ? "text-brand-red" : "text-brand-black"}`}>
+        {valor}
+      </p>
+    </div>
+  );
+}
+
 export default async function CronogramaPage({
   searchParams,
 }: {
@@ -125,7 +139,7 @@ export default async function CronogramaPage({
     supabase
       .from("etapas")
       .select(
-        "id, nome, obra_id, fornecedor_id, situacao_qualidade, data_inicio_prevista, data_fim_prevista, percentual_executado"
+        "id, nome, obra_id, valor_orcado, fornecedor_id, situacao_qualidade, data_inicio_prevista, data_fim_prevista, percentual_executado"
       )
       .order("ordem"),
   ]);
@@ -152,16 +166,25 @@ export default async function CronogramaPage({
 
   let medicoes: Medicao[] = [];
   let itensPorMedicao = new Map<string, MedicaoItem[]>();
+  let despesasObra: { valor: number; data: string }[] = [];
   if (obraAtual) {
-    const { data: medicoesData } = await supabase
-      .from("medicoes")
-      .select(
-        "id, obra_id, categoria_id, periodo_inicio, periodo_fim, status, valor_total, observacao, aprovado_por, aprovado_em, pago_em"
-      )
-      .eq("obra_id", obraAtual.id)
-      .is("deleted_at", null)
-      .order("created_at", { ascending: false });
+    const [{ data: medicoesData }, { data: despesasData }] = await Promise.all([
+      supabase
+        .from("medicoes")
+        .select(
+          "id, obra_id, categoria_id, periodo_inicio, periodo_fim, status, valor_total, observacao, aprovado_por, aprovado_em, pago_em"
+        )
+        .eq("obra_id", obraAtual.id)
+        .is("deleted_at", null)
+        .order("created_at", { ascending: false }),
+      supabase
+        .from("despesas")
+        .select("valor, data")
+        .eq("obra_id", obraAtual.id)
+        .is("deleted_at", null),
+    ]);
     medicoes = (medicoesData ?? []) as Medicao[];
+    despesasObra = despesasData ?? [];
 
     if (medicoes.length > 0) {
       const { data: itensData } = await supabase
@@ -181,6 +204,27 @@ export default async function CronogramaPage({
 
   const nomesEtapa = new Map(todasEtapas.map((e) => [e.id, e.nome]));
   const categoriasPorId = new Map(listaCategorias.map((c) => [c.id, c.nome]));
+
+  const orcamentoTotalObra = etapas.reduce((soma, e) => soma + (e.valor_orcado ?? 0), 0);
+  const executadoFinanceiro = despesasObra.reduce((soma, d) => soma + d.valor, 0);
+  const percentualFisico =
+    orcamentoTotalObra > 0
+      ? Math.round(
+          (etapas.reduce((soma, e) => soma + (e.valor_orcado ?? 0) * (e.percentual_executado / 100), 0) /
+            orcamentoTotalObra) *
+            100
+        )
+      : 0;
+  const medicoesEmAberto = medicoes.filter((m) => m.status !== "paga").length;
+
+  const curvaSPontos = calcularCurvaS(
+    etapas.map((e) => ({
+      valorOrcado: e.valor_orcado ?? 0,
+      dataInicioPrevista: e.data_inicio_prevista,
+      dataFimPrevista: e.data_fim_prevista,
+    })),
+    despesasObra
+  );
 
   const templatesQuery = await supabase
     .from("cronograma_templates")
@@ -239,7 +283,7 @@ export default async function CronogramaPage({
     em_andamento: todasAtividadesObra.filter((a) => a.status === "em_andamento").length,
     concluida: todasAtividadesObra.filter((a) => a.status === "concluida").length,
   };
-  const percentualGeral =
+  const percentualGeralDetalhado =
     todasAtividadesObra.length === 0
       ? 0
       : Math.round(
@@ -247,274 +291,6 @@ export default async function CronogramaPage({
             todasAtividadesObra.length) *
             100
         );
-
-  const cronogramaPanel = !obraAtual ? (
-    <div className="rounded-card border border-brand-gray-300/60 bg-white p-10 text-center text-sm text-brand-gray-500 shadow-card">
-      Cadastre uma obra primeiro.
-    </div>
-  ) : (
-    <div className="flex flex-col gap-6">
-      <ObraSelector obras={listaObras} obraAtualId={obraAtual.id} basePath="/dashboard/cronograma" />
-
-      <div className="overflow-hidden rounded-card border border-brand-gray-300/60 bg-white shadow-card">
-        <div className="border-b border-brand-gray-300/60 px-5 py-4">
-          <p className="text-sm font-semibold text-brand-black">Etapas de {obraAtual.nome}</p>
-          <p className="mt-1 text-xs text-brand-gray-500">
-            Só entram em medição etapas com qualidade aprovada e % executado acima do já medido.
-          </p>
-        </div>
-
-        <div className="overflow-x-auto">
-          <table className="oc-table min-w-[860px]">
-            <thead>
-              <tr>
-                <th>Etapa</th>
-                <th>Início previsto</th>
-                <th>Fim previsto</th>
-                <th>% executado</th>
-                <th>Qualidade</th>
-                <th>Fornecedor</th>
-                <th className="text-right">Ações</th>
-              </tr>
-            </thead>
-            <tbody>
-              {etapas.map((etapa) => {
-                const situacao = SITUACAO_LABEL[etapa.situacao_qualidade] ?? SITUACAO_LABEL.nao_inspecionado;
-                return (
-                  <tr key={etapa.id}>
-                    <td className="font-semibold text-brand-black">{etapa.nome}</td>
-                    <td className="text-brand-gray-700">{formatDataBR(etapa.data_inicio_prevista)}</td>
-                    <td className="text-brand-gray-700">{formatDataBR(etapa.data_fim_prevista)}</td>
-                    <td className="text-brand-gray-700">{Number(etapa.percentual_executado)}%</td>
-                    <td>
-                      <span className={`inline-flex rounded-full px-3 py-1 text-xs font-bold ${situacao.classe}`}>
-                        {situacao.texto}
-                      </span>
-                    </td>
-                    <td className="text-brand-gray-700">
-                      {etapa.fornecedor_id ? nomesFornecedor.get(etapa.fornecedor_id) ?? "—" : "—"}
-                    </td>
-                    <td>
-                      <div className="flex items-center justify-end">
-                        <CadastroModal
-                          titulo={`Atualizar progresso — ${etapa.nome}`}
-                          descricao="Datas previstas e % executado no campo."
-                          botao="Atualizar progresso"
-                          icone={<ActionIcon name="edit" />}
-                          variante="icone"
-                        >
-                          <form action={atualizarProgressoEtapaAction} className="flex flex-col gap-4">
-                            <input type="hidden" name="etapa_id" value={etapa.id} />
-                            <label className="flex flex-col gap-1 text-sm text-brand-gray-700">
-                              Início previsto
-                              <input
-                                type="date"
-                                name="data_inicio_prevista"
-                                defaultValue={etapa.data_inicio_prevista ?? ""}
-                                className="oc-input"
-                              />
-                            </label>
-                            <label className="flex flex-col gap-1 text-sm text-brand-gray-700">
-                              Fim previsto
-                              <input
-                                type="date"
-                                name="data_fim_prevista"
-                                defaultValue={etapa.data_fim_prevista ?? ""}
-                                className="oc-input"
-                              />
-                            </label>
-                            <label className="flex flex-col gap-1 text-sm text-brand-gray-700">
-                              % executado
-                              <input
-                                type="number"
-                                name="percentual_executado"
-                                min="0"
-                                max="100"
-                                step="1"
-                                defaultValue={etapa.percentual_executado}
-                                className="oc-input"
-                              />
-                            </label>
-                            <button type="submit" className="oc-button oc-button-primary">
-                              Salvar progresso
-                            </button>
-                          </form>
-                        </CadastroModal>
-                      </div>
-                    </td>
-                  </tr>
-                );
-              })}
-
-              {etapas.length === 0 && (
-                <tr>
-                  <td colSpan={7} className="oc-empty">
-                    Nenhuma etapa cadastrada para esta obra.
-                  </td>
-                </tr>
-              )}
-            </tbody>
-          </table>
-        </div>
-      </div>
-    </div>
-  );
-
-  const medicoesPanel = !obraAtual ? (
-    <div className="rounded-card border border-brand-gray-300/60 bg-white p-10 text-center text-sm text-brand-gray-500 shadow-card">
-      Cadastre uma obra primeiro.
-    </div>
-  ) : (
-    <div className="flex flex-col gap-6">
-      <ObraSelector obras={listaObras} obraAtualId={obraAtual.id} basePath="/dashboard/cronograma" />
-
-      <div className="flex flex-col gap-3 rounded-card border border-brand-gray-300/60 bg-white p-5 shadow-card sm:flex-row sm:items-center sm:justify-between">
-        <div>
-          <p className="text-sm font-semibold text-brand-black">Medições de {obraAtual.nome}</p>
-          <p className="mt-1 text-xs text-brand-gray-500">
-            Só mede o que estiver com qualidade aprovada e ainda não coberto por medições anteriores.
-          </p>
-        </div>
-        <CadastroModal
-          titulo="Preparar medição"
-          descricao="Calcula automaticamente o que há de novo executado e aprovado no período."
-          botao="+ Preparar medição"
-          variante="primario"
-        >
-          <form action={prepararMedicaoAction} className="flex flex-col gap-4">
-            <input type="hidden" name="obra_id" value={obraAtual.id} />
-            <label className="flex flex-col gap-1 text-sm text-brand-gray-700">
-              Categoria (usada nas despesas geradas)
-              <select name="categoria_id" required className="oc-input">
-                <option value="">Selecione</option>
-                {listaCategorias.map((c) => (
-                  <option key={c.id} value={c.id}>
-                    {c.nome}
-                  </option>
-                ))}
-              </select>
-            </label>
-            <div className="grid grid-cols-2 gap-3">
-              <label className="flex flex-col gap-1 text-sm text-brand-gray-700">
-                Período — início
-                <input type="date" name="periodo_inicio" required className="oc-input" />
-              </label>
-              <label className="flex flex-col gap-1 text-sm text-brand-gray-700">
-                Período — fim
-                <input type="date" name="periodo_fim" required className="oc-input" />
-              </label>
-            </div>
-            <label className="flex flex-col gap-1 text-sm text-brand-gray-700">
-              Observação
-              <textarea name="observacao" rows={2} className="oc-input" />
-            </label>
-            <button type="submit" className="oc-button oc-button-primary">
-              Preparar medição
-            </button>
-          </form>
-        </CadastroModal>
-      </div>
-
-      <div className="flex flex-col gap-4">
-        {medicoes.map((medicao) => {
-          const status = MEDICAO_STATUS_LABEL[medicao.status] ?? MEDICAO_STATUS_LABEL.preparada;
-          const itens = itensPorMedicao.get(medicao.id) ?? [];
-          return (
-            <div key={medicao.id} className="overflow-hidden rounded-card border border-brand-gray-300/60 bg-white shadow-card">
-              <div className="flex flex-wrap items-center justify-between gap-3 px-5 py-4">
-                <div>
-                  <p className="text-sm font-semibold text-brand-black">
-                    {formatDataBR(medicao.periodo_inicio)} a {formatDataBR(medicao.periodo_fim)}
-                  </p>
-                  <p className="mt-1 text-xs text-brand-gray-500">
-                    Categoria: {categoriasPorId.get(medicao.categoria_id) ?? "—"}
-                    {medicao.observacao ? ` · ${medicao.observacao}` : ""}
-                  </p>
-                </div>
-                <div className="flex items-center gap-3">
-                  <span className={`inline-flex rounded-full px-3 py-1 text-xs font-bold ${status.classe}`}>
-                    {status.texto}
-                  </span>
-                  <span className="text-sm font-extrabold text-brand-black">{formatBRL(medicao.valor_total)}</span>
-                </div>
-              </div>
-
-              <details className="border-t border-brand-gray-300/60">
-                <summary className="cursor-pointer px-5 py-3 text-xs font-bold text-brand-gray-500">
-                  Itens desta medição ({itens.length})
-                </summary>
-                <div className="overflow-x-auto px-5 pb-4">
-                  <table className="oc-table min-w-[520px]">
-                    <thead>
-                      <tr>
-                        <th>Etapa</th>
-                        <th>Fornecedor</th>
-                        <th>% medido</th>
-                        <th>Valor</th>
-                      </tr>
-                    </thead>
-                    <tbody>
-                      {itens.map((item) => (
-                        <tr key={item.id}>
-                          <td className="font-semibold text-brand-black">{nomesEtapa.get(item.etapa_id) ?? "—"}</td>
-                          <td className="text-brand-gray-700">
-                            {item.fornecedor_id ? nomesFornecedor.get(item.fornecedor_id) ?? "—" : "—"}
-                          </td>
-                          <td className="text-brand-gray-700">{Number(item.percentual_medido)}%</td>
-                          <td className="text-brand-gray-700">{formatBRL(item.valor_medido)}</td>
-                        </tr>
-                      ))}
-                    </tbody>
-                  </table>
-                </div>
-              </details>
-
-              <div className="flex items-center justify-end gap-2 border-t border-brand-gray-300/60 px-5 py-3">
-                {medicao.status === "preparada" && (
-                  <>
-                    <form action={apagarMedicaoPreparadaAction}>
-                      <input type="hidden" name="id" value={medicao.id} />
-                      <button
-                        type="submit"
-                        className="rounded-brand-sm border border-status-danger/30 px-3 py-2 text-xs font-bold text-status-danger hover:bg-status-danger/10"
-                      >
-                        Apagar
-                      </button>
-                    </form>
-                    <form action={aprovarMedicaoAction}>
-                      <input type="hidden" name="id" value={medicao.id} />
-                      <button type="submit" className="oc-button oc-button-primary">
-                        Aprovar
-                      </button>
-                    </form>
-                  </>
-                )}
-                {medicao.status === "aprovada" && (
-                  <form action={registrarPagamentoMedicaoAction}>
-                    <input type="hidden" name="id" value={medicao.id} />
-                    <button type="submit" className="oc-button oc-button-primary">
-                      Registrar pagamento
-                    </button>
-                  </form>
-                )}
-                {medicao.status === "paga" && (
-                  <span className="text-xs text-brand-gray-500">
-                    Paga em {medicao.pago_em ? formatDataBR(medicao.pago_em.slice(0, 10)) : "—"}
-                  </span>
-                )}
-              </div>
-            </div>
-          );
-        })}
-
-        {medicoes.length === 0 && (
-          <div className="oc-empty rounded-card border border-brand-gray-300/60 bg-white p-8 shadow-card">
-            Nenhuma medição preparada ainda para esta obra.
-          </div>
-        )}
-      </div>
-    </div>
-  );
 
   const avisoDetalhadoIndisponivel = (
     <div className="rounded-card border border-status-warning/30 bg-status-warning/10 p-5 text-sm text-brand-gray-700 shadow-card">
@@ -526,108 +302,14 @@ export default async function CronogramaPage({
     </div>
   );
 
-  const detalhadoPanel = !obraAtual ? (
-    <div className="rounded-card border border-brand-gray-300/60 bg-white p-10 text-center text-sm text-brand-gray-500 shadow-card">
-      Cadastre uma obra primeiro.
-    </div>
-  ) : detalhadoIndisponivel ? (
-    avisoDetalhadoIndisponivel
-  ) : fasesObra.length === 0 ? (
-    <div className="flex flex-col gap-6">
-      <ObraSelector obras={listaObras} obraAtualId={obraAtual.id} basePath="/dashboard/cronograma" />
-      <div className="rounded-card border border-brand-gray-300/60 bg-white p-8 text-center shadow-card">
-        <p className="text-sm font-semibold text-brand-black">
-          Nenhum cronograma detalhado aplicado a {obraAtual.nome} ainda.
-        </p>
-        <p className="mt-1 text-xs text-brand-gray-500">
-          Escolha um modelo reutilizável pra gerar as fases e atividades desta obra.
-        </p>
-        <form
-          action={aplicarCronogramaTemplateAction}
-          className="mx-auto mt-5 flex max-w-sm flex-col gap-3"
-        >
-          <input type="hidden" name="obra_id" value={obraAtual.id} />
-          <select name="template_id" required className="oc-input">
-            <option value="">Selecione um modelo</option>
-            {templates.map((t) => (
-              <option key={t.id} value={t.id}>
-                {t.nome} ({t.fases.length} fase(s), {totalAtividadesPorTemplate.get(t.id) ?? 0} atividade(s))
-              </option>
-            ))}
-          </select>
-          <button type="submit" className="oc-button oc-button-primary">
-            Aplicar modelo
-          </button>
-          {templates.length === 0 && (
-            <p className="text-xs text-brand-gray-500">
-              Nenhum modelo cadastrado ainda — crie um na aba &quot;Modelos&quot;.
-            </p>
-          )}
-        </form>
-      </div>
-    </div>
-  ) : (
-    <div className="flex flex-col gap-6">
-      <ObraSelector obras={listaObras} obraAtualId={obraAtual.id} basePath="/dashboard/cronograma" />
-
-      <div className="rounded-card border border-brand-gray-300/60 bg-white p-6 shadow-card">
-        <p className="text-xs font-bold uppercase tracking-[0.1em] text-brand-gray-500">
-          Progresso geral de {obraAtual.nome}
-        </p>
-        <p className="mt-2 text-5xl font-black text-brand-black">{percentualGeral}%</p>
-        <div className="mt-3 h-3 w-full overflow-hidden rounded-full bg-brand-gray-100">
-          <div
-            className="h-full rounded-full bg-[color:var(--status-success)]"
-            style={{ width: `${percentualGeral}%` }}
-          />
-        </div>
-        <p className="mt-2 text-xs text-brand-gray-500">
-          {todasAtividadesObra.length} atividade(s) em {fasesObra.length} fase(s)
-        </p>
-      </div>
-
-      <div className="grid grid-cols-1 gap-6 lg:grid-cols-[1fr_320px]">
-        <div className="overflow-hidden rounded-card border border-brand-gray-300/60 bg-white p-5 shadow-card">
-          <p className="mb-4 text-sm font-semibold text-brand-black">Linha do tempo</p>
-          <GanttTimeline
-            fases={fasesObra.map((f) => ({
-              id: f.id,
-              nome: f.nome,
-              dataInicioPrevista: f.data_inicio_prevista,
-              dataFimPrevista: f.data_fim_prevista,
-              atividades: atividadesPorFase.get(f.id) ?? [],
-            }))}
-          />
-        </div>
-        <div className="rounded-card border border-brand-gray-300/60 bg-white p-5 shadow-card">
-          <p className="mb-2 text-sm font-semibold text-brand-black">Atividades por status</p>
-          <StatusAtividadesChart contagem={contagemStatus} />
-        </div>
-      </div>
-
-      <form action={removerCronogramaObraAction} className="self-start">
-        <input type="hidden" name="obra_id" value={obraAtual.id} />
-        <button
-          type="submit"
-          className="rounded-brand-sm border border-status-danger/30 px-3 py-2 text-xs font-bold text-status-danger hover:bg-status-danger/10"
-        >
-          Remover cronograma desta obra
-        </button>
-      </form>
-    </div>
-  );
-
   const modelosPanel = detalhadoIndisponivel ? (
     avisoDetalhadoIndisponivel
   ) : (
     <div className="flex flex-col gap-6">
-      <div className="flex flex-col gap-3 rounded-card border border-brand-gray-300/60 bg-white p-5 shadow-card sm:flex-row sm:items-center sm:justify-between">
-        <div>
-          <p className="text-sm font-semibold text-brand-black">Modelos de cronograma</p>
-          <p className="mt-1 text-xs text-brand-gray-500">
-            Reutilizáveis entre obras — casas, apartamentos, o que precisar.
-          </p>
-        </div>
+      <div className="flex flex-col gap-3 rounded-brand-sm border border-brand-gray-300/60 bg-brand-gray-100/60 p-4 sm:flex-row sm:items-center sm:justify-between">
+        <p className="text-xs text-brand-gray-500">
+          Reutilizáveis entre obras — casas, apartamentos, o que precisar.
+        </p>
         <CadastroModal
           titulo="Novo modelo de cronograma"
           descricao="Ex: Residencial — Construção de Casas (5 meses)."
@@ -836,12 +518,421 @@ export default async function CronogramaPage({
     </div>
   );
 
+  const gerenciarModelosBotao = (
+    <CadastroModal
+      titulo="Modelos de cronograma"
+      descricao="Reutilizáveis entre obras."
+      botao="Gerenciar modelos"
+      variante="secundario"
+      modalSize="wide"
+    >
+      {modelosPanel}
+    </CadastroModal>
+  );
+
+  const visaoGeralPanel = !obraAtual ? (
+    <div className="rounded-card border border-brand-gray-300/60 bg-white p-10 text-center text-sm text-brand-gray-500 shadow-card">
+      Cadastre uma obra primeiro.
+    </div>
+  ) : (
+    <div className="flex flex-col gap-6">
+      <ObraSelector obras={listaObras} obraAtualId={obraAtual.id} basePath="/dashboard/cronograma" />
+
+      <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
+        <KpiTile label="Orçamento total" valor={formatBRL(orcamentoTotalObra)} />
+        <KpiTile label="Executado (financeiro)" valor={formatBRL(executadoFinanceiro)} />
+        <KpiTile label="% físico médio" valor={`${percentualFisico}%`} />
+        <KpiTile
+          label="Medições em aberto"
+          valor={String(medicoesEmAberto)}
+          destaque={medicoesEmAberto > 0}
+        />
+      </div>
+
+      <div className="rounded-card border border-brand-gray-300/60 bg-white p-5 shadow-card">
+        <p className="mb-1 text-sm font-semibold text-brand-black">Curva S — previsto x realizado</p>
+        <p className="mb-2 text-xs text-brand-gray-500">
+          Previsto distribui o orçamento entre as datas previstas de cada etapa. Realizado soma as
+          despesas lançadas.
+        </p>
+        <CurvaSChart pontos={curvaSPontos} />
+      </div>
+
+      <div className="overflow-hidden rounded-card border border-brand-gray-300/60 bg-white shadow-card">
+        <div className="border-b border-brand-gray-300/60 px-5 py-4">
+          <p className="text-sm font-semibold text-brand-black">Etapas de {obraAtual.nome}</p>
+          <p className="mt-1 text-xs text-brand-gray-500">
+            Só entram em medição etapas com qualidade aprovada e % executado acima do já medido.
+          </p>
+        </div>
+
+        <div className="overflow-x-auto">
+          <table className="oc-table min-w-[860px]">
+            <thead>
+              <tr>
+                <th>Etapa</th>
+                <th>Início previsto</th>
+                <th>Fim previsto</th>
+                <th>% executado</th>
+                <th>Qualidade</th>
+                <th>Fornecedor</th>
+                <th className="text-right">Ações</th>
+              </tr>
+            </thead>
+            <tbody>
+              {etapas.map((etapa) => {
+                const situacao = SITUACAO_LABEL[etapa.situacao_qualidade] ?? SITUACAO_LABEL.nao_inspecionado;
+                return (
+                  <tr key={etapa.id}>
+                    <td className="font-semibold text-brand-black">{etapa.nome}</td>
+                    <td className="text-brand-gray-700">{formatDataBR(etapa.data_inicio_prevista)}</td>
+                    <td className="text-brand-gray-700">{formatDataBR(etapa.data_fim_prevista)}</td>
+                    <td className="text-brand-gray-700">{Number(etapa.percentual_executado)}%</td>
+                    <td>
+                      <span className={`inline-flex rounded-full px-3 py-1 text-xs font-bold ${situacao.classe}`}>
+                        {situacao.texto}
+                      </span>
+                    </td>
+                    <td className="text-brand-gray-700">
+                      {etapa.fornecedor_id ? nomesFornecedor.get(etapa.fornecedor_id) ?? "—" : "—"}
+                    </td>
+                    <td>
+                      <div className="flex items-center justify-end">
+                        <CadastroModal
+                          titulo={`Atualizar progresso — ${etapa.nome}`}
+                          descricao="Datas previstas e % executado no campo."
+                          botao="Atualizar progresso"
+                          icone={<ActionIcon name="edit" />}
+                          variante="icone"
+                        >
+                          <form action={atualizarProgressoEtapaAction} className="flex flex-col gap-4">
+                            <input type="hidden" name="etapa_id" value={etapa.id} />
+                            <label className="flex flex-col gap-1 text-sm text-brand-gray-700">
+                              Início previsto
+                              <input
+                                type="date"
+                                name="data_inicio_prevista"
+                                defaultValue={etapa.data_inicio_prevista ?? ""}
+                                className="oc-input"
+                              />
+                            </label>
+                            <label className="flex flex-col gap-1 text-sm text-brand-gray-700">
+                              Fim previsto
+                              <input
+                                type="date"
+                                name="data_fim_prevista"
+                                defaultValue={etapa.data_fim_prevista ?? ""}
+                                className="oc-input"
+                              />
+                            </label>
+                            <label className="flex flex-col gap-1 text-sm text-brand-gray-700">
+                              % executado
+                              <input
+                                type="number"
+                                name="percentual_executado"
+                                min="0"
+                                max="100"
+                                step="1"
+                                defaultValue={etapa.percentual_executado}
+                                className="oc-input"
+                              />
+                            </label>
+                            <button type="submit" className="oc-button oc-button-primary">
+                              Salvar progresso
+                            </button>
+                          </form>
+                        </CadastroModal>
+                      </div>
+                    </td>
+                  </tr>
+                );
+              })}
+
+              {etapas.length === 0 && (
+                <tr>
+                  <td colSpan={7} className="oc-empty">
+                    Nenhuma etapa cadastrada para esta obra.
+                  </td>
+                </tr>
+              )}
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+  );
+
+  const medicoesPanel = !obraAtual ? (
+    <div className="rounded-card border border-brand-gray-300/60 bg-white p-10 text-center text-sm text-brand-gray-500 shadow-card">
+      Cadastre uma obra primeiro.
+    </div>
+  ) : (
+    <div className="flex flex-col gap-6">
+      <ObraSelector obras={listaObras} obraAtualId={obraAtual.id} basePath="/dashboard/cronograma" />
+
+      <div className="flex flex-col gap-3 rounded-brand-sm border border-brand-gray-300/60 bg-brand-gray-100/60 p-4 sm:flex-row sm:items-center sm:justify-between">
+        <p className="text-xs text-brand-gray-500">
+          Só mede o que estiver com qualidade aprovada e ainda não coberto por medições anteriores.
+        </p>
+        <CadastroModal
+          titulo="Preparar medição"
+          descricao="Calcula automaticamente o que há de novo executado e aprovado no período."
+          botao="+ Preparar medição"
+          variante="primario"
+        >
+          <form action={prepararMedicaoAction} className="flex flex-col gap-4">
+            <input type="hidden" name="obra_id" value={obraAtual.id} />
+            <label className="flex flex-col gap-1 text-sm text-brand-gray-700">
+              Categoria (usada nas despesas geradas)
+              <select name="categoria_id" required className="oc-input">
+                <option value="">Selecione</option>
+                {listaCategorias.map((c) => (
+                  <option key={c.id} value={c.id}>
+                    {c.nome}
+                  </option>
+                ))}
+              </select>
+            </label>
+            <div className="grid grid-cols-2 gap-3">
+              <label className="flex flex-col gap-1 text-sm text-brand-gray-700">
+                Período — início
+                <input type="date" name="periodo_inicio" required className="oc-input" />
+              </label>
+              <label className="flex flex-col gap-1 text-sm text-brand-gray-700">
+                Período — fim
+                <input type="date" name="periodo_fim" required className="oc-input" />
+              </label>
+            </div>
+            <label className="flex flex-col gap-1 text-sm text-brand-gray-700">
+              Observação
+              <textarea name="observacao" rows={2} className="oc-input" />
+            </label>
+            <button type="submit" className="oc-button oc-button-primary">
+              Preparar medição
+            </button>
+          </form>
+        </CadastroModal>
+      </div>
+
+      <div className="overflow-hidden rounded-card border border-brand-gray-300/60 bg-white shadow-card">
+        <div className="overflow-x-auto">
+          <table className="oc-table min-w-[760px]">
+            <thead>
+              <tr>
+                <th>Período</th>
+                <th>Categoria</th>
+                <th>Status</th>
+                <th className="text-right">Valor</th>
+                <th className="text-right">Ações</th>
+              </tr>
+            </thead>
+            <tbody>
+              {medicoes.map((medicao) => {
+                const status = MEDICAO_STATUS_LABEL[medicao.status] ?? MEDICAO_STATUS_LABEL.preparada;
+                const itens = itensPorMedicao.get(medicao.id) ?? [];
+                return (
+                  <tr key={medicao.id}>
+                    <td>
+                      <details>
+                        <summary className="cursor-pointer font-semibold text-brand-black">
+                          {formatDataBR(medicao.periodo_inicio)} a {formatDataBR(medicao.periodo_fim)}
+                        </summary>
+                        <div className="mt-3 max-w-md">
+                          {medicao.observacao && (
+                            <p className="mb-2 text-xs text-brand-gray-500">{medicao.observacao}</p>
+                          )}
+                          <table className="oc-table min-w-[420px]">
+                            <thead>
+                              <tr>
+                                <th>Etapa</th>
+                                <th>Fornecedor</th>
+                                <th>% medido</th>
+                                <th>Valor</th>
+                              </tr>
+                            </thead>
+                            <tbody>
+                              {itens.map((item) => (
+                                <tr key={item.id}>
+                                  <td className="font-semibold text-brand-black">
+                                    {nomesEtapa.get(item.etapa_id) ?? "—"}
+                                  </td>
+                                  <td className="text-brand-gray-700">
+                                    {item.fornecedor_id ? nomesFornecedor.get(item.fornecedor_id) ?? "—" : "—"}
+                                  </td>
+                                  <td className="text-brand-gray-700">{Number(item.percentual_medido)}%</td>
+                                  <td className="text-brand-gray-700">{formatBRL(item.valor_medido)}</td>
+                                </tr>
+                              ))}
+                            </tbody>
+                          </table>
+                        </div>
+                      </details>
+                    </td>
+                    <td className="text-brand-gray-700">{categoriasPorId.get(medicao.categoria_id) ?? "—"}</td>
+                    <td>
+                      <span className={`inline-flex rounded-full px-3 py-1 text-xs font-bold ${status.classe}`}>
+                        {status.texto}
+                      </span>
+                    </td>
+                    <td className="text-right font-extrabold text-brand-black">
+                      {formatBRL(medicao.valor_total)}
+                    </td>
+                    <td>
+                      <div className="flex items-center justify-end gap-2">
+                        {medicao.status === "preparada" && (
+                          <>
+                            <form action={apagarMedicaoPreparadaAction}>
+                              <input type="hidden" name="id" value={medicao.id} />
+                              <button
+                                type="submit"
+                                className="rounded-brand-sm border border-status-danger/30 px-3 py-1.5 text-xs font-bold text-status-danger hover:bg-status-danger/10"
+                              >
+                                Apagar
+                              </button>
+                            </form>
+                            <form action={aprovarMedicaoAction}>
+                              <input type="hidden" name="id" value={medicao.id} />
+                              <button type="submit" className="oc-button oc-button-primary py-1.5 text-xs">
+                                Aprovar
+                              </button>
+                            </form>
+                          </>
+                        )}
+                        {medicao.status === "aprovada" && (
+                          <form action={registrarPagamentoMedicaoAction}>
+                            <input type="hidden" name="id" value={medicao.id} />
+                            <button type="submit" className="oc-button oc-button-primary py-1.5 text-xs">
+                              Registrar pagamento
+                            </button>
+                          </form>
+                        )}
+                        {medicao.status === "paga" && (
+                          <span className="text-xs text-brand-gray-500">
+                            Paga em {medicao.pago_em ? formatDataBR(medicao.pago_em.slice(0, 10)) : "—"}
+                          </span>
+                        )}
+                      </div>
+                    </td>
+                  </tr>
+                );
+              })}
+
+              {medicoes.length === 0 && (
+                <tr>
+                  <td colSpan={5} className="oc-empty">
+                    Nenhuma medição preparada ainda para esta obra.
+                  </td>
+                </tr>
+              )}
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+  );
+
+  const detalhadoPanel = !obraAtual ? (
+    <div className="rounded-card border border-brand-gray-300/60 bg-white p-10 text-center text-sm text-brand-gray-500 shadow-card">
+      Cadastre uma obra primeiro.
+    </div>
+  ) : detalhadoIndisponivel ? (
+    avisoDetalhadoIndisponivel
+  ) : fasesObra.length === 0 ? (
+    <div className="flex flex-col gap-6">
+      <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+        <ObraSelector obras={listaObras} obraAtualId={obraAtual.id} basePath="/dashboard/cronograma" />
+        {gerenciarModelosBotao}
+      </div>
+      <div className="rounded-card border border-brand-gray-300/60 bg-white p-8 text-center shadow-card">
+        <p className="text-sm font-semibold text-brand-black">
+          Nenhum cronograma detalhado aplicado a {obraAtual.nome} ainda.
+        </p>
+        <p className="mt-1 text-xs text-brand-gray-500">
+          Escolha um modelo reutilizável pra gerar as fases e atividades desta obra.
+        </p>
+        <form
+          action={aplicarCronogramaTemplateAction}
+          className="mx-auto mt-5 flex max-w-sm flex-col gap-3"
+        >
+          <input type="hidden" name="obra_id" value={obraAtual.id} />
+          <select name="template_id" required className="oc-input">
+            <option value="">Selecione um modelo</option>
+            {templates.map((t) => (
+              <option key={t.id} value={t.id}>
+                {t.nome} ({t.fases.length} fase(s), {totalAtividadesPorTemplate.get(t.id) ?? 0} atividade(s))
+              </option>
+            ))}
+          </select>
+          <button type="submit" className="oc-button oc-button-primary">
+            Aplicar modelo
+          </button>
+          {templates.length === 0 && (
+            <p className="text-xs text-brand-gray-500">Nenhum modelo cadastrado ainda.</p>
+          )}
+        </form>
+      </div>
+    </div>
+  ) : (
+    <div className="flex flex-col gap-6">
+      <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+        <ObraSelector obras={listaObras} obraAtualId={obraAtual.id} basePath="/dashboard/cronograma" />
+        {gerenciarModelosBotao}
+      </div>
+
+      <div className="flex flex-wrap items-center gap-4 rounded-brand-sm border border-brand-gray-300/60 bg-white p-4">
+        <div>
+          <p className="text-[10px] font-bold uppercase tracking-[0.08em] text-brand-gray-500">
+            Progresso geral
+          </p>
+          <p className="text-2xl font-extrabold text-brand-black">{percentualGeralDetalhado}%</p>
+        </div>
+        <div className="h-2 min-w-[140px] flex-1 overflow-hidden rounded-full bg-brand-gray-100">
+          <div
+            className="h-full rounded-full bg-[color:var(--status-success)]"
+            style={{ width: `${percentualGeralDetalhado}%` }}
+          />
+        </div>
+        <p className="text-xs text-brand-gray-500">
+          {todasAtividadesObra.length} atividade(s) em {fasesObra.length} fase(s)
+        </p>
+      </div>
+
+      <div className="grid grid-cols-1 gap-6 lg:grid-cols-[1fr_320px]">
+        <div className="overflow-hidden rounded-card border border-brand-gray-300/60 bg-white p-5 shadow-card">
+          <p className="mb-4 text-sm font-semibold text-brand-black">Linha do tempo</p>
+          <GanttTimeline
+            fases={fasesObra.map((f) => ({
+              id: f.id,
+              nome: f.nome,
+              dataInicioPrevista: f.data_inicio_prevista,
+              dataFimPrevista: f.data_fim_prevista,
+              atividades: atividadesPorFase.get(f.id) ?? [],
+            }))}
+          />
+        </div>
+        <div className="rounded-card border border-brand-gray-300/60 bg-white p-5 shadow-card">
+          <p className="mb-2 text-sm font-semibold text-brand-black">Atividades por status</p>
+          <StatusAtividadesChart contagem={contagemStatus} />
+        </div>
+      </div>
+
+      <form action={removerCronogramaObraAction} className="self-start">
+        <input type="hidden" name="obra_id" value={obraAtual.id} />
+        <button
+          type="submit"
+          className="rounded-brand-sm border border-status-danger/30 px-3 py-2 text-xs font-bold text-status-danger hover:bg-status-danger/10"
+        >
+          Remover cronograma desta obra
+        </button>
+      </form>
+    </div>
+  );
+
   return (
     <CronogramaTabs
-      cronogramaPanel={cronogramaPanel}
+      visaoGeralPanel={visaoGeralPanel}
       medicoesPanel={medicoesPanel}
       detalhadoPanel={detalhadoPanel}
-      modelosPanel={modelosPanel}
     />
   );
 }

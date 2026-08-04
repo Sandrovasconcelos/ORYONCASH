@@ -399,3 +399,87 @@ export function calcularItensElegiveisParaMedicao(
 
   return itens;
 }
+
+// ---------- Curva S ----------
+
+export type PontoCurvaS = { mes: string; previsto: number; realizado: number };
+
+type EtapaParaCurvaS = {
+  valorOrcado: number;
+  dataInicioPrevista: string | null;
+  dataFimPrevista: string | null;
+};
+
+type DespesaParaCurvaS = { valor: number; data: string };
+
+function parseDataISO(data: string): Date {
+  const [ano, mes, dia] = data.split("-").map(Number);
+  return new Date(Date.UTC(ano, mes - 1, dia));
+}
+
+function fimDoMes(data: Date): Date {
+  return new Date(Date.UTC(data.getUTCFullYear(), data.getUTCMonth() + 1, 0));
+}
+
+/**
+ * Curva S financeira (previsto x realizado acumulado por mes). O previsto
+ * distribui o valor orcado de cada etapa linearmente entre sua data de
+ * inicio e fim previstas (aproximacao padrao quando nao ha cronograma de
+ * desembolso detalhado). O realizado soma despesas ate o fim de cada mes.
+ */
+export function calcularCurvaS(
+  etapas: EtapaParaCurvaS[],
+  despesas: DespesaParaCurvaS[]
+): PontoCurvaS[] {
+  const etapasComData = etapas
+    .filter((e) => e.dataInicioPrevista && e.dataFimPrevista)
+    .map((e) => ({
+      valorOrcado: e.valorOrcado,
+      inicio: parseDataISO(e.dataInicioPrevista as string),
+      fim: parseDataISO(e.dataFimPrevista as string),
+    }));
+
+  const datasDespesas = despesas.map((d) => parseDataISO(d.data));
+
+  const todasAsDatas = [
+    ...etapasComData.flatMap((e) => [e.inicio, e.fim]),
+    ...datasDespesas,
+  ];
+  if (todasAsDatas.length === 0) return [];
+
+  const inicioRange = new Date(Math.min(...todasAsDatas.map((d) => d.getTime())));
+  const fimRange = new Date(Math.max(...todasAsDatas.map((d) => d.getTime())));
+
+  const pontos: PontoCurvaS[] = [];
+  const cursor = new Date(Date.UTC(inicioRange.getUTCFullYear(), inicioRange.getUTCMonth(), 1));
+  while (cursor <= fimRange) {
+    const fimMes = fimDoMes(cursor);
+
+    let previsto = 0;
+    for (const etapa of etapasComData) {
+      if (fimMes < etapa.inicio) continue;
+      if (fimMes >= etapa.fim) {
+        previsto += etapa.valorOrcado;
+        continue;
+      }
+      const duracaoTotal = etapa.fim.getTime() - etapa.inicio.getTime() || 1;
+      const decorrido = fimMes.getTime() - etapa.inicio.getTime();
+      previsto += etapa.valorOrcado * Math.max(0, Math.min(1, decorrido / duracaoTotal));
+    }
+
+    let realizado = 0;
+    for (let i = 0; i < despesas.length; i++) {
+      if (datasDespesas[i] <= fimMes) realizado += despesas[i].valor;
+    }
+
+    pontos.push({
+      mes: `${NOMES_MES[cursor.getUTCMonth()]}/${String(cursor.getUTCFullYear()).slice(2)}`,
+      previsto: Number(previsto.toFixed(2)),
+      realizado: Number(realizado.toFixed(2)),
+    });
+
+    cursor.setUTCMonth(cursor.getUTCMonth() + 1);
+  }
+
+  return pontos;
+}
