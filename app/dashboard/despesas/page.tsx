@@ -13,6 +13,7 @@ import { ActionIcon } from "../action-icon";
 import { DeleteButton } from "./delete-button";
 import { OpenDespesaModalButton } from "./open-despesa-modal-button";
 import { SubmitButton } from "../submit-button";
+import { PorPaginaSelect } from "./por-pagina-select";
 
 export const dynamic = "force-dynamic";
 
@@ -26,6 +27,19 @@ function valorInputBR(valor: number) {
 function formatDataBR(data: string): string {
   const [ano, mes, dia] = data.split("-");
   return `${dia}/${mes}/${ano}`;
+}
+
+function numerosPaginacao(atual: number, total: number): (number | "...")[] {
+  const paginas = new Set<number>([1, total, atual, atual - 1, atual + 1]);
+  const ordenadas = [...paginas].filter((p) => p >= 1 && p <= total).sort((a, b) => a - b);
+  const resultado: (number | "...")[] = [];
+  let anterior = 0;
+  for (const p of ordenadas) {
+    if (anterior && p - anterior > 1) resultado.push("...");
+    resultado.push(p);
+    anterior = p;
+  }
+  return resultado;
 }
 
 type ComprovanteQueryRow = {
@@ -65,6 +79,8 @@ export default async function DespesasPage({
     material?: string;
     fornecedor?: string;
     busca?: string;
+    pagina?: string;
+    porPagina?: string;
   }>;
 }) {
   const params = await searchParams;
@@ -99,7 +115,7 @@ export default async function DespesasPage({
         .is("deleted_at", null)
         .order("data", { ascending: false })
         .order("created_at", { ascending: false })
-        .limit(200);
+        .limit(1000);
       if (params.obra) queryCompleta = queryCompleta.eq("obra_id", params.obra);
       if (params.categoria) queryCompleta = queryCompleta.eq("categoria_id", params.categoria);
       if (params.etapa) queryCompleta = queryCompleta.eq("etapa_id", params.etapa);
@@ -120,7 +136,7 @@ export default async function DespesasPage({
         .is("deleted_at", null)
         .order("data", { ascending: false })
         .order("created_at", { ascending: false })
-        .limit(200);
+        .limit(1000);
       if (params.obra) querySemContaBancaria = querySemContaBancaria.eq("obra_id", params.obra);
       if (params.categoria) querySemContaBancaria = querySemContaBancaria.eq("categoria_id", params.categoria);
       if (params.etapa) querySemContaBancaria = querySemContaBancaria.eq("etapa_id", params.etapa);
@@ -140,7 +156,7 @@ export default async function DespesasPage({
         .is("deleted_at", null)
         .order("data", { ascending: false })
         .order("created_at", { ascending: false })
-        .limit(200);
+        .limit(1000);
       if (params.obra) queryReduzida = queryReduzida.eq("obra_id", params.obra);
       if (params.categoria) queryReduzida = queryReduzida.eq("categoria_id", params.categoria);
       if (params.etapa) queryReduzida = queryReduzida.eq("etapa_id", params.etapa);
@@ -286,6 +302,32 @@ export default async function DespesasPage({
     }
   }
 
+  const TAMANHOS_PAGINA = [10, 20, 50, 100];
+  const porPagina = TAMANHOS_PAGINA.includes(Number(params.porPagina))
+    ? Number(params.porPagina)
+    : 20;
+  const totalPaginas = Math.max(1, Math.ceil(despesas.length / porPagina));
+  const paginaSolicitada = Number(params.pagina);
+  const paginaAtual =
+    Number.isFinite(paginaSolicitada) && paginaSolicitada >= 1
+      ? Math.min(paginaSolicitada, totalPaginas)
+      : 1;
+  const inicioPagina = (paginaAtual - 1) * porPagina;
+  const despesasPagina = despesas.slice(inicioPagina, inicioPagina + porPagina);
+
+  const hrefComOverrides = (overrides: Record<string, string | undefined>) => {
+    const sp = new URLSearchParams();
+    for (const [chave, valor] of Object.entries(params)) {
+      if (valor) sp.set(chave, valor);
+    }
+    for (const [chave, valor] of Object.entries(overrides)) {
+      if (valor) sp.set(chave, valor);
+      else sp.delete(chave);
+    }
+    const qs = sp.toString();
+    return `/dashboard/despesas${qs ? `?${qs}` : ""}`;
+  };
+
   const queryString = new URLSearchParams(
     Object.entries(params).filter(([, value]) => Boolean(value)) as [string, string][]
   ).toString();
@@ -370,6 +412,11 @@ export default async function DespesasPage({
             </select>
           </label>
 
+          <label className="flex flex-col gap-1 text-xs font-semibold text-brand-gray-500">
+            Exibir
+            <PorPaginaSelect valor={porPagina} />
+          </label>
+
           <button
             type="submit"
             className="rounded-brand-sm bg-brand-red px-4 py-2 text-sm font-semibold text-white hover:bg-brand-red-700"
@@ -395,7 +442,10 @@ export default async function DespesasPage({
         </form>
 
         <p className="mt-3 text-xs font-medium text-brand-gray-500">
-          {despesas.length} lançamento(s) encontrados.
+          {despesas.length} lançamento(s) encontrados
+          {despesas.length > 0 &&
+            ` — mostrando ${inicioPagina + 1}–${Math.min(inicioPagina + porPagina, despesas.length)}`}
+          .
         </p>
         <div className="mt-3 flex flex-wrap items-center gap-3 text-xs font-semibold text-brand-gray-500">
           <span className="inline-flex items-center gap-1.5">
@@ -440,7 +490,7 @@ export default async function DespesasPage({
             </tr>
           </thead>
           <tbody className="divide-y divide-brand-gray-300/40">
-            {despesas.map((d) => {
+            {despesasPagina.map((d) => {
               const obraNome = (d.obras as unknown as { nome: string } | null)?.nome ?? "-";
               const categoriaNome =
                 (d.categorias as unknown as { nome: string } | null)?.nome ?? "-";
@@ -989,6 +1039,55 @@ export default async function DespesasPage({
           </tbody>
         </table>
       </div>
+
+      {totalPaginas > 1 && (
+        <div className="flex flex-wrap items-center justify-between gap-3 rounded-card border border-brand-gray-300/60 bg-white px-5 py-4 shadow-card">
+          <p className="text-xs font-medium text-brand-gray-500">
+            Página {paginaAtual} de {totalPaginas}
+          </p>
+          <div className="flex flex-wrap items-center gap-1.5">
+            <Link
+              href={hrefComOverrides({ pagina: String(Math.max(1, paginaAtual - 1)) })}
+              className={`rounded-brand-sm border px-3 py-1.5 text-xs font-bold ${
+                paginaAtual === 1
+                  ? "pointer-events-none border-brand-gray-300 text-brand-gray-300"
+                  : "border-brand-gray-300 text-brand-gray-700 hover:border-brand-red/40 hover:text-brand-red"
+              }`}
+            >
+              Anterior
+            </Link>
+            {numerosPaginacao(paginaAtual, totalPaginas).map((item, index) =>
+              item === "..." ? (
+                <span key={`ellipsis-${index}`} className="px-2 text-xs text-brand-gray-400">
+                  …
+                </span>
+              ) : (
+                <Link
+                  key={item}
+                  href={hrefComOverrides({ pagina: String(item) })}
+                  className={`rounded-brand-sm border px-3 py-1.5 text-xs font-bold ${
+                    item === paginaAtual
+                      ? "border-brand-red bg-brand-red text-white"
+                      : "border-brand-gray-300 text-brand-gray-700 hover:border-brand-red/40 hover:text-brand-red"
+                  }`}
+                >
+                  {item}
+                </Link>
+              )
+            )}
+            <Link
+              href={hrefComOverrides({ pagina: String(Math.min(totalPaginas, paginaAtual + 1)) })}
+              className={`rounded-brand-sm border px-3 py-1.5 text-xs font-bold ${
+                paginaAtual === totalPaginas
+                  ? "pointer-events-none border-brand-gray-300 text-brand-gray-300"
+                  : "border-brand-gray-300 text-brand-gray-700 hover:border-brand-red/40 hover:text-brand-red"
+              }`}
+            >
+              Próxima
+            </Link>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
