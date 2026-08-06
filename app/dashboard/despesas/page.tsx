@@ -255,6 +255,37 @@ export default async function DespesasPage({
       })
     : despesasBrutas;
   const totalFiltrado = despesas.reduce((soma, d) => soma + d.valor, 0);
+
+  // Varios itens de uma mesma nota/comprovante viram varias despesas
+  // (uma por item). Elas compartilham o mesmo arquivo (storage_path) em
+  // despesa_comprovantes - usa isso pra agrupar visualmente sem precisar
+  // de uma coluna nova no banco.
+  const PALETA_GRUPOS_NOTA = ["#296dd1", "#7c3aed", "#bd7600", "#0f766e", "#c2185b", "#4d7c0f"];
+  const grupoNotaPorDespesa = new Map<string, { indice: number; total: number; cor: string }>();
+  {
+    const idsPorChave = new Map<string, string[]>();
+    for (const d of despesas) {
+      const comprovantesDaDespesa = comprovantesPorDespesa.get(d.id) ?? [];
+      const arquivoCompartilhado =
+        comprovantesDaDespesa.find((c) => c.tipo_documento === "documento_cobranca") ??
+        comprovantesDaDespesa.find((c) => c.tipo_documento === "comprovante_pagamento");
+      if (!arquivoCompartilhado) continue;
+      const chave = `${arquivoCompartilhado.storage_bucket}/${arquivoCompartilhado.storage_path}`;
+      const lista = idsPorChave.get(chave) ?? [];
+      lista.push(d.id);
+      idsPorChave.set(chave, lista);
+    }
+    let corIndex = 0;
+    for (const ids of idsPorChave.values()) {
+      if (ids.length < 2) continue;
+      const cor = PALETA_GRUPOS_NOTA[corIndex % PALETA_GRUPOS_NOTA.length];
+      ids.forEach((despesaId, i) => {
+        grupoNotaPorDespesa.set(despesaId, { indice: i + 1, total: ids.length, cor });
+      });
+      corIndex += 1;
+    }
+  }
+
   const queryString = new URLSearchParams(
     Object.entries(params).filter(([, value]) => Boolean(value)) as [string, string][]
   ).toString();
@@ -432,10 +463,14 @@ export default async function DespesasPage({
               const etapasDaDespesa = (etapas ?? []).filter(
                 (etapa) => etapa.obra_id === d.obra_id || etapa.obra_id === null
               );
+              const grupoNota = grupoNotaPorDespesa.get(d.id);
 
               return (
                 <tr key={d.id} className="align-top hover:bg-brand-gray-100/60">
-                  <td className="whitespace-nowrap px-5 py-4 font-semibold text-brand-black">
+                  <td
+                    className="whitespace-nowrap px-5 py-4 font-semibold text-brand-black"
+                    style={grupoNota ? { boxShadow: `inset 4px 0 0 0 ${grupoNota.cor}` } : undefined}
+                  >
                     {formatDataBR(d.data)}
                   </td>
                   <td className="px-5 py-4">
@@ -452,6 +487,14 @@ export default async function DespesasPage({
                           <p className="mt-1 text-[11px] font-bold text-brand-red">
                             Clique para ver detalhes
                           </p>
+                          {grupoNota && (
+                            <p
+                              className="mt-1.5 inline-flex w-fit items-center gap-1 rounded-full px-2 py-0.5 text-[10px] font-extrabold"
+                              style={{ background: `${grupoNota.cor}1a`, color: grupoNota.cor }}
+                            >
+                              🧾 Mesma nota · {grupoNota.indice}/{grupoNota.total}
+                            </p>
+                          )}
                         </div>
                       </div>
                     </OpenDespesaModalButton>
