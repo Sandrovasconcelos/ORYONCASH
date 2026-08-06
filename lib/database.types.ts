@@ -267,6 +267,8 @@ export interface Database {
           banco: string | null;
           agencia: string | null;
           numero: string | null;
+          titular: string | null;
+          documento: string | null;
           saldo_inicial: number;
           created_at: string;
           deleted_at: string | null;
@@ -279,6 +281,8 @@ export interface Database {
           banco?: string | null;
           agencia?: string | null;
           numero?: string | null;
+          titular?: string | null;
+          documento?: string | null;
           saldo_inicial?: number;
           created_at?: string;
           deleted_at?: string | null;

@@ -489,12 +489,16 @@ export function calcularCurvaS(
 export type ContaOrigemExtraida = {
   banco: string | null;
   numero: string | null;
+  titular?: string | null;
+  documento?: string | null;
 };
 
 export type ContaBancariaCadastrada = {
   id: string;
   banco: string | null;
   numero: string | null;
+  titular?: string | null;
+  documento?: string | null;
 };
 
 function normalizarTextoConta(texto: string): string {
@@ -509,35 +513,66 @@ function normalizarNumeroConta(numero: string): string {
   return numero.replace(/\D/g, "");
 }
 
+function unicaCorrespondencia(candidatos: ContaBancariaCadastrada[]): string | null {
+  return candidatos.length === 1 ? candidatos[0].id : null;
+}
+
 /**
  * So vincula automaticamente quando ha exatamente uma conta cadastrada que
- * bate com o que foi extraido do comprovante (numero da conta, ou banco
- * como fallback mais fraco). Ambiguo ou sem nenhuma batida => null, fica
+ * bate com o que foi extraido do comprovante. Testa os sinais do mais forte
+ * pro mais fraco - documento (CNPJ/CPF do titular) > titular > numero da
+ * conta > banco - e para no primeiro sinal que teve alguma batida (unica =
+ * vincula, mais de uma = ambiguo, fica sem conta). Isso importa porque duas
+ * contas cadastradas podem ser do mesmo banco (ex: duas contas Caixa), e
+ * nesse caso o nome do banco sozinho nunca decide - precisa do titular ou
+ * documento pra diferenciar. Ambiguo ou sem nenhuma batida => null, fica
  * pendente de atribuicao manual no dashboard (nunca adivinha).
  */
 export function encontrarContaBancariaCorrespondente(
   origem: ContaOrigemExtraida,
   contas: ContaBancariaCadastrada[]
 ): string | null {
-  const bancoExtraido = origem.banco ? normalizarTextoConta(origem.banco) : null;
+  const documentoExtraido = origem.documento ? normalizarNumeroConta(origem.documento) : null;
+  const titularExtraido = origem.titular ? normalizarTextoConta(origem.titular) : null;
   const numeroExtraido = origem.numero ? normalizarNumeroConta(origem.numero) : null;
-  if (!bancoExtraido && !numeroExtraido) return null;
+  const bancoExtraido = origem.banco ? normalizarTextoConta(origem.banco) : null;
 
-  const candidatos = contas.filter((conta) => {
-    const numeroConta = conta.numero ? normalizarNumeroConta(conta.numero) : null;
-    const bancoConta = conta.banco ? normalizarTextoConta(conta.banco) : null;
+  if (!documentoExtraido && !titularExtraido && !numeroExtraido && !bancoExtraido) return null;
 
-    const numeroBate = Boolean(
-      numeroExtraido && numeroConta && numeroExtraido === numeroConta
+  if (documentoExtraido) {
+    const porDocumento = contas.filter(
+      (conta) => conta.documento && normalizarNumeroConta(conta.documento) === documentoExtraido
     );
-    const bancoBate = Boolean(
-      bancoExtraido &&
-        bancoConta &&
-        (bancoConta.includes(bancoExtraido) || bancoExtraido.includes(bancoConta))
+    if (porDocumento.length > 0) return unicaCorrespondencia(porDocumento);
+  }
+
+  if (titularExtraido) {
+    const porTitular = contas.filter((conta) => {
+      const titularConta = conta.titular ? normalizarTextoConta(conta.titular) : null;
+      return Boolean(
+        titularConta &&
+          (titularConta.includes(titularExtraido) || titularExtraido.includes(titularConta))
+      );
+    });
+    if (porTitular.length > 0) return unicaCorrespondencia(porTitular);
+  }
+
+  if (numeroExtraido) {
+    const porNumero = contas.filter(
+      (conta) => conta.numero && normalizarNumeroConta(conta.numero) === numeroExtraido
     );
+    if (porNumero.length > 0) return unicaCorrespondencia(porNumero);
+  }
 
-    return numeroBate || bancoBate;
-  });
+  if (bancoExtraido) {
+    const porBanco = contas.filter((conta) => {
+      const bancoConta = conta.banco ? normalizarTextoConta(conta.banco) : null;
+      return Boolean(
+        bancoConta && (bancoConta.includes(bancoExtraido) || bancoExtraido.includes(bancoConta))
+      );
+    });
+    return unicaCorrespondencia(porBanco);
+  }
 
-  return candidatos.length === 1 ? candidatos[0].id : null;
+  return null;
 }

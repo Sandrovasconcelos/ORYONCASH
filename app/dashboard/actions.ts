@@ -2298,15 +2298,21 @@ export async function createContaBancariaAction(formData: FormData) {
   const banco = String(formData.get("banco") ?? "").trim() || null;
   const agencia = String(formData.get("agencia") ?? "").trim() || null;
   const numero = String(formData.get("numero") ?? "").trim() || null;
+  const titular = String(formData.get("titular") ?? "").trim() || null;
+  const documento = String(formData.get("documento") ?? "").trim() || null;
   const saldoInicial = parseValorBR(String(formData.get("saldo_inicial") ?? "0")) ?? 0;
   if (!nome) return;
 
   const supabase = await createClient();
-  const { data: conta } = await supabase
-    .from("contas_bancarias")
-    .insert({ nome, banco, agencia, numero, saldo_inicial: saldoInicial })
-    .select("id")
-    .single();
+  const dados = { nome, banco, agencia, numero, titular, documento, saldo_inicial: saldoInicial };
+  let { data: conta, error } = await supabase.from("contas_bancarias").insert(dados).select("id").single();
+  if (error?.message.toLowerCase().includes("titular") || error?.message.toLowerCase().includes("documento")) {
+    ({ data: conta } = await supabase
+      .from("contas_bancarias")
+      .insert({ nome, banco, agencia, numero, saldo_inicial: saldoInicial })
+      .select("id")
+      .single());
+  }
 
   const autorNome = await getAutorNomeDashboard();
   await registrarAtividade({
@@ -2316,7 +2322,7 @@ export async function createContaBancariaAction(formData: FormData) {
     origem: "dashboard",
     autorNome,
     resumo: `Conta bancária "${nome}" cadastrada por ${autorNome}`,
-    dadosDepois: { nome, banco, agencia, numero, saldoInicial },
+    dadosDepois: { nome, banco, agencia, numero, titular, documento, saldoInicial },
   });
 
   revalidatePath("/dashboard/contas");
@@ -2328,6 +2334,8 @@ export async function updateContaBancariaAction(formData: FormData) {
   const banco = String(formData.get("banco") ?? "").trim() || null;
   const agencia = String(formData.get("agencia") ?? "").trim() || null;
   const numero = String(formData.get("numero") ?? "").trim() || null;
+  const titular = String(formData.get("titular") ?? "").trim() || null;
+  const documento = String(formData.get("documento") ?? "").trim() || null;
   const saldoInicial = parseValorBR(String(formData.get("saldo_inicial") ?? "0")) ?? 0;
   if (!id || !nome) return;
 
@@ -2338,8 +2346,17 @@ export async function updateContaBancariaAction(formData: FormData) {
     .eq("id", id)
     .maybeSingle();
 
-  const depois = { nome, banco, agencia, numero, saldo_inicial: saldoInicial };
-  await supabase.from("contas_bancarias").update(depois).eq("id", id);
+  const depois = { nome, banco, agencia, numero, titular, documento, saldo_inicial: saldoInicial };
+  const { error: updateError } = await supabase.from("contas_bancarias").update(depois).eq("id", id);
+  if (
+    updateError?.message.toLowerCase().includes("titular") ||
+    updateError?.message.toLowerCase().includes("documento")
+  ) {
+    const { titular: _t, documento: _d, ...depoisSemNovosCampos } = depois;
+    void _t;
+    void _d;
+    await supabase.from("contas_bancarias").update(depoisSemNovosCampos).eq("id", id);
+  }
 
   const autorNome = await getAutorNomeDashboard();
   await registrarAtividade({

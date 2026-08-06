@@ -14,11 +14,18 @@ export const dynamic = "force-dynamic";
 export default async function ContasBancariasPage() {
   const supabase = createAdminClient();
 
-  const contasQuery = await supabase
+  const contasCompleta = await supabase
     .from("contas_bancarias")
-    .select("id, nome, banco, agencia, numero, saldo_inicial")
+    .select("id, nome, banco, agencia, numero, titular, documento, saldo_inicial")
     .is("deleted_at", null)
     .order("nome");
+  const contasQuery = contasCompleta.error
+    ? await supabase
+        .from("contas_bancarias")
+        .select("id, nome, banco, agencia, numero, saldo_inicial")
+        .is("deleted_at", null)
+        .order("nome")
+    : contasCompleta;
 
   const moduloIndisponivel = Boolean(contasQuery.error);
 
@@ -67,19 +74,19 @@ export default async function ContasBancariasPage() {
         </div>
         <CadastroModal
           titulo="Nova conta bancária"
-          descricao="Banco e número servem pra reconhecer automaticamente comprovantes do WhatsApp."
+          descricao="Titular e documento são o que diferencia contas do mesmo banco ao reconhecer comprovantes do WhatsApp automaticamente."
           botao="+ Nova conta"
           variante="primario"
         >
           <form action={createContaBancariaAction} className="flex flex-col gap-4">
             <label className="flex flex-col gap-1 text-sm text-brand-gray-700">
               Nome (apelido)
-              <input name="nome" required placeholder="Ex: Banco do Brasil - CC Oryon" className="oc-input" />
+              <input name="nome" required placeholder="Ex: Caixa - Oryon" className="oc-input" />
             </label>
             <div className="grid grid-cols-2 gap-3">
               <label className="flex flex-col gap-1 text-sm text-brand-gray-700">
                 Banco
-                <input name="banco" placeholder="Ex: Banco do Brasil" className="oc-input" />
+                <input name="banco" placeholder="Ex: Caixa Econômica Federal" className="oc-input" />
               </label>
               <label className="flex flex-col gap-1 text-sm text-brand-gray-700">
                 Agência
@@ -89,6 +96,14 @@ export default async function ContasBancariasPage() {
             <label className="flex flex-col gap-1 text-sm text-brand-gray-700">
               Número da conta
               <input name="numero" className="oc-input" />
+            </label>
+            <label className="flex flex-col gap-1 text-sm text-brand-gray-700">
+              Titular (como aparece no comprovante)
+              <input name="titular" placeholder="Ex: Oryon Construção e E. Ltda" className="oc-input" />
+            </label>
+            <label className="flex flex-col gap-1 text-sm text-brand-gray-700">
+              CNPJ/CPF do titular
+              <input name="documento" placeholder="Só números" className="oc-input" />
             </label>
             <label className="flex flex-col gap-1 text-sm text-brand-gray-700">
               Saldo inicial
@@ -108,6 +123,7 @@ export default async function ContasBancariasPage() {
               <tr>
                 <th>Conta</th>
                 <th>Banco</th>
+                <th>Titular</th>
                 <th>Agência / Número</th>
                 <th className="text-right">Saldo inicial</th>
                 <th className="text-right">Pago</th>
@@ -117,12 +133,22 @@ export default async function ContasBancariasPage() {
             </thead>
             <tbody>
               {contas.map((conta) => {
+                const contaInfo = conta as unknown as {
+                  titular: string | null;
+                  documento: string | null;
+                };
                 const pago = gastoPorConta.get(conta.id) ?? 0;
                 const saldoAtual = Number(conta.saldo_inicial) - pago;
                 return (
                   <tr key={conta.id}>
                     <td className="font-semibold text-brand-black">{conta.nome}</td>
                     <td className="text-brand-gray-700">{conta.banco || "—"}</td>
+                    <td className="text-brand-gray-700">
+                      <p>{contaInfo.titular || "—"}</p>
+                      {contaInfo.documento && (
+                        <p className="text-[11px] text-brand-gray-500">{contaInfo.documento}</p>
+                      )}
+                    </td>
                     <td className="text-brand-gray-700">
                       {conta.agencia || "—"} / {conta.numero || "—"}
                     </td>
@@ -165,6 +191,14 @@ export default async function ContasBancariasPage() {
                               <input name="numero" defaultValue={conta.numero ?? ""} className="oc-input" />
                             </label>
                             <label className="flex flex-col gap-1 text-sm text-brand-gray-700">
+                              Titular (como aparece no comprovante)
+                              <input name="titular" defaultValue={contaInfo.titular ?? ""} className="oc-input" />
+                            </label>
+                            <label className="flex flex-col gap-1 text-sm text-brand-gray-700">
+                              CNPJ/CPF do titular
+                              <input name="documento" defaultValue={contaInfo.documento ?? ""} className="oc-input" />
+                            </label>
+                            <label className="flex flex-col gap-1 text-sm text-brand-gray-700">
                               Saldo inicial
                               <input
                                 name="saldo_inicial"
@@ -194,7 +228,7 @@ export default async function ContasBancariasPage() {
 
               {contas.length === 0 && (
                 <tr>
-                  <td colSpan={7} className="oc-empty">
+                  <td colSpan={8} className="oc-empty">
                     Nenhuma conta bancária cadastrada ainda.
                   </td>
                 </tr>

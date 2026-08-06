@@ -231,7 +231,9 @@ export async function vincularComprovanteDespesa(input: {
     await tentarVincularContaBancaria(
       input.despesaId,
       input.comprovante.contaOrigemBanco ?? null,
-      input.comprovante.contaOrigemNumero ?? null
+      input.comprovante.contaOrigemNumero ?? null,
+      input.comprovante.contaOrigemTitular ?? null,
+      input.comprovante.contaOrigemDocumento ?? null
     );
   }
 }
@@ -245,19 +247,25 @@ export async function vincularComprovanteDespesa(input: {
 async function tentarVincularContaBancaria(
   despesaId: string,
   banco: string | null,
-  numero: string | null
+  numero: string | null,
+  titular: string | null,
+  documento: string | null
 ) {
-  if (!banco && !numero) return;
+  if (!banco && !numero && !titular && !documento) return;
 
   try {
     const supabase = createAdminClient();
-    const { data: contas, error } = await supabase
+    const completa = await supabase
       .from("contas_bancarias")
-      .select("id, banco, numero")
+      .select("id, banco, numero, titular, documento")
       .is("deleted_at", null);
+    // titular/documento podem ainda nao existir se a migration nao rodou.
+    const { data: contas, error } = completa.error
+      ? await supabase.from("contas_bancarias").select("id, banco, numero").is("deleted_at", null)
+      : completa;
     if (error || !contas || contas.length === 0) return;
 
-    const contaId = encontrarContaBancariaCorrespondente({ banco, numero }, contas);
+    const contaId = encontrarContaBancariaCorrespondente({ banco, numero, titular, documento }, contas);
     if (!contaId) return;
 
     await supabase
