@@ -3,7 +3,7 @@ import { formatBRL } from "@/lib/conversation/format";
 import { hojeNoBrasil } from "@/lib/conversation/queries";
 import { calcularCurvaS } from "@/lib/dashboard/queries";
 import {
-  apagarMedicaoPreparadaAction,
+  apagarMedicaoAction,
   aplicarCronogramaTemplateAction,
   aprovarMedicaoAction,
   atualizarProgressoEtapaAction,
@@ -1027,23 +1027,12 @@ export default async function CronogramaPage({
                         </CadastroModal>
 
                         {medicao.status === "preparada" && (
-                          <>
-                            <form action={apagarMedicaoPreparadaAction}>
-                              <input type="hidden" name="id" value={medicao.id} />
-                              <button
-                                type="submit"
-                                className="rounded-brand-sm border border-status-danger/30 px-3 py-1.5 text-xs font-bold text-status-danger hover:bg-status-danger/10"
-                              >
-                                Apagar
-                              </button>
-                            </form>
-                            <form action={aprovarMedicaoAction}>
-                              <input type="hidden" name="id" value={medicao.id} />
-                              <button type="submit" className="oc-button oc-button-primary py-1.5 text-xs">
-                                Aprovar
-                              </button>
-                            </form>
-                          </>
+                          <form action={aprovarMedicaoAction}>
+                            <input type="hidden" name="id" value={medicao.id} />
+                            <button type="submit" className="oc-button oc-button-primary py-1.5 text-xs">
+                              Aprovar
+                            </button>
+                          </form>
                         )}
                         {medicao.status === "aprovada" && (
                           <form action={registrarPagamentoMedicaoAction}>
@@ -1058,6 +1047,18 @@ export default async function CronogramaPage({
                             Paga em {medicao.pago_em ? formatDataBR(medicao.pago_em.slice(0, 10)) : "—"}
                           </span>
                         )}
+                        <DeleteCadastroButton
+                          id={medicao.id}
+                          nome={`Medição de ${formatBRL(medicao.valor_total)}`}
+                          entidade="Medição"
+                          usadoEm={medicao.status === "paga" ? 1 : 0}
+                          detalhesUso={
+                            medicao.status === "paga"
+                              ? "Já está paga — apagar também manda a despesa gerada por ela para a lixeira."
+                              : undefined
+                          }
+                          action={apagarMedicaoAction}
+                        />
                       </div>
                     </td>
                   </tr>

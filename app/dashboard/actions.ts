@@ -1693,7 +1693,7 @@ export async function updateMedicaoAction(formData: FormData) {
   revalidatePath("/dashboard/cronograma");
 }
 
-export async function apagarMedicaoPreparadaAction(formData: FormData) {
+export async function apagarMedicaoAction(formData: FormData) {
   const medicaoId = String(formData.get("id") ?? "");
   if (!medicaoId) return;
 
@@ -1702,21 +1702,52 @@ export async function apagarMedicaoPreparadaAction(formData: FormData) {
     .from("medicoes")
     .select("obra_id, status, valor_total")
     .eq("id", medicaoId)
-    .eq("status", "preparada")
     .maybeSingle();
   if (!medicao) return;
 
-  await supabase.from("medicoes").delete().eq("id", medicaoId).eq("status", "preparada");
-
   const autorNome = await getAutorNomeDashboard();
+  let despesasEstornadas = 0;
+
+  if (medicao.status === "paga") {
+    const { data: itens } = await supabase
+      .from("medicao_itens")
+      .select("despesa_id")
+      .eq("medicao_id", medicaoId);
+
+    for (const item of itens ?? []) {
+      if (!item.despesa_id) continue;
+      await supabase
+        .from("despesas")
+        .update({
+          deleted_at: new Date().toISOString(),
+          deleted_by: autorNome,
+          deleted_reason: "Medição que gerou este lançamento foi apagada",
+        })
+        .eq("id", item.despesa_id);
+      despesasEstornadas += 1;
+    }
+  }
+
+  await supabase.from("medicoes").delete().eq("id", medicaoId);
+
+  const statusLabel =
+    medicao.status === "paga" ? "paga" : medicao.status === "aprovada" ? "aprovada" : "preparada";
   await registrarAtividade({
     tipo: "exclusao",
     entidade: "obra",
     entidadeId: medicao.obra_id,
     origem: "dashboard",
     autorNome,
-    resumo: `Medição preparada (${formatBRL(Number(medicao.valor_total))}) apagada por ${autorNome}`,
+    resumo:
+      `Medição ${statusLabel} (${formatBRL(Number(medicao.valor_total))}) apagada por ${autorNome}` +
+      (despesasEstornadas > 0
+        ? ` — ${despesasEstornadas} despesa(s) gerada(s) enviada(s) para a lixeira`
+        : ""),
   });
+
+  revalidatePath("/dashboard/despesas");
+  revalidatePath("/dashboard/lixeira");
+  revalidatePath("/dashboard");
 
   revalidatePath("/dashboard/cronograma");
 }

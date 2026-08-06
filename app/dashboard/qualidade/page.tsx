@@ -1,4 +1,6 @@
+import Link from "next/link";
 import { createAdminClient } from "@/lib/supabase/admin";
+import { formatBRL } from "@/lib/conversation/format";
 import {
   createChecklistItemAction,
   createChecklistTemplateAction,
@@ -66,6 +68,7 @@ export default async function QualidadePage({
   const listaFornecedores = fornecedores ?? [];
 
   let etapas: EtapaQualidade[] = [];
+  const pagoPorEtapa = new Map<string, { percentual: number; valor: number }>();
   if (obraAtual && !moduloIndisponivel) {
     const { data } = await supabase
       .from("etapas")
@@ -73,6 +76,24 @@ export default async function QualidadePage({
       .eq("obra_id", obraAtual.id)
       .order("ordem");
     etapas = (data ?? []) as EtapaQualidade[];
+
+    if (etapas.length > 0) {
+      const { data: itensPagos } = await supabase
+        .from("medicao_itens")
+        .select("etapa_id, percentual_medido, valor_medido, medicoes!inner(status)")
+        .in(
+          "etapa_id",
+          etapas.map((e) => e.id)
+        )
+        .eq("medicoes.status", "paga");
+
+      for (const item of itensPagos ?? []) {
+        const atual = pagoPorEtapa.get(item.etapa_id) ?? { percentual: 0, valor: 0 };
+        atual.percentual += Number(item.percentual_medido);
+        atual.valor += Number(item.valor_medido);
+        pagoPorEtapa.set(item.etapa_id, atual);
+      }
+    }
   }
 
   const nomesFornecedor = new Map(listaFornecedores.map((f) => [f.id, f.nome]));
@@ -114,6 +135,7 @@ export default async function QualidadePage({
                 <th>Fornecedor responsável</th>
                 <th>Checklist vinculado</th>
                 <th>Situação</th>
+                <th>Pago</th>
                 <th className="text-right">Ações</th>
               </tr>
             </thead>
@@ -123,6 +145,14 @@ export default async function QualidadePage({
                 const template = etapa.checklist_template_id
                   ? templatesPorId.get(etapa.checklist_template_id)
                   : null;
+                const pago = pagoPorEtapa.get(etapa.id) ?? { percentual: 0, valor: 0 };
+                const pagoPercentual = Math.round(pago.percentual);
+                const pagoClasse =
+                  pagoPercentual >= 100
+                    ? "bg-[#e9f8f0] text-status-success"
+                    : pagoPercentual > 0
+                      ? "bg-status-warning/15 text-status-warning"
+                      : "bg-brand-gray-100 text-brand-gray-700";
 
                 return (
                   <tr key={etapa.id}>
@@ -135,6 +165,22 @@ export default async function QualidadePage({
                       <span className={`inline-flex rounded-full px-3 py-1 text-xs font-bold ${situacao.classe}`}>
                         {situacao.texto}
                       </span>
+                    </td>
+                    <td>
+                      <div className="flex flex-col gap-1">
+                        <span className={`inline-flex w-fit rounded-full px-3 py-1 text-xs font-bold ${pagoClasse}`}>
+                          {pagoPercentual}% pago
+                        </span>
+                        {pago.valor > 0 && (
+                          <span className="text-[11px] text-brand-gray-500">{formatBRL(pago.valor)}</span>
+                        )}
+                        <Link
+                          href={`/dashboard/cronograma?obra=${obraAtual.id}`}
+                          className="text-[11px] font-bold text-brand-red hover:underline"
+                        >
+                          Ver medições →
+                        </Link>
+                      </div>
                     </td>
                     <td>
                       <div className="flex items-center justify-end gap-2">
@@ -263,7 +309,7 @@ export default async function QualidadePage({
 
               {etapas.length === 0 && (
                 <tr>
-                  <td colSpan={5} className="oc-empty">
+                  <td colSpan={6} className="oc-empty">
                     Nenhuma etapa cadastrada para esta obra.
                   </td>
                 </tr>
