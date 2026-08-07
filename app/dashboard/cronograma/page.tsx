@@ -172,16 +172,22 @@ export default async function CronogramaPage({
 
   let medicoes: Medicao[] = [];
   let itensPorMedicao = new Map<string, MedicaoItem[]>();
-  let despesasObra: { valor: number; data: string; fornecedor_id: string | null }[] = [];
+  let despesasObra: {
+    valor: number;
+    data: string;
+    fornecedor_id: string | null;
+    etapa_id: string | null;
+  }[] = [];
   let contratosObra: {
     id: string;
     obra_id: string;
     fornecedor_id: string;
+    etapa_id: string | null;
     descricao: string | null;
     valor_contrato: number;
   }[] = [];
   if (obraAtual) {
-    const [{ data: medicoesData }, { data: despesasData }, { data: contratosData }] = await Promise.all([
+    const [{ data: medicoesData }, { data: despesasData }, contratosQuery] = await Promise.all([
       supabase
         .from("medicoes")
         .select(
@@ -192,19 +198,32 @@ export default async function CronogramaPage({
         .order("created_at", { ascending: false }),
       supabase
         .from("despesas")
-        .select("valor, data, fornecedor_id")
+        .select("valor, data, fornecedor_id, etapa_id")
         .eq("obra_id", obraAtual.id)
         .is("deleted_at", null),
-      supabase
-        .from("contratos_fornecedor")
-        .select("id, obra_id, fornecedor_id, descricao, valor_contrato")
-        .eq("obra_id", obraAtual.id)
-        .is("deleted_at", null)
-        .order("created_at", { ascending: false }),
+      (async () => {
+        const completa = await supabase
+          .from("contratos_fornecedor")
+          .select("id, obra_id, fornecedor_id, etapa_id, descricao, valor_contrato")
+          .eq("obra_id", obraAtual.id)
+          .is("deleted_at", null)
+          .order("created_at", { ascending: false });
+        if (!completa.error) return completa;
+        // etapa_id pode ainda nao existir se a migration nao rodou.
+        return supabase
+          .from("contratos_fornecedor")
+          .select("id, obra_id, fornecedor_id, descricao, valor_contrato")
+          .eq("obra_id", obraAtual.id)
+          .is("deleted_at", null)
+          .order("created_at", { ascending: false });
+      })(),
     ]);
     medicoes = (medicoesData ?? []) as Medicao[];
     despesasObra = despesasData ?? [];
-    contratosObra = contratosData ?? [];
+    contratosObra = (contratosQuery.data ?? []).map((c) => ({
+      ...c,
+      etapa_id: (c as { etapa_id?: string | null }).etapa_id ?? null,
+    }));
 
     if (medicoes.length > 0) {
       const { data: itensData } = await supabase
@@ -226,9 +245,24 @@ export default async function CronogramaPage({
   const categoriasPorId = new Map(listaCategorias.map((c) => [c.id, c.nome]));
 
   const pagoPorFornecedor = new Map<string, number>();
+  const pagoPorFornecedorEEtapa = new Map<string, number>();
   for (const d of despesasObra) {
     if (!d.fornecedor_id) continue;
     pagoPorFornecedor.set(d.fornecedor_id, (pagoPorFornecedor.get(d.fornecedor_id) ?? 0) + d.valor);
+    if (d.etapa_id) {
+      const chave = `${d.fornecedor_id}::${d.etapa_id}`;
+      pagoPorFornecedorEEtapa.set(chave, (pagoPorFornecedorEEtapa.get(chave) ?? 0) + d.valor);
+    }
+  }
+
+  // Contrato escopado a uma etapa (jose/pintura) so soma despesas daquela
+  // etapa; contrato geral (sem etapa_id) mantem o comportamento antigo de
+  // somar todas as despesas do fornecedor na obra.
+  function pagoDoContrato(contrato: { fornecedor_id: string; etapa_id: string | null }): number {
+    if (contrato.etapa_id) {
+      return pagoPorFornecedorEEtapa.get(`${contrato.fornecedor_id}::${contrato.etapa_id}`) ?? 0;
+    }
+    return pagoPorFornecedor.get(contrato.fornecedor_id) ?? 0;
   }
 
   const orcamentoTotalObra = Number(obraAtual?.orcamento_total ?? 0);
@@ -589,12 +623,13 @@ export default async function CronogramaPage({
           <div>
             <p className="text-sm font-semibold text-brand-black">Contratos de fornecedores</p>
             <p className="mt-1 text-xs text-brand-gray-500">
-              Valor contratado x já pago (soma de todas as despesas do fornecedor nesta obra).
+              Valor contratado x já pago. Escopado a uma etapa, soma só as despesas daquela etapa;
+              sem etapa, soma todas as despesas do fornecedor nesta obra.
             </p>
           </div>
           <CadastroModal
             titulo="Novo contrato de fornecedor"
-            descricao="Ex: Mão de obra — Alex, R$ 315.000,00."
+            descricao="Ex: Pintura — José, R$ 12.000,00."
             botao="+ Novo contrato"
             variante="primario"
           >
@@ -607,6 +642,17 @@ export default async function CronogramaPage({
                   {listaFornecedores.map((f) => (
                     <option key={f.id} value={f.id}>
                       {f.nome}
+                    </option>
+                  ))}
+                </select>
+              </label>
+              <label className="flex flex-col gap-1 text-sm text-brand-gray-700">
+                Etapa (opcional)
+                <select name="etapa_id" className="oc-input" defaultValue="">
+                  <option value="">Nenhuma etapa específica (contrato geral)</option>
+                  {etapas.map((e) => (
+                    <option key={e.id} value={e.id}>
+                      {e.nome}
                     </option>
                   ))}
                 </select>
@@ -627,10 +673,11 @@ export default async function CronogramaPage({
         </div>
 
         <div className="overflow-x-auto">
-          <table className="oc-table min-w-[760px]">
+          <table className="oc-table min-w-[860px]">
             <thead>
               <tr>
                 <th>Fornecedor</th>
+                <th>Etapa</th>
                 <th>Descrição</th>
                 <th className="text-right">Contrato</th>
                 <th className="text-right">Pago</th>
@@ -641,7 +688,7 @@ export default async function CronogramaPage({
             </thead>
             <tbody>
               {contratosObra.map((contrato) => {
-                const pago = pagoPorFornecedor.get(contrato.fornecedor_id) ?? 0;
+                const pago = pagoDoContrato(contrato);
                 const saldo = contrato.valor_contrato - pago;
                 const percentual =
                   contrato.valor_contrato > 0
@@ -652,6 +699,15 @@ export default async function CronogramaPage({
                   <tr key={contrato.id}>
                     <td className="font-semibold text-brand-black">
                       {nomesFornecedor.get(contrato.fornecedor_id) ?? "—"}
+                    </td>
+                    <td className="text-brand-gray-700">
+                      {contrato.etapa_id ? (
+                        nomesEtapa.get(contrato.etapa_id) ?? "—"
+                      ) : (
+                        <span className="inline-flex w-fit rounded-full bg-brand-gray-100 px-2 py-0.5 text-[11px] font-bold text-brand-gray-500">
+                          Geral
+                        </span>
+                      )}
                     </td>
                     <td className="text-brand-gray-700">{contrato.descricao || "—"}</td>
                     <td className="text-right text-brand-gray-700">{formatBRL(contrato.valor_contrato)}</td>
@@ -697,6 +753,21 @@ export default async function CronogramaPage({
                               </select>
                             </label>
                             <label className="flex flex-col gap-1 text-sm text-brand-gray-700">
+                              Etapa (opcional)
+                              <select
+                                name="etapa_id"
+                                defaultValue={contrato.etapa_id ?? ""}
+                                className="oc-input"
+                              >
+                                <option value="">Nenhuma etapa específica (contrato geral)</option>
+                                {etapas.map((e) => (
+                                  <option key={e.id} value={e.id}>
+                                    {e.nome}
+                                  </option>
+                                ))}
+                              </select>
+                            </label>
+                            <label className="flex flex-col gap-1 text-sm text-brand-gray-700">
                               Descrição
                               <input
                                 name="descricao"
@@ -735,7 +806,7 @@ export default async function CronogramaPage({
 
               {contratosObra.length === 0 && (
                 <tr>
-                  <td colSpan={7} className="oc-empty">
+                  <td colSpan={8} className="oc-empty">
                     Nenhum contrato cadastrado pra esta obra ainda.
                   </td>
                 </tr>

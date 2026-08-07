@@ -70,6 +70,7 @@ export default async function QualidadePage({
 
   let etapas: EtapaQualidade[] = [];
   const pagoPorEtapa = new Map<string, { percentual: number; valor: number }>();
+  const contratoPorEtapa = new Map<string, { descricao: string | null; valorContrato: number }>();
   if (obraAtual && !moduloIndisponivel) {
     const { data } = await supabase
       .from("etapas")
@@ -93,6 +94,23 @@ export default async function QualidadePage({
         atual.percentual += Number(item.percentual_medido);
         atual.valor += Number(item.valor_medido);
         pagoPorEtapa.set(item.etapa_id, atual);
+      }
+
+      // Contratos escopados a uma etapa especifica - so pra mostrar o link
+      // visual etapa -> contrato aqui na Qualidade. Se a coluna etapa_id
+      // ainda nao existir (migration nao aplicada), ignora silenciosamente.
+      const { data: contratosEtapa } = await supabase
+        .from("contratos_fornecedor")
+        .select("etapa_id, descricao, valor_contrato")
+        .eq("obra_id", obraAtual.id)
+        .is("deleted_at", null)
+        .not("etapa_id", "is", null);
+      for (const contrato of (contratosEtapa ?? []) as { etapa_id: string | null; descricao: string | null; valor_contrato: number }[]) {
+        if (!contrato.etapa_id) continue;
+        contratoPorEtapa.set(contrato.etapa_id, {
+          descricao: contrato.descricao,
+          valorContrato: Number(contrato.valor_contrato),
+        });
       }
     }
   }
@@ -154,12 +172,18 @@ export default async function QualidadePage({
                     : pagoPercentual > 0
                       ? "bg-status-warning/15 text-status-warning"
                       : "bg-brand-gray-100 text-brand-gray-700";
+                const contrato = contratoPorEtapa.get(etapa.id);
 
                 return (
                   <tr key={etapa.id}>
                     <td className="font-semibold text-brand-black">{etapa.nome}</td>
                     <td className="text-brand-gray-700">
-                      {etapa.fornecedor_id ? nomesFornecedor.get(etapa.fornecedor_id) ?? "—" : "—"}
+                      <p>{etapa.fornecedor_id ? nomesFornecedor.get(etapa.fornecedor_id) ?? "—" : "—"}</p>
+                      {contrato && (
+                        <p className="mt-1 text-[11px] font-bold text-brand-red">
+                          📄 Contrato: {formatBRL(contrato.valorContrato)}
+                        </p>
+                      )}
                     </td>
                     <td className="text-brand-gray-700">{template?.nome ?? "Nenhum"}</td>
                     <td>

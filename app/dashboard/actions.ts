@@ -2198,6 +2198,7 @@ export async function atualizarStatusAtividadeAction(formData: FormData) {
 export async function createContratoFornecedorAction(formData: FormData) {
   const obraId = String(formData.get("obra_id") ?? "");
   const fornecedorId = String(formData.get("fornecedor_id") ?? "");
+  const etapaId = String(formData.get("etapa_id") ?? "").trim() || null;
   const descricao = String(formData.get("descricao") ?? "").trim() || null;
   const valorContrato = parseValorBR(String(formData.get("valor_contrato") ?? "0")) ?? 0;
   if (!obraId || !fornecedorId) return;
@@ -2208,6 +2209,7 @@ export async function createContratoFornecedorAction(formData: FormData) {
     .insert({
       obra_id: obraId,
       fornecedor_id: fornecedorId,
+      etapa_id: etapaId,
       descricao,
       valor_contrato: valorContrato,
     })
@@ -2222,7 +2224,7 @@ export async function createContratoFornecedorAction(formData: FormData) {
     origem: "dashboard",
     autorNome,
     resumo: `Contrato de fornecedor cadastrado (${formatBRL(valorContrato)}) por ${autorNome}`,
-    dadosDepois: { id: contrato?.id, fornecedorId, descricao, valorContrato },
+    dadosDepois: { id: contrato?.id, fornecedorId, etapaId, descricao, valorContrato },
   });
 
   revalidatePath("/dashboard/cronograma");
@@ -2231,6 +2233,7 @@ export async function createContratoFornecedorAction(formData: FormData) {
 export async function updateContratoFornecedorAction(formData: FormData) {
   const id = String(formData.get("id") ?? "");
   const fornecedorId = String(formData.get("fornecedor_id") ?? "");
+  const etapaId = String(formData.get("etapa_id") ?? "").trim() || null;
   const descricao = String(formData.get("descricao") ?? "").trim() || null;
   const valorContrato = parseValorBR(String(formData.get("valor_contrato") ?? "0")) ?? 0;
   if (!id || !fornecedorId) return;
@@ -2242,7 +2245,7 @@ export async function updateContratoFornecedorAction(formData: FormData) {
     .eq("id", id)
     .maybeSingle();
 
-  const depois = { fornecedor_id: fornecedorId, descricao, valor_contrato: valorContrato };
+  const depois = { fornecedor_id: fornecedorId, etapa_id: etapaId, descricao, valor_contrato: valorContrato };
   await supabase.from("contratos_fornecedor").update(depois).eq("id", id);
 
   const autorNome = await getAutorNomeDashboard();
