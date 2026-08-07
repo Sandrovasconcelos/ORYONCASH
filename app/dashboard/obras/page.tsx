@@ -16,6 +16,7 @@ import { CadastroModal } from "../cadastro-modal";
 import { DeleteCadastroButton } from "../delete-cadastro-button";
 import { ActionIcon } from "../action-icon";
 import { ImportarOrcamentoForm } from "./importar-orcamento-form";
+import { SubmitButton } from "../submit-button";
 import {
   MoveObraToTrashButton,
   PermanentlyDeleteObraButton,
@@ -157,12 +158,9 @@ export default async function ObrasPage() {
                   className="rounded-brand-sm border border-brand-gray-300 bg-white px-3 py-2 text-sm outline-none focus:border-brand-red"
                 />
               </label>
-              <button
-                type="submit"
-                className="rounded-brand-sm bg-brand-red px-4 py-2 text-sm font-semibold text-white hover:bg-brand-red-700"
-              >
+              <SubmitButton className="rounded-brand-sm bg-brand-red px-4 py-2 text-sm font-semibold text-white hover:bg-brand-red-700">
                 Salvar obra
-              </button>
+              </SubmitButton>
             </form>
           </CadastroModal>
         </div>
@@ -281,12 +279,9 @@ export default async function ObrasPage() {
                                   <option value="concluida">Concluída</option>
                                 </select>
                               </label>
-                              <button
-                                type="submit"
-                                className="rounded-brand-sm bg-brand-red px-4 py-2 text-sm font-semibold text-white hover:bg-brand-red-700"
-                              >
+                              <SubmitButton className="rounded-brand-sm bg-brand-red px-4 py-2 text-sm font-semibold text-white hover:bg-brand-red-700">
                                 Salvar edição
-                              </button>
+                              </SubmitButton>
                             </form>
                           </CadastroModal>
                           <CadastroModal
@@ -316,9 +311,9 @@ export default async function ObrasPage() {
                                   Valor orçado
                                   <input name="valor_orcado" placeholder="0,00" className="oc-input" />
                                 </label>
-                                <button type="submit" className="oc-button oc-button-primary self-end">
+                                <SubmitButton className="oc-button oc-button-primary self-end">
                                   Adicionar
-                                </button>
+                                </SubmitButton>
                               </form>
 
                               <div className="overflow-x-auto rounded-card border border-brand-gray-300/70">
@@ -367,9 +362,9 @@ export default async function ObrasPage() {
                                                     Valor orçado
                                                     <input name="valor_orcado" defaultValue={valorInputBR(Number(etapa.valor_orcado ?? 0))} className="oc-input" />
                                                   </label>
-                                                  <button type="submit" className="oc-button oc-button-primary">
+                                                  <SubmitButton className="oc-button oc-button-primary">
                                                     Salvar etapa
-                                                  </button>
+                                                  </SubmitButton>
                                                 </form>
                                               </CadastroModal>
                                               <DeleteCadastroButton
@@ -427,12 +422,9 @@ export default async function ObrasPage() {
                                           </label>
                                         ))}
                                     </div>
-                                    <button
-                                      type="submit"
-                                      className="oc-button oc-button-primary mt-3"
-                                    >
+                                    <SubmitButton className="oc-button oc-button-primary mt-3">
                                       Copiar etapas
-                                    </button>
+                                    </SubmitButton>
                                   </form>
                                 )}
                             </div>

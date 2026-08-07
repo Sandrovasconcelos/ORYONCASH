@@ -4,6 +4,7 @@ import { useState } from "react";
 import { permanentlyDeleteFromTrashAction, restoreFromTrashAction } from "../actions";
 import { ActionIcon } from "../action-icon";
 import { AppModal } from "../app-modal";
+import { SubmitButton } from "../submit-button";
 
 type TipoLixeira = "obra" | "categoria" | "material" | "fornecedor" | "despesa";
 
@@ -75,9 +76,9 @@ export function PermanentDeleteTrashButton({
             <form action={permanentlyDeleteFromTrashAction}>
               <input type="hidden" name="id" value={id} />
               <input type="hidden" name="tipo" value={tipo} />
-              <button type="submit" className="oc-button oc-button-primary w-full sm:w-auto">
+              <SubmitButton className="oc-button oc-button-primary w-full sm:w-auto">
                 Apagar definitivamente
-              </button>
+              </SubmitButton>
             </form>
           </>
         }

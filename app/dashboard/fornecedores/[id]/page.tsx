@@ -1,6 +1,7 @@
 import { notFound } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
 import { updateFornecedorAction } from "../../actions";
+import { SubmitButton } from "../../submit-button";
 
 export default async function EditarFornecedorPage({
   params,
@@ -132,12 +133,9 @@ export default async function EditarFornecedorPage({
           </label>
         </div>
 
-        <button
-          type="submit"
-          className="rounded-brand-sm bg-brand-red px-4 py-2 text-sm font-medium text-white hover:bg-brand-red-700"
-        >
+        <SubmitButton className="rounded-brand-sm bg-brand-red px-4 py-2 text-sm font-medium text-white hover:bg-brand-red-700">
           Salvar
-        </button>
+        </SubmitButton>
       </form>
     </div>
   );

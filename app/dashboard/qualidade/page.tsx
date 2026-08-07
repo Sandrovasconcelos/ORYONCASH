@@ -15,6 +15,7 @@ import { DeleteCadastroButton } from "../delete-cadastro-button";
 import { ActionIcon } from "../action-icon";
 import { ObraSelector } from "../obra-selector";
 import { QualidadeTabs } from "./qualidade-tabs";
+import { SubmitButton } from "../submit-button";
 
 export const dynamic = "force-dynamic";
 
@@ -223,9 +224,9 @@ export default async function QualidadePage({
                                 ))}
                               </select>
                             </label>
-                            <button type="submit" className="oc-button oc-button-primary">
+                            <SubmitButton className="oc-button oc-button-primary">
                               Salvar vínculo
-                            </button>
+                            </SubmitButton>
                           </form>
                         </CadastroModal>
 
@@ -288,9 +289,9 @@ export default async function QualidadePage({
                                 />
                               </label>
 
-                              <button type="submit" className="oc-button oc-button-primary">
+                              <SubmitButton className="oc-button oc-button-primary">
                                 Concluir inspeção
-                              </button>
+                              </SubmitButton>
                             </form>
                           </CadastroModal>
                         ) : (
@@ -345,9 +346,9 @@ export default async function QualidadePage({
               Descrição
               <textarea name="descricao" rows={2} className="oc-input" />
             </label>
-            <button type="submit" className="oc-button oc-button-primary">
+            <SubmitButton className="oc-button oc-button-primary">
               Salvar modelo
-            </button>
+            </SubmitButton>
           </form>
         </CadastroModal>
       </div>
@@ -395,9 +396,9 @@ export default async function QualidadePage({
                               className="oc-input"
                             />
                           </label>
-                          <button type="submit" className="oc-button oc-button-primary">
+                          <SubmitButton className="oc-button oc-button-primary">
                             Salvar edição
-                          </button>
+                          </SubmitButton>
                         </form>
                       </CadastroModal>
 
@@ -432,9 +433,9 @@ export default async function QualidadePage({
                               <input type="checkbox" name="critico" className="h-4 w-4" />
                               Crítico
                             </label>
-                            <button type="submit" className="oc-button oc-button-primary self-end">
+                            <SubmitButton className="oc-button oc-button-primary self-end">
                               Adicionar
-                            </button>
+                            </SubmitButton>
                           </form>
 
                           <div className="overflow-x-auto rounded-card border border-brand-gray-300/70">

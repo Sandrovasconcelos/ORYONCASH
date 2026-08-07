@@ -3,6 +3,7 @@
 import { useState } from "react";
 import { ActionIcon } from "../action-icon";
 import { AppModal } from "../app-modal";
+import { SubmitButton } from "../submit-button";
 
 export function DeleteButton({
   despesaId,
@@ -39,9 +40,9 @@ export function DeleteButton({
             </button>
             <form action={action}>
               <input type="hidden" name="id" value={despesaId} />
-              <button type="submit" className="oc-button oc-button-primary w-full sm:w-auto">
+              <SubmitButton className="oc-button oc-button-primary w-full sm:w-auto">
                 Enviar para lixeira
-              </button>
+              </SubmitButton>
             </form>
           </>
         }

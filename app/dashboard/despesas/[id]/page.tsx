@@ -1,6 +1,7 @@
 import { notFound } from "next/navigation";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { updateDespesaAction } from "../../actions";
+import { SubmitButton } from "../../submit-button";
 
 export const dynamic = "force-dynamic";
 
@@ -125,12 +126,9 @@ export default async function EditarDespesaPage({
       </label>
 
       <div className="flex justify-end md:col-span-2">
-        <button
-          type="submit"
-          className="rounded-brand-sm bg-brand-red px-5 py-2 text-sm font-semibold text-white hover:bg-brand-red-700"
-        >
+        <SubmitButton className="rounded-brand-sm bg-brand-red px-5 py-2 text-sm font-semibold text-white hover:bg-brand-red-700">
           Salvar alteracoes
-        </button>
+        </SubmitButton>
       </div>
     </form>
   );

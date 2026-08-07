@@ -6,6 +6,7 @@ import {
 } from "../actions";
 import { CadastroModal } from "../cadastro-modal";
 import { NumeroActionButton } from "./numero-action-button";
+import { SubmitButton } from "../submit-button";
 
 export const dynamic = "force-dynamic";
 
@@ -54,9 +55,9 @@ export default async function NumerosPage() {
                 className="oc-input"
               />
             </label>
-            <button type="submit" className="oc-button oc-button-primary">
+            <SubmitButton className="oc-button oc-button-primary">
               Autorizar acesso
-            </button>
+            </SubmitButton>
           </form>
         </CadastroModal>
       </div>

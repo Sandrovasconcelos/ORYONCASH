@@ -4,6 +4,7 @@ import { createMaterialAction, deleteMaterialAction, updateMaterialAction } from
 import { CadastroModal } from "../cadastro-modal";
 import { DeleteCadastroButton } from "../delete-cadastro-button";
 import { ActionIcon } from "../action-icon";
+import { SubmitButton } from "../submit-button";
 
 export const dynamic = "force-dynamic";
 
@@ -86,12 +87,9 @@ export default async function MateriaisPage() {
                 ))}
               </select>
             </label>
-            <button
-              type="submit"
-              className="rounded-brand-sm bg-brand-red px-4 py-2 text-sm font-semibold text-white hover:bg-brand-red-700"
-            >
+            <SubmitButton className="rounded-brand-sm bg-brand-red px-4 py-2 text-sm font-semibold text-white hover:bg-brand-red-700">
               Salvar material
-            </button>
+            </SubmitButton>
             <Link
               href="/dashboard/categorias"
               className="text-center text-xs font-semibold text-brand-red hover:underline"
@@ -196,12 +194,9 @@ export default async function MateriaisPage() {
                                 ))}
                               </select>
                             </label>
-                            <button
-                              type="submit"
-                              className="rounded-brand-sm bg-brand-red px-4 py-2 text-sm font-semibold text-white hover:bg-brand-red-700"
-                            >
+                            <SubmitButton className="rounded-brand-sm bg-brand-red px-4 py-2 text-sm font-semibold text-white hover:bg-brand-red-700">
                               Salvar edição
-                            </button>
+                            </SubmitButton>
                           </form>
                         </CadastroModal>
                         <DeleteCadastroButton

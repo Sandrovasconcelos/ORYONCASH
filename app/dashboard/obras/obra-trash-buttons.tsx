@@ -3,6 +3,7 @@
 import { useState } from "react";
 import { ActionIcon } from "../action-icon";
 import { AppModal } from "../app-modal";
+import { SubmitButton } from "../submit-button";
 
 type Action = (formData: FormData) => void | Promise<void>;
 
@@ -64,12 +65,11 @@ function TrashDialog({
             </button>
             <form id={formId} action={action}>
               <input type="hidden" name="id" value={id} />
-              <button
-                type="submit"
+              <SubmitButton
                 className={danger ? "oc-button oc-button-primary" : "oc-button oc-button-dark"}
               >
                 {confirmLabel}
-              </button>
+              </SubmitButton>
             </form>
           </>
         }

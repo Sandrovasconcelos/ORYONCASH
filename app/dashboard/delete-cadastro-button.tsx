@@ -3,6 +3,7 @@
 import { useState } from "react";
 import { ActionIcon } from "./action-icon";
 import { AppModal } from "./app-modal";
+import { SubmitButton } from "./submit-button";
 
 type DeleteCadastroButtonProps = {
   id: string;
@@ -56,9 +57,9 @@ export function DeleteCadastroButton({
             </button>
             <form action={action}>
               <input type="hidden" name="id" value={id} />
-              <button type="submit" className="oc-button oc-button-primary w-full sm:w-auto">
+              <SubmitButton className="oc-button oc-button-primary w-full sm:w-auto">
                 Enviar para lixeira
-              </button>
+              </SubmitButton>
             </form>
           </>
         }

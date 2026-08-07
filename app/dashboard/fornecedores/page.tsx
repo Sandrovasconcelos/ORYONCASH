@@ -8,6 +8,7 @@ import {
 import { CadastroModal } from "../cadastro-modal";
 import { DeleteCadastroButton } from "../delete-cadastro-button";
 import { ActionIcon } from "../action-icon";
+import { SubmitButton } from "../submit-button";
 
 export const dynamic = "force-dynamic";
 
@@ -148,12 +149,9 @@ export default async function FornecedoresPage() {
                 className="rounded-brand-sm border border-brand-gray-300 bg-white px-3 py-2 text-sm outline-none focus:border-brand-red"
               />
             </label>
-            <button
-              type="submit"
-              className="rounded-brand-sm bg-brand-red px-4 py-2 text-sm font-semibold text-white hover:bg-brand-red-700"
-            >
+            <SubmitButton className="rounded-brand-sm bg-brand-red px-4 py-2 text-sm font-semibold text-white hover:bg-brand-red-700">
               Salvar fornecedor
-            </button>
+            </SubmitButton>
           </form>
         </CadastroModal>
       </div>
@@ -284,12 +282,9 @@ export default async function FornecedoresPage() {
                                 />
                               </label>
                             </div>
-                            <button
-                              type="submit"
-                              className="rounded-brand-sm bg-brand-red px-4 py-2 text-sm font-semibold text-white hover:bg-brand-red-700"
-                            >
+                            <SubmitButton className="rounded-brand-sm bg-brand-red px-4 py-2 text-sm font-semibold text-white hover:bg-brand-red-700">
                               Salvar edição
-                            </button>
+                            </SubmitButton>
                           </form>
                         </CadastroModal>
                         <DeleteCadastroButton

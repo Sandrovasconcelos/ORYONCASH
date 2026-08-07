@@ -30,6 +30,7 @@ import { CronogramaTabs } from "./cronograma-tabs";
 import { GanttTimeline } from "./gantt-timeline";
 import { StatusAtividadesChart } from "../charts/status-atividades-chart";
 import { CurvaSChart } from "../charts/curva-s-chart";
+import { SubmitButton } from "../submit-button";
 
 export const dynamic = "force-dynamic";
 
@@ -350,9 +351,9 @@ export default async function CronogramaPage({
               Descrição
               <textarea name="descricao" rows={2} className="oc-input" />
             </label>
-            <button type="submit" className="oc-button oc-button-primary">
+            <SubmitButton className="oc-button oc-button-primary">
               Salvar modelo
-            </button>
+            </SubmitButton>
           </form>
         </CadastroModal>
       </div>
@@ -404,9 +405,9 @@ export default async function CronogramaPage({
                               className="oc-input"
                             />
                           </label>
-                          <button type="submit" className="oc-button oc-button-primary">
+                          <SubmitButton className="oc-button oc-button-primary">
                             Salvar edição
-                          </button>
+                          </SubmitButton>
                         </form>
                       </CadastroModal>
 
@@ -440,9 +441,9 @@ export default async function CronogramaPage({
                               Ordem
                               <input name="ordem" type="number" min="1" defaultValue={template.fases.length + 1} className="oc-input" />
                             </label>
-                            <button type="submit" className="oc-button oc-button-primary self-end">
+                            <SubmitButton className="oc-button oc-button-primary self-end">
                               Adicionar
-                            </button>
+                            </SubmitButton>
                           </form>
 
                           <div className="flex flex-col gap-4">
@@ -483,9 +484,9 @@ export default async function CronogramaPage({
                                     defaultValue={fase.atividades.length + 1}
                                     className="oc-input"
                                   />
-                                  <button type="submit" className="oc-button oc-button-soft">
+                                  <SubmitButton className="oc-button oc-button-soft">
                                     Adicionar
-                                  </button>
+                                  </SubmitButton>
                                 </form>
 
                                 <ul className="mt-3 flex flex-col gap-1.5">
@@ -618,9 +619,9 @@ export default async function CronogramaPage({
                 Valor do contrato
                 <input name="valor_contrato" placeholder="0,00" required className="oc-input" />
               </label>
-              <button type="submit" className="oc-button oc-button-primary">
+              <SubmitButton className="oc-button oc-button-primary">
                 Salvar contrato
-              </button>
+              </SubmitButton>
             </form>
           </CadastroModal>
         </div>
@@ -713,9 +714,9 @@ export default async function CronogramaPage({
                                 className="oc-input"
                               />
                             </label>
-                            <button type="submit" className="oc-button oc-button-primary">
+                            <SubmitButton className="oc-button oc-button-primary">
                               Salvar edição
-                            </button>
+                            </SubmitButton>
                           </form>
                         </CadastroModal>
 
@@ -823,9 +824,9 @@ export default async function CronogramaPage({
                                 className="oc-input"
                               />
                             </label>
-                            <button type="submit" className="oc-button oc-button-primary">
+                            <SubmitButton className="oc-button oc-button-primary">
                               Salvar progresso
-                            </button>
+                            </SubmitButton>
                           </form>
                         </CadastroModal>
                       </div>
@@ -893,9 +894,9 @@ export default async function CronogramaPage({
               Observação
               <textarea name="observacao" rows={2} className="oc-input" />
             </label>
-            <button type="submit" className="oc-button oc-button-primary">
+            <SubmitButton className="oc-button oc-button-primary">
               Preparar medição
-            </button>
+            </SubmitButton>
           </form>
         </CadastroModal>
       </div>
@@ -1020,26 +1021,26 @@ export default async function CronogramaPage({
                                 className="oc-input"
                               />
                             </label>
-                            <button type="submit" className="oc-button oc-button-primary">
+                            <SubmitButton className="oc-button oc-button-primary">
                               Salvar edição
-                            </button>
+                            </SubmitButton>
                           </form>
                         </CadastroModal>
 
                         {medicao.status === "preparada" && (
                           <form action={aprovarMedicaoAction}>
                             <input type="hidden" name="id" value={medicao.id} />
-                            <button type="submit" className="oc-button oc-button-primary py-1.5 text-xs">
+                            <SubmitButton className="oc-button oc-button-primary py-1.5 text-xs">
                               Aprovar
-                            </button>
+                            </SubmitButton>
                           </form>
                         )}
                         {medicao.status === "aprovada" && (
                           <form action={registrarPagamentoMedicaoAction}>
                             <input type="hidden" name="id" value={medicao.id} />
-                            <button type="submit" className="oc-button oc-button-primary py-1.5 text-xs">
+                            <SubmitButton className="oc-button oc-button-primary py-1.5 text-xs">
                               Registrar pagamento
-                            </button>
+                            </SubmitButton>
                           </form>
                         )}
                         {medicao.status === "paga" && (
@@ -1111,9 +1112,9 @@ export default async function CronogramaPage({
               </option>
             ))}
           </select>
-          <button type="submit" className="oc-button oc-button-primary">
+          <SubmitButton className="oc-button oc-button-primary">
             Aplicar modelo
-          </button>
+          </SubmitButton>
           {templates.length === 0 && (
             <p className="text-xs text-brand-gray-500">Nenhum modelo cadastrado ainda.</p>
           )}
@@ -1167,12 +1168,9 @@ export default async function CronogramaPage({
 
       <form action={removerCronogramaObraAction} className="self-start">
         <input type="hidden" name="obra_id" value={obraAtual.id} />
-        <button
-          type="submit"
-          className="rounded-brand-sm border border-status-danger/30 px-3 py-2 text-xs font-bold text-status-danger hover:bg-status-danger/10"
-        >
+        <SubmitButton className="rounded-brand-sm border border-status-danger/30 px-3 py-2 text-xs font-bold text-status-danger hover:bg-status-danger/10">
           Remover cronograma desta obra
-        </button>
+        </SubmitButton>
       </form>
     </div>
   );

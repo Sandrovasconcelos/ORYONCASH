@@ -8,6 +8,7 @@ import {
 import { CadastroModal } from "../cadastro-modal";
 import { DeleteCadastroButton } from "../delete-cadastro-button";
 import { ActionIcon } from "../action-icon";
+import { SubmitButton } from "../submit-button";
 
 export const dynamic = "force-dynamic";
 
@@ -109,9 +110,9 @@ export default async function ContasBancariasPage() {
               Saldo inicial
               <input name="saldo_inicial" placeholder="0,00" className="oc-input" />
             </label>
-            <button type="submit" className="oc-button oc-button-primary">
+            <SubmitButton className="oc-button oc-button-primary">
               Salvar conta
-            </button>
+            </SubmitButton>
           </form>
         </CadastroModal>
       </div>
@@ -206,9 +207,9 @@ export default async function ContasBancariasPage() {
                                 className="oc-input"
                               />
                             </label>
-                            <button type="submit" className="oc-button oc-button-primary">
+                            <SubmitButton className="oc-button oc-button-primary">
                               Salvar edição
-                            </button>
+                            </SubmitButton>
                           </form>
                         </CadastroModal>
 

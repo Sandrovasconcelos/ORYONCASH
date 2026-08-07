@@ -3,6 +3,7 @@
 import { useState } from "react";
 import { ActionIcon } from "../action-icon";
 import { AppModal } from "../app-modal";
+import { SubmitButton } from "../submit-button";
 
 type NumeroActionButtonProps = {
   telefone: string;
@@ -58,12 +59,11 @@ export function NumeroActionButton({
             <form action={action}>
               <input type="hidden" name="telefone" value={telefone} />
               {!isDelete && <input type="hidden" name="ativo" value={String(ativo)} />}
-              <button
-                type="submit"
+              <SubmitButton
                 className={isDelete ? "oc-button oc-button-primary" : "oc-button oc-button-dark"}
               >
                 {isDelete ? "Sim, remover" : ativo ? "Sim, desativar" : "Sim, ativar"}
-              </button>
+              </SubmitButton>
             </form>
           </>
         }
