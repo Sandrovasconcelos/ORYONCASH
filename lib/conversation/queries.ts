@@ -309,6 +309,44 @@ export async function findEtapaById(id: string) {
   return data;
 }
 
+function normalizarTextoEtapa(texto: string): string {
+  return texto
+    .normalize("NFD")
+    .replace(/[̀-ͯ]/g, "")
+    .toLowerCase()
+    .trim();
+}
+
+/**
+ * Casa o texto digitado no WhatsApp com uma etapa da obra - necessario
+ * porque a lista de toque so mostra as 10 primeiras (limite do WhatsApp),
+ * entao obras com mais etapas do que isso precisam de um jeito de escolher
+ * por texto. So decide quando ha exatamente uma etapa batendo (exata ou por
+ * substring); ambiguo ou sem nenhuma batida retorna null.
+ */
+export async function findEtapaPorTexto(obraId: string, texto: string) {
+  if (!texto.trim()) return null;
+
+  const supabase = createAdminClient();
+  const { data: etapas } = await supabase
+    .from("etapas")
+    .select("id, nome")
+    .eq("obra_id", obraId)
+    .order("ordem");
+  if (!etapas || etapas.length === 0) return null;
+
+  const termo = normalizarTextoEtapa(texto);
+
+  const exato = etapas.find((e) => normalizarTextoEtapa(e.nome) === termo);
+  if (exato) return exato;
+
+  const candidatos = etapas.filter((e) => {
+    const nomeEtapa = normalizarTextoEtapa(e.nome);
+    return nomeEtapa.includes(termo) || termo.includes(nomeEtapa);
+  });
+  return candidatos.length === 1 ? candidatos[0] : null;
+}
+
 export async function createObra(nome: string, orcamentoTotal: number) {
   const supabase = createAdminClient();
   const { data, error } = await supabase

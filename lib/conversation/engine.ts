@@ -23,6 +23,7 @@ import {
   findObraById,
   findCategoriaById,
   findEtapaById,
+  findEtapaPorTexto,
   listObrasAtivas,
   createObra,
   createMaterial,
@@ -126,6 +127,19 @@ type Dados = {
 function idSemPrefixo(replyId: string | null, prefixo: string): string | null {
   if (!replyId || !replyId.startsWith(prefixo)) return null;
   return replyId.slice(prefixo.length);
+}
+
+/**
+ * A lista de toque do WhatsApp so mostra as 10 primeiras etapas (limite da
+ * API). Se o usuario tocou num item da lista, usa isso; senao, tenta casar
+ * o texto digitado com o nome de uma etapa da obra - assim obras com mais
+ * de 10 etapas continuam totalmente acessiveis.
+ */
+async function resolverEtapaDaMensagem(message: IncomingMessage, obraId: string) {
+  const etapaId = idSemPrefixo(message.replyId, "etapa:");
+  if (etapaId) return findEtapaById(etapaId);
+  if (message.text) return findEtapaPorTexto(obraId, message.text);
+  return null;
 }
 
 const MODELOS_MATERIAL: Record<string, string> = {
@@ -456,8 +470,7 @@ async function handleDespesaEtapa(
   message: IncomingMessage,
   session: Session
 ) {
-  const etapaId = idSemPrefixo(message.replyId, "etapa:");
-  const etapa = etapaId ? await findEtapaById(etapaId) : null;
+  const etapa = await resolverEtapaDaMensagem(message, (session.dados_coletados as Dados).obraId!);
   if (!etapa) {
     await sendListEtapas(from, (session.dados_coletados as Dados).obraId!);
     return;
@@ -1364,8 +1377,7 @@ async function handleNotaItemEtapa(
   message: IncomingMessage,
   session: Session
 ) {
-  const etapaId = idSemPrefixo(message.replyId, "etapa:");
-  const etapa = etapaId ? await findEtapaById(etapaId) : null;
+  const etapa = await resolverEtapaDaMensagem(message, (session.dados_coletados as Dados).obraId!);
   if (!etapa) {
     await sendListEtapas(from, (session.dados_coletados as Dados).obraId!);
     return;
@@ -1810,12 +1822,11 @@ async function handleCorrigirEtapaNova(
   message: IncomingMessage,
   session: Session
 ) {
-  const etapaId = idSemPrefixo(message.replyId, "etapa:");
-  const etapa = etapaId ? await findEtapaById(etapaId) : null;
   const dados = session.dados_coletados as Dados;
+  const despesa = await findDespesaCompletaById(dados.despesaId!);
+  const etapa = despesa ? await resolverEtapaDaMensagem(message, despesa.obraId) : null;
 
   if (!etapa) {
-    const despesa = await findDespesaCompletaById(dados.despesaId!);
     await sendListEtapas(from, despesa!.obraId);
     return;
   }

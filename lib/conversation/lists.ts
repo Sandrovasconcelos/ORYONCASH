@@ -40,7 +40,8 @@ export async function sendListEtapas(to: string, obraId: string) {
   const etapas = await listEtapasParaObra(obraId);
   await sendList(to, {
     headerText: "📐 Etapa da obra",
-    bodyText: "Em qual etapa da construção ocorreu essa despesa?",
+    bodyText:
+      "Em qual etapa da construção ocorreu essa despesa? Só aparecem as 10 primeiras aqui - se a sua não estiver na lista, digite o nome dela.",
     buttonText: "📐 Ver etapas",
     sections: [
       { rows: etapas.map((e) => ({ id: `etapa:${e.id}`, title: e.nome })) },
