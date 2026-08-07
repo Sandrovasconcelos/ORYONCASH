@@ -1,3 +1,4 @@
+import Link from "next/link";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { formatBRL } from "@/lib/conversation/format";
 import { hojeNoBrasil } from "@/lib/conversation/queries";
@@ -13,6 +14,7 @@ import {
   createFaseTemplateAction,
   deleteAtividadeTemplateAction,
   deleteContratoFornecedorAction,
+  excluirArquivoContratoAction,
   deleteCronogramaTemplateAction,
   deleteFaseTemplateAction,
   prepararMedicaoAction,
@@ -185,6 +187,9 @@ export default async function CronogramaPage({
     etapa_id: string | null;
     descricao: string | null;
     valor_contrato: number;
+    arquivo_storage_path: string | null;
+    arquivo_nome: string | null;
+    arquivo_url: string | null;
   }[] = [];
   if (obraAtual) {
     const [{ data: medicoesData }, { data: despesasData }, contratosQuery] = await Promise.all([
@@ -204,12 +209,22 @@ export default async function CronogramaPage({
       (async () => {
         const completa = await supabase
           .from("contratos_fornecedor")
-          .select("id, obra_id, fornecedor_id, etapa_id, descricao, valor_contrato")
+          .select(
+            "id, obra_id, fornecedor_id, etapa_id, descricao, valor_contrato, arquivo_storage_path, arquivo_nome"
+          )
           .eq("obra_id", obraAtual.id)
           .is("deleted_at", null)
           .order("created_at", { ascending: false });
         if (!completa.error) return completa;
-        // etapa_id pode ainda nao existir se a migration nao rodou.
+        // arquivo_* pode ainda nao existir se a migration nao rodou.
+        const comEtapa = await supabase
+          .from("contratos_fornecedor")
+          .select("id, obra_id, fornecedor_id, etapa_id, descricao, valor_contrato")
+          .eq("obra_id", obraAtual.id)
+          .is("deleted_at", null)
+          .order("created_at", { ascending: false });
+        if (!comEtapa.error) return comEtapa;
+        // etapa_id tambem pode ainda nao existir.
         return supabase
           .from("contratos_fornecedor")
           .select("id, obra_id, fornecedor_id, descricao, valor_contrato")
@@ -220,10 +235,34 @@ export default async function CronogramaPage({
     ]);
     medicoes = (medicoesData ?? []) as Medicao[];
     despesasObra = despesasData ?? [];
-    contratosObra = (contratosQuery.data ?? []).map((c) => ({
-      ...c,
-      etapa_id: (c as { etapa_id?: string | null }).etapa_id ?? null,
-    }));
+    contratosObra = await Promise.all(
+      (contratosQuery.data ?? []).map(async (c) => {
+        const contratoInfo = c as unknown as {
+          id: string;
+          obra_id: string;
+          fornecedor_id: string;
+          etapa_id?: string | null;
+          descricao: string | null;
+          valor_contrato: number;
+          arquivo_storage_path?: string | null;
+          arquivo_nome?: string | null;
+        };
+        let arquivoUrl: string | null = null;
+        if (contratoInfo.arquivo_storage_path) {
+          const { data: signed } = await supabase.storage
+            .from("comprovantes")
+            .createSignedUrl(contratoInfo.arquivo_storage_path, 60 * 60);
+          arquivoUrl = signed?.signedUrl ?? null;
+        }
+        return {
+          ...contratoInfo,
+          etapa_id: contratoInfo.etapa_id ?? null,
+          arquivo_storage_path: contratoInfo.arquivo_storage_path ?? null,
+          arquivo_nome: contratoInfo.arquivo_nome ?? null,
+          arquivo_url: arquivoUrl,
+        };
+      })
+    );
 
     if (medicoes.length > 0) {
       const { data: itensData } = await supabase
@@ -665,6 +704,15 @@ export default async function CronogramaPage({
                 Valor do contrato
                 <input name="valor_contrato" placeholder="0,00" required className="oc-input" />
               </label>
+              <label className="flex flex-col gap-1 text-sm text-brand-gray-700">
+                Contrato assinado (PDF ou Word)
+                <input
+                  type="file"
+                  name="arquivo"
+                  accept=".pdf,.doc,.docx,application/pdf,application/msword,application/vnd.openxmlformats-officedocument.wordprocessingml.document"
+                  className="oc-input"
+                />
+              </label>
               <SubmitButton className="oc-button oc-button-primary">
                 Salvar contrato
               </SubmitButton>
@@ -673,12 +721,13 @@ export default async function CronogramaPage({
         </div>
 
         <div className="overflow-x-auto">
-          <table className="oc-table min-w-[860px]">
+          <table className="oc-table min-w-[960px]">
             <thead>
               <tr>
                 <th>Fornecedor</th>
                 <th>Etapa</th>
                 <th>Descrição</th>
+                <th>Arquivo</th>
                 <th className="text-right">Contrato</th>
                 <th className="text-right">Pago</th>
                 <th className="text-right">Saldo</th>
@@ -710,6 +759,24 @@ export default async function CronogramaPage({
                       )}
                     </td>
                     <td className="text-brand-gray-700">{contrato.descricao || "—"}</td>
+                    <td>
+                      {contrato.arquivo_url ? (
+                        <Link
+                          href={contrato.arquivo_url}
+                          target="_blank"
+                          rel="noreferrer"
+                          className="inline-flex h-9 w-9 items-center justify-center rounded-brand-sm border border-status-info/25 bg-white text-status-info hover:bg-status-info hover:text-white"
+                          aria-label={`Ver contrato de ${nomesFornecedor.get(contrato.fornecedor_id) ?? "fornecedor"}`}
+                          title={contrato.arquivo_nome ?? "Ver arquivo"}
+                        >
+                          <ActionIcon name="file" />
+                        </Link>
+                      ) : (
+                        <span className="inline-flex h-9 w-9 items-center justify-center rounded-brand-sm border border-brand-gray-300 bg-brand-gray-100 text-brand-gray-500">
+                          <ActionIcon name="file" />
+                        </span>
+                      )}
+                    </td>
                     <td className="text-right text-brand-gray-700">{formatBRL(contrato.valor_contrato)}</td>
                     <td className="text-right text-brand-gray-700">{formatBRL(pago)}</td>
                     <td className={`text-right ${estourou ? "font-bold text-status-danger" : "text-brand-gray-700"}`}>
@@ -785,6 +852,34 @@ export default async function CronogramaPage({
                                 className="oc-input"
                               />
                             </label>
+                            <div className="flex flex-col gap-1 text-sm text-brand-gray-700">
+                              Contrato assinado (PDF ou Word)
+                              {contrato.arquivo_url && (
+                                <div className="flex items-center justify-between gap-2 rounded-brand-sm bg-brand-gray-100 px-3 py-2 text-xs">
+                                  <Link
+                                    href={contrato.arquivo_url}
+                                    target="_blank"
+                                    rel="noreferrer"
+                                    className="truncate font-bold text-status-info hover:underline"
+                                  >
+                                    {contrato.arquivo_nome ?? "Ver arquivo atual"}
+                                  </Link>
+                                  <button
+                                    type="submit"
+                                    formAction={excluirArquivoContratoAction}
+                                    className="shrink-0 text-status-danger hover:underline"
+                                  >
+                                    Remover
+                                  </button>
+                                </div>
+                              )}
+                              <input
+                                type="file"
+                                name="arquivo"
+                                accept=".pdf,.doc,.docx,application/pdf,application/msword,application/vnd.openxmlformats-officedocument.wordprocessingml.document"
+                                className="oc-input"
+                              />
+                            </div>
                             <SubmitButton className="oc-button oc-button-primary">
                               Salvar edição
                             </SubmitButton>
@@ -806,7 +901,7 @@ export default async function CronogramaPage({
 
               {contratosObra.length === 0 && (
                 <tr>
-                  <td colSpan={8} className="oc-empty">
+                  <td colSpan={9} className="oc-empty">
                     Nenhum contrato cadastrado pra esta obra ainda.
                   </td>
                 </tr>

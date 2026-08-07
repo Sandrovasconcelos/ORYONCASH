@@ -130,6 +130,77 @@ async function anexarArquivosSelecionadosNoFormulario(input: {
   }
 }
 
+async function anexarArquivoContrato(input: {
+  supabase: Awaited<ReturnType<typeof createClient>>;
+  contratoId: string;
+  arquivo: File;
+}) {
+  const { supabase, contratoId, arquivo } = input;
+  if (arquivo.size === 0) return;
+
+  const extensao =
+    arquivo.name.split(".").pop()?.replace(/[^a-z0-9]/gi, "").toLowerCase() || "bin";
+  const nomeSeguro = arquivo.name
+    .replace(/\.[^.]+$/, "")
+    .normalize("NFD")
+    .replace(/[̀-ͯ]/g, "")
+    .replace(/[^a-z0-9_-]+/gi, "-")
+    .replace(/^-+|-+$/g, "")
+    .toLowerCase()
+    .slice(0, 70);
+  const storagePath = `contratos/${contratoId}/${Date.now()}-${crypto.randomUUID()}-${nomeSeguro || "contrato"}.${extensao}`;
+
+  const { error: uploadError } = await supabase.storage
+    .from("comprovantes")
+    .upload(storagePath, arquivo, {
+      contentType: arquivo.type || "application/octet-stream",
+      upsert: false,
+    });
+  if (uploadError) throw uploadError;
+
+  await supabase
+    .from("contratos_fornecedor")
+    .update({
+      arquivo_storage_path: storagePath,
+      arquivo_nome: arquivo.name,
+      arquivo_mime_type: arquivo.type || "application/octet-stream",
+    })
+    .eq("id", contratoId);
+}
+
+export async function excluirArquivoContratoAction(formData: FormData) {
+  const id = String(formData.get("id") ?? "");
+  if (!id) return;
+
+  const supabase = await createClient();
+  const { data: contrato } = await supabase
+    .from("contratos_fornecedor")
+    .select("arquivo_storage_path, obra_id")
+    .eq("id", id)
+    .maybeSingle();
+  if (!contrato) return;
+
+  if (contrato.arquivo_storage_path) {
+    await supabase.storage.from("comprovantes").remove([contrato.arquivo_storage_path]);
+  }
+  await supabase
+    .from("contratos_fornecedor")
+    .update({ arquivo_storage_path: null, arquivo_nome: null, arquivo_mime_type: null })
+    .eq("id", id);
+
+  const autorNome = await getAutorNomeDashboard();
+  await registrarAtividade({
+    tipo: "edicao",
+    entidade: "obra",
+    entidadeId: contrato.obra_id,
+    origem: "dashboard",
+    autorNome,
+    resumo: `Arquivo do contrato de fornecedor removido por ${autorNome}`,
+  });
+
+  revalidatePath("/dashboard/cronograma");
+}
+
 export async function signOutAction() {
   const supabase = await createClient();
   await supabase.auth.signOut();
@@ -2216,6 +2287,11 @@ export async function createContratoFornecedorAction(formData: FormData) {
     .select("id")
     .single();
 
+  const arquivo = formData.get("arquivo");
+  if (contrato && arquivo instanceof File && arquivo.size > 0) {
+    await anexarArquivoContrato({ supabase, contratoId: contrato.id, arquivo });
+  }
+
   const autorNome = await getAutorNomeDashboard();
   await registrarAtividade({
     tipo: "criacao",
@@ -2247,6 +2323,14 @@ export async function updateContratoFornecedorAction(formData: FormData) {
 
   const depois = { fornecedor_id: fornecedorId, etapa_id: etapaId, descricao, valor_contrato: valorContrato };
   await supabase.from("contratos_fornecedor").update(depois).eq("id", id);
+
+  const arquivo = formData.get("arquivo");
+  if (arquivo instanceof File && arquivo.size > 0) {
+    if (antes?.arquivo_storage_path) {
+      await supabase.storage.from("comprovantes").remove([antes.arquivo_storage_path]);
+    }
+    await anexarArquivoContrato({ supabase, contratoId: id, arquivo });
+  }
 
   const autorNome = await getAutorNomeDashboard();
   await registrarAtividade({

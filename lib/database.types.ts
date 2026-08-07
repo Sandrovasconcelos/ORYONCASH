@@ -857,6 +857,9 @@ export interface Database {
           etapa_id: string | null;
           descricao: string | null;
           valor_contrato: number;
+          arquivo_storage_path: string | null;
+          arquivo_nome: string | null;
+          arquivo_mime_type: string | null;
           created_at: string;
           deleted_at: string | null;
           deleted_by: string | null;
@@ -869,6 +872,9 @@ export interface Database {
           etapa_id?: string | null;
           descricao?: string | null;
           valor_contrato?: number;
+          arquivo_storage_path?: string | null;
+          arquivo_nome?: string | null;
+          arquivo_mime_type?: string | null;
           created_at?: string;
           deleted_at?: string | null;
           deleted_by?: string | null;
