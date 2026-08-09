@@ -3,7 +3,9 @@ import {
   createNumeroAction,
   deleteNumeroAction,
   toggleNumeroAtivoAction,
+  updateNumeroAction,
 } from "../actions";
+import { ActionIcon } from "../action-icon";
 import { CadastroModal } from "../cadastro-modal";
 import { NumeroActionButton } from "./numero-action-button";
 import { SubmitButton } from "../submit-button";
@@ -111,6 +113,29 @@ export default async function NumerosPage() {
                   </td>
                   <td>
                     <div className="flex items-center justify-end gap-2 whitespace-nowrap">
+                      <CadastroModal
+                        titulo="Editar número"
+                        descricao="O telefone não pode ser alterado - para trocar o número, remova e autorize um novo."
+                        botao="Editar"
+                        icone={<ActionIcon name="edit" />}
+                        variante="icone"
+                      >
+                        <form action={updateNumeroAction} className="flex flex-col gap-4">
+                          <input type="hidden" name="telefone" value={u.telefone} />
+                          <label className="flex flex-col gap-1 text-sm text-brand-gray-700">
+                            Nome
+                            <input
+                              name="nome"
+                              defaultValue={u.nome}
+                              required
+                              className="oc-input"
+                            />
+                          </label>
+                          <SubmitButton className="oc-button oc-button-primary">
+                            Salvar edição
+                          </SubmitButton>
+                        </form>
+                      </CadastroModal>
                       <NumeroActionButton
                         telefone={u.telefone}
                         ativo={u.ativo}

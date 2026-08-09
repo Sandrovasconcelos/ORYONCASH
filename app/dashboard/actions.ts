@@ -1277,16 +1277,61 @@ export async function createNumeroAction(formData: FormData) {
   revalidatePath("/dashboard/numeros");
 }
 
+export async function updateNumeroAction(formData: FormData) {
+  const telefone = String(formData.get("telefone") ?? "");
+  const nome = String(formData.get("nome") ?? "").trim();
+  if (!telefone || !nome) return;
+
+  const supabase = await createClient();
+  const { data: antes } = await supabase
+    .from("usuarios_whatsapp")
+    .select("nome")
+    .eq("telefone", telefone)
+    .maybeSingle();
+
+  await supabase.from("usuarios_whatsapp").update({ nome }).eq("telefone", telefone);
+
+  const autorNome = await getAutorNomeDashboard();
+  await registrarAtividade({
+    tipo: "edicao",
+    entidade: "usuario_whatsapp",
+    origem: "dashboard",
+    autorNome,
+    resumo: `Número ${telefone} renomeado de "${antes?.nome ?? "?"}" para "${nome}" por ${autorNome}`,
+    dadosAntes: antes,
+    dadosDepois: { telefone, nome },
+  });
+
+  revalidatePath("/dashboard/numeros");
+}
+
 export async function toggleNumeroAtivoAction(formData: FormData) {
   const telefone = String(formData.get("telefone") ?? "");
   const ativo = String(formData.get("ativo") ?? "") === "true";
   if (!telefone) return;
 
   const supabase = await createClient();
+  const { data: usuario } = await supabase
+    .from("usuarios_whatsapp")
+    .select("nome")
+    .eq("telefone", telefone)
+    .maybeSingle();
+
   await supabase
     .from("usuarios_whatsapp")
     .update({ ativo: !ativo })
     .eq("telefone", telefone);
+
+  const autorNome = await getAutorNomeDashboard();
+  await registrarAtividade({
+    tipo: "edicao",
+    entidade: "usuario_whatsapp",
+    origem: "dashboard",
+    autorNome,
+    resumo: `Número ${telefone} (${usuario?.nome ?? "?"}) ${ativo ? "desativado" : "ativado"} por ${autorNome}`,
+    dadosAntes: { ativo },
+    dadosDepois: { ativo: !ativo },
+  });
 
   revalidatePath("/dashboard/numeros");
 }
@@ -1296,7 +1341,23 @@ export async function deleteNumeroAction(formData: FormData) {
   if (!telefone) return;
 
   const supabase = await createClient();
+  const { data: usuario } = await supabase
+    .from("usuarios_whatsapp")
+    .select("*")
+    .eq("telefone", telefone)
+    .maybeSingle();
+
   await supabase.from("usuarios_whatsapp").delete().eq("telefone", telefone);
+
+  const autorNome = await getAutorNomeDashboard();
+  await registrarAtividade({
+    tipo: "exclusao",
+    entidade: "usuario_whatsapp",
+    origem: "dashboard",
+    autorNome,
+    resumo: `Número ${telefone} (${usuario?.nome ?? "?"}) removido dos acessos por ${autorNome}`,
+    dadosAntes: usuario,
+  });
 
   revalidatePath("/dashboard/numeros");
 }
