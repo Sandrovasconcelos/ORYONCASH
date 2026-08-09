@@ -6,7 +6,18 @@ import { ActionIcon } from "../action-icon";
 import { AppModal } from "../app-modal";
 import { SubmitButton } from "../submit-button";
 
-type TipoLixeira = "obra" | "categoria" | "material" | "fornecedor" | "despesa" | "medicao";
+type TipoLixeira =
+  | "obra"
+  | "categoria"
+  | "material"
+  | "fornecedor"
+  | "despesa"
+  | "medicao"
+  | "etapa"
+  | "contrato_fornecedor"
+  | "cronograma_template"
+  | "checklist_template"
+  | "conta_bancaria";
 
 export function RestoreTrashButton({
   id,

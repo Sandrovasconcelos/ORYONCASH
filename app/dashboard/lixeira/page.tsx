@@ -5,7 +5,18 @@ import { PermanentDeleteTrashButton, RestoreTrashButton } from "./trash-actions"
 
 export const dynamic = "force-dynamic";
 
-type TipoLixeira = "obra" | "categoria" | "material" | "fornecedor" | "despesa" | "medicao";
+type TipoLixeira =
+  | "obra"
+  | "categoria"
+  | "material"
+  | "fornecedor"
+  | "despesa"
+  | "medicao"
+  | "etapa"
+  | "contrato_fornecedor"
+  | "cronograma_template"
+  | "checklist_template"
+  | "conta_bancaria";
 
 function formatDataBR(data: string): string {
   const [ano, mes, dia] = data.split("-");
@@ -32,6 +43,11 @@ export default async function LixeiraPage() {
     { data: fornecedores },
     { data: despesas },
     medicoesQuery,
+    etapasQuery,
+    contratosQuery,
+    cronogramaTemplatesQuery,
+    checklistTemplatesQuery,
+    contasBancariasQuery,
   ] = await Promise.all([
     supabase
       .from("obras")
@@ -67,8 +83,40 @@ export default async function LixeiraPage() {
       )
       .not("deleted_at", "is", null)
       .order("deleted_at", { ascending: false }),
+    supabase
+      .from("etapas")
+      .select("id, nome, valor_orcado, deleted_at, deleted_by, deleted_reason, obras(nome)")
+      .not("deleted_at", "is", null)
+      .order("deleted_at", { ascending: false }),
+    supabase
+      .from("contratos_fornecedor")
+      .select(
+        "id, valor_contrato, descricao, deleted_at, deleted_by, deleted_reason, obras(nome), fornecedores(nome)"
+      )
+      .not("deleted_at", "is", null)
+      .order("deleted_at", { ascending: false }),
+    supabase
+      .from("cronograma_templates")
+      .select("id, nome, descricao, deleted_at, deleted_by, deleted_reason")
+      .not("deleted_at", "is", null)
+      .order("deleted_at", { ascending: false }),
+    supabase
+      .from("checklist_templates")
+      .select("id, nome, descricao, deleted_at, deleted_by, deleted_reason")
+      .not("deleted_at", "is", null)
+      .order("deleted_at", { ascending: false }),
+    supabase
+      .from("contas_bancarias")
+      .select("id, nome, banco, titular, deleted_at, deleted_by, deleted_reason")
+      .not("deleted_at", "is", null)
+      .order("deleted_at", { ascending: false }),
   ]);
   const medicoes = medicoesQuery.data;
+  const etapas = etapasQuery.data;
+  const contratos = contratosQuery.data;
+  const cronogramaTemplates = cronogramaTemplatesQuery.data;
+  const checklistTemplates = checklistTemplatesQuery.data;
+  const contasBancarias = contasBancariasQuery.data;
 
   const itens: TrashItem[] = [
     ...(obras ?? []).map((obra) => ({
@@ -143,6 +191,62 @@ export default async function LixeiraPage() {
       removidoPor: medicao.deleted_by,
       motivo: medicao.deleted_reason,
     })),
+    ...(etapas ?? []).map((etapa) => ({
+      id: etapa.id,
+      tipo: "etapa" as const,
+      nome: etapa.nome,
+      detalhe: [
+        (etapa.obras as unknown as { nome: string } | null)?.nome,
+        etapa.valor_orcado ? `Orçado ${formatBRL(Number(etapa.valor_orcado))}` : null,
+      ]
+        .filter(Boolean)
+        .join(" • "),
+      removidoEm: etapa.deleted_at,
+      removidoPor: etapa.deleted_by,
+      motivo: etapa.deleted_reason,
+    })),
+    ...(contratos ?? []).map((contrato) => ({
+      id: contrato.id,
+      tipo: "contrato_fornecedor" as const,
+      nome: formatBRL(Number(contrato.valor_contrato ?? 0)),
+      detalhe: [
+        (contrato.fornecedores as unknown as { nome: string } | null)?.nome,
+        (contrato.obras as unknown as { nome: string } | null)?.nome,
+        contrato.descricao,
+      ]
+        .filter(Boolean)
+        .join(" • "),
+      removidoEm: contrato.deleted_at,
+      removidoPor: contrato.deleted_by,
+      motivo: contrato.deleted_reason,
+    })),
+    ...(cronogramaTemplates ?? []).map((template) => ({
+      id: template.id,
+      tipo: "cronograma_template" as const,
+      nome: template.nome,
+      detalhe: template.descricao || "Modelo de cronograma",
+      removidoEm: template.deleted_at,
+      removidoPor: template.deleted_by,
+      motivo: template.deleted_reason,
+    })),
+    ...(checklistTemplates ?? []).map((template) => ({
+      id: template.id,
+      tipo: "checklist_template" as const,
+      nome: template.nome,
+      detalhe: template.descricao || "Modelo de checklist",
+      removidoEm: template.deleted_at,
+      removidoPor: template.deleted_by,
+      motivo: template.deleted_reason,
+    })),
+    ...(contasBancarias ?? []).map((conta) => ({
+      id: conta.id,
+      tipo: "conta_bancaria" as const,
+      nome: conta.nome,
+      detalhe: [conta.banco, conta.titular].filter(Boolean).join(" • ") || "Sem detalhes",
+      removidoEm: conta.deleted_at,
+      removidoPor: conta.deleted_by,
+      motivo: conta.deleted_reason,
+    })),
   ].sort((a, b) => {
     const dataA = a.removidoEm ? new Date(a.removidoEm).getTime() : 0;
     const dataB = b.removidoEm ? new Date(b.removidoEm).getTime() : 0;
@@ -154,7 +258,19 @@ export default async function LixeiraPage() {
       acc[item.tipo] += 1;
       return acc;
     },
-    { obra: 0, categoria: 0, material: 0, fornecedor: 0, despesa: 0, medicao: 0 }
+    {
+      obra: 0,
+      categoria: 0,
+      material: 0,
+      fornecedor: 0,
+      despesa: 0,
+      medicao: 0,
+      etapa: 0,
+      contrato_fornecedor: 0,
+      cronograma_template: 0,
+      checklist_template: 0,
+      conta_bancaria: 0,
+    }
   );
 
   return (
@@ -182,6 +298,11 @@ export default async function LixeiraPage() {
         <ResumoCard label="Fornecedores" valor={totais.fornecedor} />
         <ResumoCard label="Lançamentos" valor={totais.despesa} />
         <ResumoCard label="Medições" valor={totais.medicao} />
+        <ResumoCard label="Etapas" valor={totais.etapa} />
+        <ResumoCard label="Contratos" valor={totais.contrato_fornecedor} />
+        <ResumoCard label="Modelos de cronograma" valor={totais.cronograma_template} />
+        <ResumoCard label="Modelos de checklist" valor={totais.checklist_template} />
+        <ResumoCard label="Contas bancárias" valor={totais.conta_bancaria} />
       </section>
 
       <section className="overflow-hidden rounded-card border border-brand-gray-300/60 bg-white shadow-card">
@@ -268,6 +389,11 @@ function TipoBadge({ tipo }: { tipo: TipoLixeira }) {
     fornecedor: "Fornecedor",
     despesa: "Lançamento",
     medicao: "Medição",
+    etapa: "Etapa",
+    contrato_fornecedor: "Contrato",
+    cronograma_template: "Modelo de cronograma",
+    checklist_template: "Modelo de checklist",
+    conta_bancaria: "Conta bancária",
   };
 
   return (

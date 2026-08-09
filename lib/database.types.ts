@@ -69,6 +69,9 @@ export interface Database {
           data_fim_prevista: string | null;
           percentual_executado: number;
           created_at: string;
+          deleted_at: string | null;
+          deleted_by: string | null;
+          deleted_reason: string | null;
         };
         Insert: {
           id?: string;
@@ -83,6 +86,9 @@ export interface Database {
           data_fim_prevista?: string | null;
           percentual_executado?: number;
           created_at?: string;
+          deleted_at?: string | null;
+          deleted_by?: string | null;
+          deleted_reason?: string | null;
         };
         Update: Partial<Database["public"]["Tables"]["etapas"]["Insert"]>;
         Relationships: [

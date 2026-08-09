@@ -274,6 +274,7 @@ export async function getDashboardData(
     supabase
       .from("etapas")
       .select("id, nome, valor_orcado")
+      .is("deleted_at", null)
       .eq("obra_id", obraSelecionada.id)
       .order("ordem"),
     supabase.from("materiais").select("id, nome").is("deleted_at", null),
@@ -287,6 +288,7 @@ export async function getDashboardData(
       .from("etapas")
       .select("id, nome, valor_orcado")
       .is("obra_id", null)
+      .is("deleted_at", null)
       .order("ordem");
     etapasCatalogo = etapasGenericas ?? [];
   }

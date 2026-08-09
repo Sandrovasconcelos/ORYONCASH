@@ -55,6 +55,7 @@ export async function listEtapas() {
   const { data } = await supabase
     .from("etapas")
     .select("id, nome")
+    .is("deleted_at", null)
     .order("ordem")
     .limit(10);
   return data ?? [];
@@ -71,6 +72,7 @@ export async function listEtapasParaObra(obraId: string) {
     .from("etapas")
     .select("id, nome")
     .eq("obra_id", obraId)
+    .is("deleted_at", null)
     .order("ordem")
     .limit(10);
 
@@ -80,6 +82,7 @@ export async function listEtapasParaObra(obraId: string) {
     .from("etapas")
     .select("id, nome")
     .is("obra_id", null)
+    .is("deleted_at", null)
     .order("ordem")
     .limit(10);
   return genericas ?? [];
@@ -305,6 +308,7 @@ export async function findEtapaById(id: string) {
     .from("etapas")
     .select("id, nome")
     .eq("id", id)
+    .is("deleted_at", null)
     .maybeSingle();
   return data;
 }
@@ -349,6 +353,7 @@ export async function findEtapaPorTexto(obraId: string, texto: string) {
     .from("etapas")
     .select("id, nome")
     .eq("obra_id", obraId)
+    .is("deleted_at", null)
     .order("ordem");
   return encontrarUnicoPorNome(etapas ?? [], texto);
 }

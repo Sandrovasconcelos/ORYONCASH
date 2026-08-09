@@ -76,6 +76,7 @@ export default async function QualidadePage({
       .from("etapas")
       .select("id, nome, obra_id, fornecedor_id, situacao_qualidade, checklist_template_id")
       .eq("obra_id", obraAtual.id)
+      .is("deleted_at", null)
       .order("ordem");
     etapas = (data ?? []) as EtapaQualidade[];
 

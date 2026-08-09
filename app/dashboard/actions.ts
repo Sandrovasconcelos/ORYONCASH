@@ -21,6 +21,27 @@ const LIXEIRA_ENTIDADES = {
   },
   despesa: { tabela: "despesas", nome: "Despesa", rota: "/dashboard/despesas" },
   medicao: { tabela: "medicoes", nome: "Medição", rota: "/dashboard/cronograma" },
+  etapa: { tabela: "etapas", nome: "Etapa", rota: "/dashboard/obras" },
+  contrato_fornecedor: {
+    tabela: "contratos_fornecedor",
+    nome: "Contrato de fornecedor",
+    rota: "/dashboard/cronograma",
+  },
+  cronograma_template: {
+    tabela: "cronograma_templates",
+    nome: "Modelo de cronograma",
+    rota: "/dashboard/cronograma",
+  },
+  checklist_template: {
+    tabela: "checklist_templates",
+    nome: "Modelo de checklist",
+    rota: "/dashboard/qualidade",
+  },
+  conta_bancaria: {
+    tabela: "contas_bancarias",
+    nome: "Conta bancária",
+    rota: "/dashboard/contas",
+  },
 } as const;
 
 type TipoLixeira = keyof typeof LIXEIRA_ENTIDADES;
@@ -482,36 +503,38 @@ export async function updateEtapaAction(formData: FormData) {
 
 export async function deleteEtapaAction(formData: FormData) {
   const id = String(formData.get("id") ?? "");
+  const motivo = String(formData.get("motivo") ?? "").trim() || null;
   let obraId = String(formData.get("obra_id") ?? "");
   if (!id) return;
 
   const supabase = await createClient();
-  const [{ data: etapa }, { count: despesasCount }] = await Promise.all([
-    supabase.from("etapas").select("*").eq("id", id).maybeSingle(),
-    supabase
-      .from("despesas")
-      .select("id", { count: "exact", head: true })
-      .eq("etapa_id", id),
-  ]);
-
+  const { data: etapa } = await supabase.from("etapas").select("*").eq("id", id).maybeSingle();
   obraId = obraId || etapa?.obra_id || "";
-  if ((despesasCount ?? 0) > 0) return;
-
-  await supabase.from("etapas").delete().eq("id", id);
 
   const autorNome = await getAutorNomeDashboard();
+  await supabase
+    .from("etapas")
+    .update({
+      deleted_at: new Date().toISOString(),
+      deleted_by: autorNome,
+      deleted_reason: motivo,
+    })
+    .eq("id", id);
+
   await registrarAtividade({
     tipo: "exclusao",
-    entidade: "obra",
-    entidadeId: obraId,
+    entidade: "etapa",
+    entidadeId: id,
     origem: "dashboard",
     autorNome,
-    resumo: `Etapa "${etapa?.nome ?? id}" apagada por ${autorNome}`,
+    resumo: `Etapa "${etapa?.nome ?? id}" enviada para a lixeira por ${autorNome}`,
     dadosAntes: etapa,
+    dadosDepois: { deleted: true, motivo },
   });
 
   revalidatePath("/dashboard/obras");
   revalidatePath("/dashboard/despesas");
+  revalidatePath("/dashboard/lixeira");
   revalidatePath("/dashboard");
 }
 
@@ -528,6 +551,7 @@ export async function copiarEtapasAction(formData: FormData) {
     .from("etapas")
     .select("nome, ordem, valor_orcado")
     .eq("obra_id", obraOrigemId)
+    .is("deleted_at", null)
     .order("ordem");
   if (!etapasOrigem || etapasOrigem.length === 0) return;
 
@@ -537,7 +561,8 @@ export async function copiarEtapasAction(formData: FormData) {
     const { data: etapasExistentes } = await supabase
       .from("etapas")
       .select("ordem")
-      .eq("obra_id", obraDestinoId);
+      .eq("obra_id", obraDestinoId)
+      .is("deleted_at", null);
     const maiorOrdemAtual = Math.max(0, ...(etapasExistentes ?? []).map((e) => e.ordem ?? 0));
 
     const novasEtapas = etapasOrigem.map((etapa, indice) => ({
@@ -1688,7 +1713,8 @@ export async function prepararMedicaoAction(formData: FormData) {
   const { data: etapas } = await supabase
     .from("etapas")
     .select("id, nome, valor_orcado, percentual_executado, situacao_qualidade, fornecedor_id")
-    .eq("obra_id", obraId);
+    .eq("obra_id", obraId)
+    .is("deleted_at", null);
   if (!etapas || etapas.length === 0) return;
 
   const idsEtapas = etapas.map((e) => e.id);

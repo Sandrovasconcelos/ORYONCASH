@@ -149,6 +149,7 @@ export default async function CronogramaPage({
       .select(
         "id, nome, obra_id, valor_orcado, fornecedor_id, situacao_qualidade, data_inicio_prevista, data_fim_prevista, percentual_executado"
       )
+      .is("deleted_at", null)
       .order("ordem"),
   ]);
 

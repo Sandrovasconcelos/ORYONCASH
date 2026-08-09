@@ -99,7 +99,7 @@ export default async function DespesasPage({
     supabase.from("categorias").select("id, nome").is("deleted_at", null).order("nome"),
     supabase.from("materiais").select("id, nome").is("deleted_at", null).order("nome"),
     supabase.from("fornecedores").select("id, nome").is("deleted_at", null).order("nome"),
-    supabase.from("etapas").select("id, nome, obra_id").order("ordem"),
+    supabase.from("etapas").select("id, nome, obra_id").is("deleted_at", null).order("ordem"),
     supabase
       .from("contas_bancarias")
       .select("id, nome")
