@@ -20,6 +20,7 @@ const LIXEIRA_ENTIDADES = {
     rota: "/dashboard/fornecedores",
   },
   despesa: { tabela: "despesas", nome: "Despesa", rota: "/dashboard/despesas" },
+  medicao: { tabela: "medicoes", nome: "Medição", rota: "/dashboard/cronograma" },
 } as const;
 
 type TipoLixeira = keyof typeof LIXEIRA_ENTIDADES;
@@ -1799,14 +1800,21 @@ export async function apagarMedicaoAction(formData: FormData) {
     }
   }
 
-  await supabase.from("medicoes").delete().eq("id", medicaoId);
+  await supabase
+    .from("medicoes")
+    .update({
+      deleted_at: new Date().toISOString(),
+      deleted_by: autorNome,
+      deleted_reason: "Apagada pelo dashboard",
+    })
+    .eq("id", medicaoId);
 
   const statusLabel =
     medicao.status === "paga" ? "paga" : medicao.status === "aprovada" ? "aprovada" : "preparada";
   await registrarAtividade({
     tipo: "exclusao",
-    entidade: "obra",
-    entidadeId: medicao.obra_id,
+    entidade: "medicao",
+    entidadeId: medicaoId,
     origem: "dashboard",
     autorNome,
     resumo:

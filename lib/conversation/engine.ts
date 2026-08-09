@@ -1454,48 +1454,70 @@ async function handleNotaConfirmacao(
 
   const dados = session.dados_coletados as Dados;
   const autorNome = await getNomePorTelefone(from);
+  const itens = dados.notaItensClassificados ?? [];
   const despesaIdsPagamento: string[] = [];
 
-  for (const item of dados.notaItensClassificados ?? []) {
-    const ehMaterial = item.categoriaNome.toLowerCase() === "material";
-    const material = ehMaterial
-      ? await findOrCreateMaterial(item.descricao, item.categoriaId)
-      : null;
+  // Move a sessao pra fora de NOTA_CONFIRMACAO ANTES de comecar a inserir -
+  // se o usuario tocar "Confirmar" de novo (rede lenta, duplo toque) ou se
+  // o loop quebrar no meio, um novo "confirm:sim" nao cai mais aqui e nao
+  // relanca os itens que ja foram criados.
+  await saveSession(from, ESTADOS.ANEXAR_PAGAMENTO_ARQUIVO, {
+    despesaIdsPagamento: [],
+  });
 
-    const despesa = await createDespesa({
-      obraId: dados.obraId!,
-      categoriaId: item.categoriaId,
-      etapaId: item.etapaId,
-      valor: item.valorTotal,
-      descricao: `${item.descricao} (${item.quantidade}x)`,
-      materialId: material?.id ?? null,
-      fornecedorId: dados.fornecedorId ?? null,
-      criadoPorTelefone: from,
-      criadoPorNome: autorNome,
-    });
-    if (dados.comprovante) {
-      await vincularComprovanteDespesa({
-        despesaId: despesa.id,
-        comprovante: dados.comprovante,
+  try {
+    for (const item of itens) {
+      const ehMaterial = item.categoriaNome.toLowerCase() === "material";
+      const material = ehMaterial
+        ? await findOrCreateMaterial(item.descricao, item.categoriaId)
+        : null;
+
+      const despesa = await createDespesa({
+        obraId: dados.obraId!,
+        categoriaId: item.categoriaId,
+        etapaId: item.etapaId,
+        valor: item.valorTotal,
+        descricao: `${item.descricao} (${item.quantidade}x)`,
+        materialId: material?.id ?? null,
+        fornecedorId: dados.fornecedorId ?? null,
+        criadoPorTelefone: from,
+        criadoPorNome: autorNome,
+      });
+      if (dados.comprovante) {
+        await vincularComprovanteDespesa({
+          despesaId: despesa.id,
+          comprovante: dados.comprovante,
+        });
+      }
+      despesaIdsPagamento.push(despesa.id);
+
+      await registrarAtividade({
+        tipo: "criacao",
+        entidade: "despesa",
+        entidadeId: despesa.id,
+        origem: "whatsapp",
+        autorTelefone: from,
+        autorNome,
+        resumo: `Despesa de ${formatBRL(item.valorTotal)} (${item.descricao}, nota fiscal) registrada por ${autorNome}`,
+        dadosDepois: item,
       });
     }
-    despesaIdsPagamento.push(despesa.id);
-
-    await registrarAtividade({
-      tipo: "criacao",
-      entidade: "despesa",
-      entidadeId: despesa.id,
-      origem: "whatsapp",
-      autorTelefone: from,
-      autorNome,
-      resumo: `Despesa de ${formatBRL(item.valorTotal)} (${item.descricao}, nota fiscal) registrada por ${autorNome}`,
-      dadosDepois: item,
+  } catch (error) {
+    console.error("Erro ao registrar itens da nota:", error);
+    await saveSession(from, ESTADOS.ANEXAR_PAGAMENTO_ARQUIVO, {
+      despesaIdsPagamento,
     });
+    await sendText(
+      from,
+      `⚠️ Deu um erro no meio do registro da nota. ${despesaIdsPagamento.length} de ${itens.length} item(ns) foram lançados com sucesso antes da falha - confira em Lançamentos e relance o restante manualmente se precisar.`
+    );
+    await sendMenuPrincipal(from);
+    return;
   }
 
   await sendText(
     from,
-    `✅ Nota registrada! ${dados.notaItensClassificados?.length ?? 0} itens lançados na obra "${dados.obraNome}".`
+    `✅ Nota registrada! ${itens.length} itens lançados na obra "${dados.obraNome}".`
   );
   await saveSession(from, ESTADOS.ANEXAR_PAGAMENTO_ARQUIVO, {
     despesaIdsPagamento,

@@ -5,7 +5,12 @@ import { PermanentDeleteTrashButton, RestoreTrashButton } from "./trash-actions"
 
 export const dynamic = "force-dynamic";
 
-type TipoLixeira = "obra" | "categoria" | "material" | "fornecedor" | "despesa";
+type TipoLixeira = "obra" | "categoria" | "material" | "fornecedor" | "despesa" | "medicao";
+
+function formatDataBR(data: string): string {
+  const [ano, mes, dia] = data.split("-");
+  return `${dia}/${mes}/${ano}`;
+}
 
 type TrashItem = {
   id: string;
@@ -26,6 +31,7 @@ export default async function LixeiraPage() {
     { data: materiais },
     { data: fornecedores },
     { data: despesas },
+    medicoesQuery,
   ] = await Promise.all([
     supabase
       .from("obras")
@@ -54,7 +60,15 @@ export default async function LixeiraPage() {
       )
       .not("deleted_at", "is", null)
       .order("deleted_at", { ascending: false }),
+    supabase
+      .from("medicoes")
+      .select(
+        "id, valor_total, status, periodo_inicio, periodo_fim, deleted_at, deleted_by, deleted_reason, obras(nome), categorias(nome)"
+      )
+      .not("deleted_at", "is", null)
+      .order("deleted_at", { ascending: false }),
   ]);
+  const medicoes = medicoesQuery.data;
 
   const itens: TrashItem[] = [
     ...(obras ?? []).map((obra) => ({
@@ -111,6 +125,24 @@ export default async function LixeiraPage() {
       removidoPor: despesa.deleted_by,
       motivo: despesa.deleted_reason,
     })),
+    ...(medicoes ?? []).map((medicao) => ({
+      id: medicao.id,
+      tipo: "medicao" as const,
+      nome: formatBRL(Number(medicao.valor_total ?? 0)),
+      detalhe: [
+        (medicao.obras as unknown as { nome: string } | null)?.nome,
+        (medicao.categorias as unknown as { nome: string } | null)?.nome,
+        medicao.periodo_inicio && medicao.periodo_fim
+          ? `${formatDataBR(medicao.periodo_inicio)} a ${formatDataBR(medicao.periodo_fim)}`
+          : null,
+        medicao.status,
+      ]
+        .filter(Boolean)
+        .join(" • "),
+      removidoEm: medicao.deleted_at,
+      removidoPor: medicao.deleted_by,
+      motivo: medicao.deleted_reason,
+    })),
   ].sort((a, b) => {
     const dataA = a.removidoEm ? new Date(a.removidoEm).getTime() : 0;
     const dataB = b.removidoEm ? new Date(b.removidoEm).getTime() : 0;
@@ -122,7 +154,7 @@ export default async function LixeiraPage() {
       acc[item.tipo] += 1;
       return acc;
     },
-    { obra: 0, categoria: 0, material: 0, fornecedor: 0, despesa: 0 }
+    { obra: 0, categoria: 0, material: 0, fornecedor: 0, despesa: 0, medicao: 0 }
   );
 
   return (
@@ -143,12 +175,13 @@ export default async function LixeiraPage() {
         </div>
       </section>
 
-      <section className="grid grid-cols-2 gap-3 lg:grid-cols-5">
+      <section className="grid grid-cols-2 gap-3 lg:grid-cols-6">
         <ResumoCard label="Obras" valor={totais.obra} />
         <ResumoCard label="Categorias" valor={totais.categoria} />
         <ResumoCard label="Materiais" valor={totais.material} />
         <ResumoCard label="Fornecedores" valor={totais.fornecedor} />
         <ResumoCard label="Lançamentos" valor={totais.despesa} />
+        <ResumoCard label="Medições" valor={totais.medicao} />
       </section>
 
       <section className="overflow-hidden rounded-card border border-brand-gray-300/60 bg-white shadow-card">
@@ -234,6 +267,7 @@ function TipoBadge({ tipo }: { tipo: TipoLixeira }) {
     material: "Material",
     fornecedor: "Fornecedor",
     despesa: "Lançamento",
+    medicao: "Medição",
   };
 
   return (

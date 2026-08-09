@@ -382,6 +382,20 @@ export interface Database {
         >;
         Relationships: [];
       };
+      whatsapp_mensagens_processadas: {
+        Row: {
+          wamid: string;
+          created_at: string;
+        };
+        Insert: {
+          wamid: string;
+          created_at?: string;
+        };
+        Update: Partial<
+          Database["public"]["Tables"]["whatsapp_mensagens_processadas"]["Insert"]
+        >;
+        Relationships: [];
+      };
       atividades: {
         Row: {
           id: string;
@@ -393,7 +407,13 @@ export interface Database {
             | "material"
             | "fornecedor"
             | "orcamento"
-            | "usuario_whatsapp";
+            | "usuario_whatsapp"
+            | "medicao"
+            | "contrato_fornecedor"
+            | "cronograma_template"
+            | "checklist_template"
+            | "conta_bancaria"
+            | "etapa";
           entidade_id: string | null;
           origem: "whatsapp" | "dashboard";
           autor_telefone: string | null;
@@ -413,7 +433,13 @@ export interface Database {
             | "material"
             | "fornecedor"
             | "orcamento"
-            | "usuario_whatsapp";
+            | "usuario_whatsapp"
+            | "medicao"
+            | "contrato_fornecedor"
+            | "cronograma_template"
+            | "checklist_template"
+            | "conta_bancaria"
+            | "etapa";
           entidade_id?: string | null;
           origem: "whatsapp" | "dashboard";
           autor_telefone?: string | null;

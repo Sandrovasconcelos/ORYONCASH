@@ -294,14 +294,34 @@ export default async function CronogramaPage({
     }
   }
 
+  // Se o mesmo fornecedor tem um contrato geral E um contrato escopado a
+  // uma etapa, as despesas daquela etapa nao podem contar nos dois ao
+  // mesmo tempo - senao o "Pago" fica duplicado. Marca quais etapas ja tem
+  // contrato proprio por fornecedor, pra excluir do contrato geral.
+  const etapasEscopadasPorFornecedor = new Map<string, Set<string>>();
+  for (const c of contratosObra) {
+    if (!c.etapa_id) continue;
+    const etapasDoFornecedor = etapasEscopadasPorFornecedor.get(c.fornecedor_id) ?? new Set<string>();
+    etapasDoFornecedor.add(c.etapa_id);
+    etapasEscopadasPorFornecedor.set(c.fornecedor_id, etapasDoFornecedor);
+  }
+
   // Contrato escopado a uma etapa (jose/pintura) so soma despesas daquela
-  // etapa; contrato geral (sem etapa_id) mantem o comportamento antigo de
-  // somar todas as despesas do fornecedor na obra.
+  // etapa; contrato geral (sem etapa_id) soma as despesas do fornecedor na
+  // obra, exceto as que ja pertencem a uma etapa com contrato proprio.
   function pagoDoContrato(contrato: { fornecedor_id: string; etapa_id: string | null }): number {
     if (contrato.etapa_id) {
       return pagoPorFornecedorEEtapa.get(`${contrato.fornecedor_id}::${contrato.etapa_id}`) ?? 0;
     }
-    return pagoPorFornecedor.get(contrato.fornecedor_id) ?? 0;
+    const etapasEscopadas = etapasEscopadasPorFornecedor.get(contrato.fornecedor_id);
+    if (!etapasEscopadas || etapasEscopadas.size === 0) {
+      return pagoPorFornecedor.get(contrato.fornecedor_id) ?? 0;
+    }
+    return despesasObra.reduce((soma, d) => {
+      if (d.fornecedor_id !== contrato.fornecedor_id) return soma;
+      if (d.etapa_id && etapasEscopadas.has(d.etapa_id)) return soma;
+      return soma + d.valor;
+    }, 0);
   }
 
   const orcamentoTotalObra = Number(obraAtual?.orcamento_total ?? 0);

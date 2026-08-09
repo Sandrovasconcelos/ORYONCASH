@@ -6,7 +6,7 @@ import { ActionIcon } from "../action-icon";
 import { AppModal } from "../app-modal";
 import { SubmitButton } from "../submit-button";
 
-type TipoLixeira = "obra" | "categoria" | "material" | "fornecedor" | "despesa";
+type TipoLixeira = "obra" | "categoria" | "material" | "fornecedor" | "despesa" | "medicao";
 
 export function RestoreTrashButton({
   id,

@@ -2,6 +2,31 @@ import { NextRequest, NextResponse } from "next/server";
 import { verifyWebhookSignature, isAllowedNumber } from "@/lib/whatsapp/verify";
 import { parseIncomingMessage } from "@/lib/whatsapp/parse";
 import { handleIncomingMessage } from "@/lib/conversation/engine";
+import { createAdminClient } from "@/lib/supabase/admin";
+
+/**
+ * A Meta reentrega webhooks que nao respondem rapido o suficiente (ou por
+ * falhas de rede) - sem essa checagem, a mesma mensagem processada duas
+ * vezes cria o mesmo lancamento duas vezes. So processa se conseguir
+ * "reservar" o wamid; se a tabela nao existir ainda (migration pendente),
+ * segue o fluxo normalmente em vez de travar tudo.
+ */
+async function jaProcessadaOuMarcarComoProcessada(wamid: string | null): Promise<boolean> {
+  if (!wamid) return false;
+  try {
+    const supabase = createAdminClient();
+    const { error } = await supabase
+      .from("whatsapp_mensagens_processadas")
+      .insert({ wamid });
+    if (error) {
+      if (error.code === "23505") return true; // ja existia = mensagem repetida
+      return false; // outro erro (ex: migration nao aplicada) - nao bloqueia
+    }
+    return false;
+  } catch {
+    return false;
+  }
+}
 
 export async function GET(request: NextRequest) {
   const params = request.nextUrl.searchParams;
@@ -29,6 +54,10 @@ export async function POST(request: NextRequest) {
 
   // Nao ha mensagem (ex.: evento de status de entrega) - apenas confirma o recebimento.
   if (!message) {
+    return NextResponse.json({ ok: true });
+  }
+
+  if (await jaProcessadaOuMarcarComoProcessada(message.id)) {
     return NextResponse.json({ ok: true });
   }
 

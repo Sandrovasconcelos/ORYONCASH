@@ -4,6 +4,7 @@ export type IncomingMedia = {
 };
 
 export type IncomingMessage = {
+  id: string | null;
   from: string;
   text: string | null;
   replyId: string | null;
@@ -15,6 +16,7 @@ type WebhookPayload = {
     changes?: {
       value?: {
         messages?: {
+          id?: string;
           from: string;
           type: string;
           text?: { body?: string };
@@ -43,9 +45,11 @@ export function parseIncomingMessage(payload: unknown): IncomingMessage | null {
   if (!message) return null;
 
   const from: string = message.from;
+  const id: string | null = message.id ?? null;
 
   if (message.type === "text") {
     return {
+      id,
       from,
       text: message.text?.body?.trim() ?? null,
       replyId: null,
@@ -57,6 +61,7 @@ export function parseIncomingMessage(payload: unknown): IncomingMessage | null {
     const interactive = message.interactive;
     if (interactive?.type === "list_reply") {
       return {
+        id,
         from,
         text: null,
         replyId: interactive.list_reply?.id ?? null,
@@ -65,6 +70,7 @@ export function parseIncomingMessage(payload: unknown): IncomingMessage | null {
     }
     if (interactive?.type === "button_reply") {
       return {
+        id,
         from,
         text: null,
         replyId: interactive.button_reply?.id ?? null,
@@ -75,6 +81,7 @@ export function parseIncomingMessage(payload: unknown): IncomingMessage | null {
 
   if (message.type === "image" && message.image) {
     return {
+      id,
       from,
       text: null,
       replyId: null,
@@ -84,6 +91,7 @@ export function parseIncomingMessage(payload: unknown): IncomingMessage | null {
 
   if (message.type === "document" && message.document) {
     return {
+      id,
       from,
       text: null,
       replyId: null,
@@ -93,6 +101,7 @@ export function parseIncomingMessage(payload: unknown): IncomingMessage | null {
 
   if (message.type === "audio" && message.audio) {
     return {
+      id,
       from,
       text: null,
       replyId: null,
@@ -100,5 +109,5 @@ export function parseIncomingMessage(payload: unknown): IncomingMessage | null {
     };
   }
 
-  return { from, text: null, replyId: null, media: null };
+  return { id, from, text: null, replyId: null, media: null };
 }

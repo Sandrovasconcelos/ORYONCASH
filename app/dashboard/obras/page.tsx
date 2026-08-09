@@ -80,7 +80,7 @@ export default async function ObrasPage() {
   const supabase = createAdminClient();
   const [obrasQuery, { data: despesas }, { data: etapas }] = await Promise.all([
     buscarObrasComFallback(supabase),
-    supabase.from("despesas").select("obra_id, etapa_id, valor"),
+    supabase.from("despesas").select("obra_id, etapa_id, valor").is("deleted_at", null),
     supabase.from("etapas").select("id, obra_id, nome, ordem, valor_orcado, created_at").order("ordem"),
   ]);
 
