@@ -42,6 +42,36 @@ async function getAutorNomeDashboard() {
   return user?.email ?? "Usuário do dashboard";
 }
 
+const TAMANHO_MAXIMO_ARQUIVO_BYTES = 15 * 1024 * 1024;
+
+const MIME_TYPES_IMAGEM_OU_PDF = new Set([
+  "application/pdf",
+  "image/jpeg",
+  "image/png",
+  "image/webp",
+  "image/gif",
+  "image/heic",
+  "image/heif",
+]);
+
+const MIME_TYPES_CONTRATO = new Set([
+  "application/pdf",
+  "application/msword",
+  "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+]);
+
+function validarArquivo(arquivo: File, mimesPermitidos: Set<string>) {
+  if (arquivo.size > TAMANHO_MAXIMO_ARQUIVO_BYTES) {
+    throw new Error(
+      `Arquivo "${arquivo.name}" tem ${(arquivo.size / (1024 * 1024)).toFixed(1)}MB - o limite é 15MB.`
+    );
+  }
+  if (arquivo.type && !mimesPermitidos.has(arquivo.type)) {
+    throw new Error(
+      `Tipo de arquivo "${arquivo.type || "desconhecido"}" não é aceito para "${arquivo.name}".`
+    );
+  }
+}
 
 async function anexarArquivoDespesa(input: {
   supabase: Awaited<ReturnType<typeof createClient>>;
@@ -53,6 +83,7 @@ async function anexarArquivoDespesa(input: {
   const { supabase, despesaId, tipoDocumento, arquivo, autorNome } = input;
 
   if (arquivo.size === 0) return;
+  validarArquivo(arquivo, MIME_TYPES_IMAGEM_OU_PDF);
 
   const extensao =
     arquivo.name.split(".").pop()?.replace(/[^a-z0-9]/gi, "").toLowerCase() ||
@@ -138,6 +169,7 @@ async function anexarArquivoContrato(input: {
 }) {
   const { supabase, contratoId, arquivo } = input;
   if (arquivo.size === 0) return;
+  validarArquivo(arquivo, MIME_TYPES_CONTRATO);
 
   const extensao =
     arquivo.name.split(".").pop()?.replace(/[^a-z0-9]/gi, "").toLowerCase() || "bin";
@@ -1484,6 +1516,7 @@ async function anexarEvidenciaInspecao(input: {
 }) {
   const { supabase, inspecaoId, arquivo } = input;
   if (arquivo.size === 0) return;
+  validarArquivo(arquivo, MIME_TYPES_IMAGEM_OU_PDF);
 
   const extensao =
     arquivo.name.split(".").pop()?.replace(/[^a-z0-9]/gi, "").toLowerCase() ||
