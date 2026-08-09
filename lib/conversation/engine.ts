@@ -15,15 +15,20 @@ import {
   sendListEtapas,
   sendListFornecedores,
   sendListDespesasRecentes,
+  sendListDespesasBusca,
   sendListCamposParaCorrigir,
   sendListMateriais,
   sendListMateriaisParaDespesa,
 } from "./lists";
 import {
   findObraById,
+  findObraPorTexto,
   findCategoriaById,
+  findCategoriaPorTexto,
   findEtapaById,
   findEtapaPorTexto,
+  findFornecedorPorTexto,
+  findMaterialPorTexto,
   listObrasAtivas,
   createObra,
   createMaterial,
@@ -35,6 +40,7 @@ import {
   upsertEtapasDeObra,
   findFornecedorById,
   findDespesaCompletaById,
+  buscarDespesasPorTexto,
   updateDespesaCampo,
   deleteDespesaPorId,
   listDespesasRecentes,
@@ -140,6 +146,37 @@ async function resolverEtapaDaMensagem(message: IncomingMessage, obraId: string)
   if (etapaId) return findEtapaById(etapaId);
   if (message.text) return findEtapaPorTexto(obraId, message.text);
   return null;
+}
+
+/**
+ * Mesma ideia da etapa, mas pra despesa: a lista de toque so mostra os 10
+ * lancamentos mais recentes. Se o usuario digitar em vez de tocar, busca
+ * por descricao/fornecedor - achou um so, resolve direto; achou varios,
+ * manda uma lista so com esses candidatos (e sinaliza que ja respondeu,
+ * pra quem chamou nao mandar outra mensagem em cima).
+ */
+async function resolverDespesaDaMensagem(
+  from: string,
+  message: IncomingMessage
+): Promise<{
+  despesa: Awaited<ReturnType<typeof findDespesaCompletaById>>;
+  jaRespondeu: boolean;
+}> {
+  const despesaId = idSemPrefixo(message.replyId, "despesa:");
+  if (despesaId) {
+    return { despesa: await findDespesaCompletaById(despesaId), jaRespondeu: false };
+  }
+  if (!message.text) return { despesa: null, jaRespondeu: false };
+
+  const candidatos = await buscarDespesasPorTexto(message.text);
+  if (candidatos.length === 1) {
+    return { despesa: await findDespesaCompletaById(candidatos[0].id), jaRespondeu: false };
+  }
+  if (candidatos.length > 1) {
+    await sendListDespesasBusca(from, message.text);
+    return { despesa: null, jaRespondeu: true };
+  }
+  return { despesa: null, jaRespondeu: false };
 }
 
 const MODELOS_MATERIAL: Record<string, string> = {
@@ -382,11 +419,16 @@ async function enviarResumoObra(from: string, obraId: string) {
 
 async function handleResumoObra(from: string, message: IncomingMessage) {
   const obraId = idSemPrefixo(message.replyId, "obra:");
-  if (!obraId) {
+  const obra = obraId
+    ? await findObraById(obraId)
+    : message.text
+      ? await findObraPorTexto(message.text)
+      : null;
+  if (!obra) {
     await sendListObras(from);
     return;
   }
-  await enviarResumoObra(from, obraId);
+  await enviarResumoObra(from, obra.id);
   await resetSession(from);
   await sendMenuPrincipal(from);
 }
@@ -429,7 +471,11 @@ async function handleDespesaObra(
   session: Session
 ) {
   const obraId = idSemPrefixo(message.replyId, "obra:");
-  const obra = obraId ? await findObraById(obraId) : null;
+  const obra = obraId
+    ? await findObraById(obraId)
+    : message.text
+      ? await findObraPorTexto(message.text)
+      : null;
   if (!obra) {
     await sendListObras(from);
     return;
@@ -450,7 +496,11 @@ async function handleDespesaCategoria(
   session: Session
 ) {
   const categoriaId = idSemPrefixo(message.replyId, "categoria:");
-  const categoria = categoriaId ? await findCategoriaById(categoriaId) : null;
+  const categoria = categoriaId
+    ? await findCategoriaById(categoriaId)
+    : message.text
+      ? await findCategoriaPorTexto(message.text)
+      : null;
   if (!categoria) {
     await sendListCategorias(from);
     return;
@@ -579,7 +629,11 @@ async function handleDespesaMaterial(
   }
 
   const materialId = idSemPrefixo(message.replyId, "material:");
-  const material = materialId ? await findMaterialById(materialId) : null;
+  const material = materialId
+    ? await findMaterialById(materialId)
+    : message.text
+      ? await findMaterialPorTexto(message.text)
+      : null;
   if (!material) {
     await sendListMateriaisParaDespesa(from);
     return;
@@ -850,7 +904,11 @@ async function handleCadastroMaterialCategoria(
   session: Session
 ) {
   const categoriaId = idSemPrefixo(message.replyId, "categoria:");
-  const categoria = categoriaId ? await findCategoriaById(categoriaId) : null;
+  const categoria = categoriaId
+    ? await findCategoriaById(categoriaId)
+    : message.text
+      ? await findCategoriaPorTexto(message.text)
+      : null;
   if (!categoria) {
     await sendListCategorias(from);
     return;
@@ -1160,8 +1218,8 @@ async function handleAnexarPagamentoSelecionandoLancamento(
   message: IncomingMessage,
   session: Session
 ) {
-  const despesaId = idSemPrefixo(message.replyId, "despesa:");
-  const despesa = despesaId ? await findDespesaCompletaById(despesaId) : null;
+  const { despesa, jaRespondeu } = await resolverDespesaDaMensagem(from, message);
+  if (jaRespondeu) return;
 
   if (!despesa) {
     await sendText(from, "👉 Não encontrei esse lançamento. Escolha novamente.");
@@ -1317,7 +1375,11 @@ async function handleNotaAguardandoObra(
   session: Session
 ) {
   const obraId = idSemPrefixo(message.replyId, "obra:");
-  const obra = obraId ? await findObraById(obraId) : null;
+  const obra = obraId
+    ? await findObraById(obraId)
+    : message.text
+      ? await findObraPorTexto(message.text)
+      : null;
   if (!obra) {
     await sendListObras(from);
     return;
@@ -1357,7 +1419,11 @@ async function handleNotaItemCategoria(
   session: Session
 ) {
   const categoriaId = idSemPrefixo(message.replyId, "categoria:");
-  const categoria = categoriaId ? await findCategoriaById(categoriaId) : null;
+  const categoria = categoriaId
+    ? await findCategoriaById(categoriaId)
+    : message.text
+      ? await findCategoriaPorTexto(message.text)
+      : null;
   if (!categoria) {
     await sendListCategorias(from);
     return;
@@ -1583,7 +1649,11 @@ async function handleOrcamentoAguardandoObra(
   session: Session
 ) {
   const obraId = idSemPrefixo(message.replyId, "obra:");
-  const obra = obraId ? await findObraById(obraId) : null;
+  const obra = obraId
+    ? await findObraById(obraId)
+    : message.text
+      ? await findObraPorTexto(message.text)
+      : null;
   if (!obra) {
     await sendListObras(from);
     return;
@@ -1700,8 +1770,8 @@ async function handleCorrigirSelecionandoLancamento(
   from: string,
   message: IncomingMessage
 ) {
-  const despesaId = idSemPrefixo(message.replyId, "despesa:");
-  const despesa = despesaId ? await findDespesaCompletaById(despesaId) : null;
+  const { despesa, jaRespondeu } = await resolverDespesaDaMensagem(from, message);
+  if (jaRespondeu) return;
   if (!despesa) {
     await sendListDespesasRecentes(from);
     return;
@@ -1820,7 +1890,11 @@ async function handleCorrigirCategoriaNova(
   session: Session
 ) {
   const categoriaId = idSemPrefixo(message.replyId, "categoria:");
-  const categoria = categoriaId ? await findCategoriaById(categoriaId) : null;
+  const categoria = categoriaId
+    ? await findCategoriaById(categoriaId)
+    : message.text
+      ? await findCategoriaPorTexto(message.text)
+      : null;
   if (!categoria) {
     await sendListCategorias(from);
     return;
@@ -1869,7 +1943,11 @@ async function handleCorrigirMaterialNovo(
   session: Session
 ) {
   const materialId = idSemPrefixo(message.replyId, "material:");
-  const material = materialId ? await findMaterialById(materialId) : null;
+  const material = materialId
+    ? await findMaterialById(materialId)
+    : message.text
+      ? await findMaterialPorTexto(message.text)
+      : null;
   const dados = session.dados_coletados as Dados;
 
   if (!material) {
@@ -1896,7 +1974,11 @@ async function handleCorrigirFornecedorNovo(
   session: Session
 ) {
   const fornecedorId = idSemPrefixo(message.replyId, "fornecedor:");
-  const fornecedor = fornecedorId ? await findFornecedorById(fornecedorId) : null;
+  const fornecedor = fornecedorId
+    ? await findFornecedorById(fornecedorId)
+    : message.text
+      ? await findFornecedorPorTexto(message.text)
+      : null;
   if (!fornecedor) {
     await sendListFornecedores(from);
     return;
@@ -2020,13 +2102,19 @@ async function handleRemoverSelecionandoItem(
   const prefixo = `${tipo}:`;
   const itemId = idSemPrefixo(message.replyId, prefixo);
 
-  const item = !itemId
-    ? null
-    : tipo === "obra"
+  const item = itemId
+    ? tipo === "obra"
       ? await findObraById(itemId)
       : tipo === "material"
         ? await findMaterialById(itemId)
-        : await findFornecedorById(itemId);
+        : await findFornecedorById(itemId)
+    : message.text
+      ? tipo === "obra"
+        ? await findObraPorTexto(message.text)
+        : tipo === "material"
+          ? await findMaterialPorTexto(message.text)
+          : await findFornecedorPorTexto(message.text)
+      : null;
 
   if (!item) {
     await enviarListaParaRemover(from, tipo);

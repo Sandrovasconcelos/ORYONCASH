@@ -309,7 +309,7 @@ export async function findEtapaById(id: string) {
   return data;
 }
 
-function normalizarTextoEtapa(texto: string): string {
+function normalizarTextoBusca(texto: string): string {
   return texto
     .normalize("NFD")
     .replace(/[̀-ͯ]/g, "")
@@ -318,33 +318,76 @@ function normalizarTextoEtapa(texto: string): string {
 }
 
 /**
- * Casa o texto digitado no WhatsApp com uma etapa da obra - necessario
- * porque a lista de toque so mostra as 10 primeiras (limite do WhatsApp),
- * entao obras com mais etapas do que isso precisam de um jeito de escolher
- * por texto. So decide quando ha exatamente uma etapa batendo (exata ou por
- * substring); ambiguo ou sem nenhuma batida retorna null.
+ * Casa um texto digitado com o "nome" de exatamente um item de uma lista -
+ * usado toda vez que uma lista de toque do WhatsApp so mostra os 10
+ * primeiros (limite da API) e precisamos de um jeito de escolher por texto
+ * pros itens 11+. Tenta match exato primeiro, depois substring nos dois
+ * sentidos; so decide quando sobra exatamente um candidato - ambiguo ou sem
+ * nenhuma batida retorna null (nunca adivinha).
  */
-export async function findEtapaPorTexto(obraId: string, texto: string) {
-  if (!texto.trim()) return null;
+function encontrarUnicoPorNome<T extends { nome: string }>(
+  itens: T[],
+  texto: string
+): T | null {
+  if (!texto.trim() || itens.length === 0) return null;
 
+  const termo = normalizarTextoBusca(texto);
+
+  const exato = itens.find((i) => normalizarTextoBusca(i.nome) === termo);
+  if (exato) return exato;
+
+  const candidatos = itens.filter((i) => {
+    const nome = normalizarTextoBusca(i.nome);
+    return nome.includes(termo) || termo.includes(nome);
+  });
+  return candidatos.length === 1 ? candidatos[0] : null;
+}
+
+export async function findEtapaPorTexto(obraId: string, texto: string) {
   const supabase = createAdminClient();
   const { data: etapas } = await supabase
     .from("etapas")
     .select("id, nome")
     .eq("obra_id", obraId)
     .order("ordem");
-  if (!etapas || etapas.length === 0) return null;
+  return encontrarUnicoPorNome(etapas ?? [], texto);
+}
 
-  const termo = normalizarTextoEtapa(texto);
+export async function findObraPorTexto(texto: string) {
+  const supabase = createAdminClient();
+  const { data: obras } = await supabase
+    .from("obras")
+    .select("id, nome")
+    .eq("status", "ativa")
+    .is("deleted_at", null);
+  return encontrarUnicoPorNome(obras ?? [], texto);
+}
 
-  const exato = etapas.find((e) => normalizarTextoEtapa(e.nome) === termo);
-  if (exato) return exato;
+export async function findCategoriaPorTexto(texto: string) {
+  const supabase = createAdminClient();
+  const { data: categorias } = await supabase
+    .from("categorias")
+    .select("id, nome")
+    .is("deleted_at", null);
+  return encontrarUnicoPorNome(categorias ?? [], texto);
+}
 
-  const candidatos = etapas.filter((e) => {
-    const nomeEtapa = normalizarTextoEtapa(e.nome);
-    return nomeEtapa.includes(termo) || termo.includes(nomeEtapa);
-  });
-  return candidatos.length === 1 ? candidatos[0] : null;
+export async function findFornecedorPorTexto(texto: string) {
+  const supabase = createAdminClient();
+  const { data: fornecedores } = await supabase
+    .from("fornecedores")
+    .select("id, nome")
+    .is("deleted_at", null);
+  return encontrarUnicoPorNome(fornecedores ?? [], texto);
+}
+
+export async function findMaterialPorTexto(texto: string) {
+  const supabase = createAdminClient();
+  const { data: materiais } = await supabase
+    .from("materiais")
+    .select("id, nome")
+    .is("deleted_at", null);
+  return encontrarUnicoPorNome(materiais ?? [], texto);
 }
 
 export async function createObra(nome: string, orcamentoTotal: number) {
@@ -679,6 +722,49 @@ export async function listDespesasRecentes(limite = 10) {
     data: d.data,
     categoriaNome: (d.categorias as unknown as { nome: string } | null)?.nome ?? "—",
   }));
+}
+
+/**
+ * Busca despesas por descricao ou nome do fornecedor - usado quando o
+ * lancamento que o usuario quer corrigir/anexar pagamento nao esta entre
+ * os 10 mais recentes mostrados na lista de toque (limite do WhatsApp).
+ */
+export async function buscarDespesasPorTexto(termo: string, limite = 10) {
+  if (!termo.trim()) return [];
+
+  const supabase = createAdminClient();
+  const [porDescricao, porFornecedor] = await Promise.all([
+    supabase
+      .from("despesas")
+      .select("id, valor, descricao, data, categorias(nome)")
+      .is("deleted_at", null)
+      .ilike("descricao", `%${termo}%`)
+      .order("created_at", { ascending: false })
+      .limit(limite),
+    supabase
+      .from("despesas")
+      .select("id, valor, descricao, data, categorias(nome), fornecedores!inner(nome)")
+      .is("deleted_at", null)
+      .ilike("fornecedores.nome", `%${termo}%`)
+      .order("created_at", { ascending: false })
+      .limit(limite),
+  ]);
+
+  const vistos = new Set<string>();
+  const resultado: { id: string; valor: number; descricao: string | null; data: string; categoriaNome: string }[] = [];
+  for (const d of [...(porDescricao.data ?? []), ...(porFornecedor.data ?? [])]) {
+    if (vistos.has(d.id)) continue;
+    vistos.add(d.id);
+    resultado.push({
+      id: d.id,
+      valor: d.valor,
+      descricao: d.descricao,
+      data: d.data,
+      categoriaNome: (d.categorias as unknown as { nome: string } | null)?.nome ?? "—",
+    });
+    if (resultado.length >= limite) break;
+  }
+  return resultado;
 }
 
 export async function findDespesaRecenteParaComprovantePagamento() {
