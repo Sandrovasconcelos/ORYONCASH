@@ -9,6 +9,7 @@ import { calcularItensElegiveisParaMedicao } from "@/lib/dashboard/queries";
 import { extractSpreadsheetAsText } from "@/lib/orcamento/parseSpreadsheet";
 import { extractOrcamentoData } from "@/lib/gemini/extractOrcamento";
 import { registrarAtividade } from "@/lib/atividades";
+import { enviarNotificacaoDiaria } from "@/lib/alertas/notificar";
 
 const LIXEIRA_ENTIDADES = {
   obra: { tabela: "obras", nome: "Obra", rota: "/dashboard/obras" },
@@ -1360,6 +1361,35 @@ export async function deleteNumeroAction(formData: FormData) {
   });
 
   revalidatePath("/dashboard/numeros");
+}
+
+export async function updateConfiguracaoNotificacaoAction(formData: FormData) {
+  const numeroWhatsapp = String(formData.get("numero_whatsapp") ?? "").replace(/\D/g, "") || null;
+
+  const supabase = await createClient();
+  await supabase
+    .from("configuracoes_notificacao")
+    .update({
+      numero_whatsapp: numeroWhatsapp,
+      notificar_atraso: formData.get("notificar_atraso") === "on",
+      notificar_estouro: formData.get("notificar_estouro") === "on",
+      notificar_saldo_negativo: formData.get("notificar_saldo_negativo") === "on",
+      updated_at: new Date().toISOString(),
+    })
+    .eq("id", true);
+
+  revalidatePath("/dashboard/configuracoes");
+  redirect("/dashboard/configuracoes?salvo=1");
+}
+
+export async function testarNotificacaoAction() {
+  const resultado = await enviarNotificacaoDiaria();
+  revalidatePath("/dashboard/configuracoes");
+
+  if (resultado.enviado) {
+    redirect(`/dashboard/configuracoes?teste=enviado&alertas=${resultado.alertas?.length ?? 0}`);
+  }
+  redirect(`/dashboard/configuracoes?teste=sem_envio&motivo=${encodeURIComponent(resultado.motivo ?? "")}`);
 }
 
 export type ImportarOrcamentoResultado =
