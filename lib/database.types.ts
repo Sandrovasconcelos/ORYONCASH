@@ -402,6 +402,26 @@ export interface Database {
         >;
         Relationships: [];
       };
+      configuracoes_notificacao: {
+        Row: {
+          id: boolean;
+          numero_whatsapp: string | null;
+          notificar_atraso: boolean;
+          notificar_estouro: boolean;
+          notificar_saldo_negativo: boolean;
+          updated_at: string;
+        };
+        Insert: {
+          id?: boolean;
+          numero_whatsapp?: string | null;
+          notificar_atraso?: boolean;
+          notificar_estouro?: boolean;
+          notificar_saldo_negativo?: boolean;
+          updated_at?: string;
+        };
+        Update: Partial<Database["public"]["Tables"]["configuracoes_notificacao"]["Insert"]>;
+        Relationships: [];
+      };
       atividades: {
         Row: {
           id: string;
