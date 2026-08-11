@@ -21,17 +21,26 @@ export async function GET(request: NextRequest) {
     .order("data", { ascending: false })
     .order("created_at", { ascending: false });
 
-  const obra = params.get("obra");
-  const categoria = params.get("categoria");
-  const etapa = params.get("etapa");
-  const material = params.get("material");
-  const fornecedor = params.get("fornecedor");
+  const ids = (params.get("ids") ?? "")
+    .split(",")
+    .map((id) => id.trim())
+    .filter(Boolean);
 
-  if (obra) query = query.eq("obra_id", obra);
-  if (categoria) query = query.eq("categoria_id", categoria);
-  if (etapa) query = query.eq("etapa_id", etapa);
-  if (material) query = query.eq("material_id", material);
-  if (fornecedor) query = query.eq("fornecedor_id", fornecedor);
+  if (ids.length > 0) {
+    query = query.in("id", ids);
+  } else {
+    const obra = params.get("obra");
+    const categoria = params.get("categoria");
+    const etapa = params.get("etapa");
+    const material = params.get("material");
+    const fornecedor = params.get("fornecedor");
+
+    if (obra) query = query.eq("obra_id", obra);
+    if (categoria) query = query.eq("categoria_id", categoria);
+    if (etapa) query = query.eq("etapa_id", etapa);
+    if (material) query = query.eq("material_id", material);
+    if (fornecedor) query = query.eq("fornecedor_id", fornecedor);
+  }
 
   const { data, error } = await query;
   if (error) {

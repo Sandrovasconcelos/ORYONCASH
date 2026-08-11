@@ -14,6 +14,9 @@ import { DeleteButton } from "./delete-button";
 import { OpenDespesaModalButton } from "./open-despesa-modal-button";
 import { SubmitButton } from "../submit-button";
 import { PorPaginaSelect } from "./por-pagina-select";
+import { SelecaoLancamentosProvider } from "./selecao-context";
+import { DespesaCheckbox, SelecionarTodosCheckbox } from "./despesa-checkbox";
+import { SelecaoActionBar } from "./selecao-action-bar";
 
 export const dynamic = "force-dynamic";
 
@@ -351,6 +354,7 @@ export default async function DespesasPage({
   ).toString();
 
   return (
+    <SelecaoLancamentosProvider>
     <div className="flex flex-col gap-6">
       <div className="rounded-card border border-brand-gray-300/60 bg-white p-5 shadow-card">
         <div className="mb-4 flex flex-col gap-2 sm:flex-row sm:items-end sm:justify-between">
@@ -495,6 +499,9 @@ export default async function DespesasPage({
         <table className="w-full min-w-[1120px] text-left text-sm">
           <thead className="bg-brand-gray-100 text-[11px] uppercase tracking-[0.12em] text-brand-gray-500">
             <tr>
+              <th className="w-10 px-5 py-3">
+                <SelecionarTodosCheckbox ids={despesasPagina.map((d) => d.id)} />
+              </th>
               <th className="px-5 py-3 font-extrabold">Data</th>
               <th className="px-5 py-3 font-extrabold">Lançamento</th>
               <th className="px-5 py-3 font-extrabold">Classificação</th>
@@ -535,6 +542,9 @@ export default async function DespesasPage({
 
               return (
                 <tr key={d.id} className="align-top hover:bg-brand-gray-100/60">
+                  <td className="px-5 py-4">
+                    <DespesaCheckbox id={d.id} />
+                  </td>
                   <td
                     className="whitespace-nowrap px-5 py-4 font-semibold text-brand-black"
                     style={grupoNota ? { boxShadow: `inset 4px 0 0 0 ${grupoNota.cor}` } : undefined}
@@ -1049,7 +1059,7 @@ export default async function DespesasPage({
 
             {despesas.length === 0 && (
               <tr>
-                <td colSpan={10} className="px-5 py-10 text-center text-sm text-brand-gray-500">
+                <td colSpan={11} className="px-5 py-10 text-center text-sm text-brand-gray-500">
                   Nenhum lançamento encontrado para os filtros atuais.
                 </td>
               </tr>
@@ -1106,6 +1116,8 @@ export default async function DespesasPage({
           </div>
         </div>
       )}
+      <SelecaoActionBar />
     </div>
+    </SelecaoLancamentosProvider>
   );
 }

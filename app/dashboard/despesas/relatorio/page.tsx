@@ -14,6 +14,7 @@ type Filtros = {
   etapa?: string;
   material?: string;
   fornecedor?: string;
+  ids?: string;
 };
 
 function nomeDe(relacao: unknown): string {
@@ -119,6 +120,12 @@ export default async function RelatorioDespesasPage({
   const params = await searchParams;
   const supabase = createAdminClient();
 
+  const idsSelecionados = (params.ids ?? "")
+    .split(",")
+    .map((id) => id.trim())
+    .filter(Boolean);
+  const usaSelecaoManual = idsSelecionados.length > 0;
+
   let query = supabase
     .from("despesas")
     .select(
@@ -128,34 +135,66 @@ export default async function RelatorioDespesasPage({
     .order("data", { ascending: false })
     .order("created_at", { ascending: false });
 
-  if (params.obra) query = query.eq("obra_id", params.obra);
-  if (params.categoria) query = query.eq("categoria_id", params.categoria);
-  if (params.etapa) query = query.eq("etapa_id", params.etapa);
-  if (params.material) query = query.eq("material_id", params.material);
-  if (params.fornecedor) query = query.eq("fornecedor_id", params.fornecedor);
+  if (usaSelecaoManual) {
+    query = query.in("id", idsSelecionados);
+  } else {
+    if (params.obra) query = query.eq("obra_id", params.obra);
+    if (params.categoria) query = query.eq("categoria_id", params.categoria);
+    if (params.etapa) query = query.eq("etapa_id", params.etapa);
+    if (params.material) query = query.eq("material_id", params.material);
+    if (params.fornecedor) query = query.eq("fornecedor_id", params.fornecedor);
+  }
 
   const [{ data }, obraFiltro, categoriaFiltro, etapaFiltro, materialFiltro, fornecedorFiltro] =
     await Promise.all([
       query,
-      params.obra
+      !usaSelecaoManual && params.obra
         ? supabase.from("obras").select("nome").eq("id", params.obra).maybeSingle()
         : Promise.resolve({ data: null }),
-      params.categoria
+      !usaSelecaoManual && params.categoria
         ? supabase.from("categorias").select("nome").eq("id", params.categoria).maybeSingle()
         : Promise.resolve({ data: null }),
-      params.etapa
+      !usaSelecaoManual && params.etapa
         ? supabase.from("etapas").select("nome").eq("id", params.etapa).maybeSingle()
         : Promise.resolve({ data: null }),
-      params.material
+      !usaSelecaoManual && params.material
         ? supabase.from("materiais").select("nome").eq("id", params.material).maybeSingle()
         : Promise.resolve({ data: null }),
-      params.fornecedor
+      !usaSelecaoManual && params.fornecedor
         ? supabase.from("fornecedores").select("nome").eq("id", params.fornecedor).maybeSingle()
         : Promise.resolve({ data: null }),
     ]);
 
   const despesas = data ?? [];
   const totalGasto = despesas.reduce((soma, d) => soma + d.valor, 0);
+
+  const idsDespesas = despesas.map((d) => d.id);
+  const { data: comprovantesData } =
+    idsDespesas.length > 0
+      ? await supabase
+          .from("despesa_comprovantes")
+          .select("id, despesa_id, tipo_documento, storage_bucket, storage_path")
+          .in("despesa_id", idsDespesas)
+      : { data: [] };
+  const comprovantesComUrl = await Promise.all(
+    (comprovantesData ?? []).map(async (c) => {
+      const { data: signed } = await supabase.storage
+        .from(c.storage_bucket)
+        .createSignedUrl(c.storage_path, 60 * 60);
+      return { ...c, url: signed?.signedUrl ?? null };
+    })
+  );
+  const documentosPorDespesa = new Map<
+    string,
+    { nota: string | null; comprovante: string | null }
+  >();
+  for (const c of comprovantesComUrl) {
+    if (!c.despesa_id) continue;
+    const atual = documentosPorDespesa.get(c.despesa_id) ?? { nota: null, comprovante: null };
+    if (c.tipo_documento === "comprovante_pagamento") atual.comprovante = c.url;
+    else atual.nota = c.url;
+    documentosPorDespesa.set(c.despesa_id, atual);
+  }
   const quantidade = despesas.length;
   const ticketMedio = quantidade > 0 ? totalGasto / quantidade : 0;
 
@@ -175,7 +214,9 @@ export default async function RelatorioDespesasPage({
   const maiorCategoria = Math.max(0, ...porCategoria.map((c) => c.total));
   const maiorEtapa = Math.max(0, ...porEtapa.map((c) => c.total));
 
-  const filtrosAtivos = [
+  const filtrosAtivos = usaSelecaoManual
+    ? [{ rotulo: "Seleção manual", valor: `${despesas.length} lançamento(s)` }]
+    : ([
     params.obra
       ? { rotulo: "Obra", valor: (obraFiltro.data as { nome: string } | null)?.nome ?? "-" }
       : null,
@@ -200,7 +241,7 @@ export default async function RelatorioDespesasPage({
           valor: (fornecedorFiltro.data as { nome: string } | null)?.nome ?? "-",
         }
       : null,
-  ].filter(Boolean) as { rotulo: string; valor: string }[];
+  ].filter(Boolean) as { rotulo: string; valor: string }[]);
 
   const queryString = new URLSearchParams(
     Object.entries(params).filter(([, value]) => Boolean(value)) as [string, string][]
@@ -325,25 +366,56 @@ export default async function RelatorioDespesasPage({
                   <th className="print:w-[12%]">Fornecedor</th>
                   <th className="print:w-[22%]">Descrição</th>
                   <th className="text-right print:w-[12%]">Valor</th>
+                  <th className="print:hidden">Documentos</th>
                 </tr>
               </thead>
               <tbody>
-                {despesas.map((d) => (
-                  <tr key={d.id}>
-                    <td className="whitespace-nowrap">{formatDataBrasil(d.data)}</td>
-                    <td className="print:truncate">{nomeDe(d.obras)}</td>
-                    <td className="print:truncate">{nomeDe(d.categorias)}</td>
-                    <td className="print:truncate">{nomeDe(d.etapas)}</td>
-                    <td className="print:truncate">{nomeDe(d.materiais)}</td>
-                    <td className="print:truncate">{nomeDe(d.fornecedores)}</td>
-                    <td className="max-w-[220px] truncate">{d.descricao ?? "-"}</td>
-                    <td className="text-right font-semibold">{formatBRL(d.valor)}</td>
-                  </tr>
-                ))}
+                {despesas.map((d) => {
+                  const documentos = documentosPorDespesa.get(d.id);
+                  return (
+                    <tr key={d.id}>
+                      <td className="whitespace-nowrap">{formatDataBrasil(d.data)}</td>
+                      <td className="print:truncate">{nomeDe(d.obras)}</td>
+                      <td className="print:truncate">{nomeDe(d.categorias)}</td>
+                      <td className="print:truncate">{nomeDe(d.etapas)}</td>
+                      <td className="print:truncate">{nomeDe(d.materiais)}</td>
+                      <td className="print:truncate">{nomeDe(d.fornecedores)}</td>
+                      <td className="max-w-[220px] truncate">{d.descricao ?? "-"}</td>
+                      <td className="text-right font-semibold">{formatBRL(d.valor)}</td>
+                      <td className="print:hidden">
+                        <div className="flex flex-col gap-1 whitespace-nowrap text-xs font-semibold">
+                          {documentos?.nota && (
+                            <a
+                              href={documentos.nota}
+                              target="_blank"
+                              rel="noreferrer"
+                              className="text-status-info hover:underline"
+                            >
+                              📄 Nota
+                            </a>
+                          )}
+                          {documentos?.comprovante && (
+                            <a
+                              href={documentos.comprovante}
+                              target="_blank"
+                              rel="noreferrer"
+                              className="text-status-success hover:underline"
+                            >
+                              💳 Comprovante
+                            </a>
+                          )}
+                          {!documentos?.nota && !documentos?.comprovante && (
+                            <span className="text-brand-gray-400">-</span>
+                          )}
+                        </div>
+                      </td>
+                    </tr>
+                  );
+                })}
 
                 {despesas.length === 0 && (
                   <tr>
-                    <td colSpan={8} className="oc-empty">
+                    <td colSpan={9} className="oc-empty">
                       Nenhuma despesa encontrada para os filtros selecionados.
                     </td>
                   </tr>
@@ -358,6 +430,7 @@ export default async function RelatorioDespesasPage({
                     <td className="text-right font-display text-base font-black text-brand-red">
                       {formatBRL(totalGasto)}
                     </td>
+                    <td className="print:hidden" />
                   </tr>
                 </tfoot>
               )}
