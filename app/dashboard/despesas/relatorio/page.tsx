@@ -134,10 +134,9 @@ export default async function RelatorioDespesasPage({
   if (params.material) query = query.eq("material_id", params.material);
   if (params.fornecedor) query = query.eq("fornecedor_id", params.fornecedor);
 
-  const { data } = await query;
-
-  const [obraFiltro, categoriaFiltro, etapaFiltro, materialFiltro, fornecedorFiltro] =
+  const [{ data }, obraFiltro, categoriaFiltro, etapaFiltro, materialFiltro, fornecedorFiltro] =
     await Promise.all([
+      query,
       params.obra
         ? supabase.from("obras").select("nome").eq("id", params.obra).maybeSingle()
         : Promise.resolve({ data: null }),

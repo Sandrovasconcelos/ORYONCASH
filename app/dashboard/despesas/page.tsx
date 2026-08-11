@@ -214,14 +214,16 @@ export default async function DespesasPage({
     }>
   >();
 
+  // Monta o mapa sem gerar signed URL ainda - isso so precisa acontecer pros
+  // comprovantes da pagina atual (depois do filtro de busca + paginacao),
+  // que e feito mais abaixo. Antes disso, o mapa so serve pra buscar por
+  // numero_documento/conta_origem_documento e agrupar por nota, nenhum dos
+  // dois depende de URL assinada.
   for (const comprovanteBase of comprovantes ?? []) {
     const comprovante = comprovanteBase as ComprovanteQueryRow;
     if (!comprovante.despesa_id) {
       continue;
     }
-    const { data: signed } = await supabase.storage
-      .from(comprovante.storage_bucket)
-      .createSignedUrl(comprovante.storage_path, 60 * 60);
     const listaAtual = comprovantesPorDespesa.get(comprovante.despesa_id) ?? [];
     listaAtual.push({
       id: comprovante.id,
@@ -237,7 +239,7 @@ export default async function DespesasPage({
       conta_origem_numero: comprovante.conta_origem_numero ?? null,
       metodo_pagamento: comprovante.metodo_pagamento ?? null,
       numero_documento: comprovante.numero_documento ?? null,
-      url: signed?.signedUrl ?? null,
+      url: null,
     });
     comprovantesPorDespesa.set(comprovante.despesa_id, listaAtual);
   }
@@ -314,6 +316,22 @@ export default async function DespesasPage({
       : 1;
   const inicioPagina = (paginaAtual - 1) * porPagina;
   const despesasPagina = despesas.slice(inicioPagina, inicioPagina + porPagina);
+
+  // So gera signed URL pros comprovantes que vao realmente aparecer na tela
+  // (a pagina atual), em paralelo - antes disso rodava sequencialmente pra
+  // TODOS os comprovantes de ate 1000 despesas em toda visita a pagina,
+  // que era o principal motivo da demora nas buscas e filtros.
+  const comprovantesDaPaginaAtual = despesasPagina.flatMap(
+    (d) => comprovantesPorDespesa.get(d.id) ?? []
+  );
+  await Promise.all(
+    comprovantesDaPaginaAtual.map(async (comprovante) => {
+      const { data: signed } = await supabase.storage
+        .from(comprovante.storage_bucket)
+        .createSignedUrl(comprovante.storage_path, 60 * 60);
+      comprovante.url = signed?.signedUrl ?? null;
+    })
+  );
 
   const hrefComOverrides = (overrides: Record<string, string | undefined>) => {
     const sp = new URLSearchParams();

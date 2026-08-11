@@ -132,26 +132,36 @@ export default async function CronogramaPage({
   const params = await searchParams;
   const supabase = createAdminClient();
 
-  const { data: obras } = await supabase
-    .from("obras")
-    .select("id, nome, status, orcamento_total")
-    .is("deleted_at", null)
-    .order("created_at", { ascending: false });
+  // Nenhuma dessas 5 consultas depende de outra (etapas/templates trazem
+  // tudo e sao filtrados por obra em memoria logo abaixo) - juntar tudo num
+  // Promise.all so evita 3 idas e vindas sequenciais ao Supabase.
+  const [{ data: obras }, { data: fornecedores }, { data: categorias }, etapasQuery, templatesQuery] =
+    await Promise.all([
+      supabase
+        .from("obras")
+        .select("id, nome, status, orcamento_total")
+        .is("deleted_at", null)
+        .order("created_at", { ascending: false }),
+      supabase.from("fornecedores").select("id, nome").is("deleted_at", null).order("nome"),
+      supabase.from("categorias").select("id, nome").order("nome"),
+      supabase
+        .from("etapas")
+        .select(
+          "id, nome, obra_id, valor_orcado, fornecedor_id, situacao_qualidade, data_inicio_prevista, data_fim_prevista, percentual_executado"
+        )
+        .is("deleted_at", null)
+        .order("ordem"),
+      supabase
+        .from("cronograma_templates")
+        .select(
+          "id, nome, descricao, cronograma_template_fases(id, nome, ordem, mes_inicio, duracao_meses, cronograma_template_atividades(id, descricao, ordem))"
+        )
+        .is("deleted_at", null)
+        .order("nome"),
+    ]);
 
   const listaObras = obras ?? [];
   const obraAtual = listaObras.find((o) => o.id === params.obra) ?? listaObras[0] ?? null;
-
-  const [{ data: fornecedores }, { data: categorias }, etapasQuery] = await Promise.all([
-    supabase.from("fornecedores").select("id, nome").is("deleted_at", null).order("nome"),
-    supabase.from("categorias").select("id, nome").order("nome"),
-    supabase
-      .from("etapas")
-      .select(
-        "id, nome, obra_id, valor_orcado, fornecedor_id, situacao_qualidade, data_inicio_prevista, data_fim_prevista, percentual_executado"
-      )
-      .is("deleted_at", null)
-      .order("ordem"),
-  ]);
 
   const moduloIndisponivel = Boolean(etapasQuery.error);
   const listaFornecedores = fornecedores ?? [];
@@ -345,14 +355,6 @@ export default async function CronogramaPage({
     })),
     despesasObra
   );
-
-  const templatesQuery = await supabase
-    .from("cronograma_templates")
-    .select(
-      "id, nome, descricao, cronograma_template_fases(id, nome, ordem, mes_inicio, duracao_meses, cronograma_template_atividades(id, descricao, ordem))"
-    )
-    .is("deleted_at", null)
-    .order("nome");
 
   const detalhadoIndisponivel = Boolean(templatesQuery.error);
   const templates = (templatesQuery.data ?? []).map((t) => ({

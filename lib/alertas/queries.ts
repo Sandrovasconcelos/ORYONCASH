@@ -200,17 +200,15 @@ async function buscarContratosEstourados(): Promise<Alerta[]> {
 async function buscarSaldosNegativos(): Promise<Alerta[]> {
   const supabase = createAdminClient();
 
-  const { data: contas } = await supabase
-    .from("contas_bancarias")
-    .select("id, nome, saldo_inicial")
-    .is("deleted_at", null);
+  const [{ data: contas }, { data: despesas }] = await Promise.all([
+    supabase.from("contas_bancarias").select("id, nome, saldo_inicial").is("deleted_at", null),
+    supabase
+      .from("despesas")
+      .select("conta_bancaria_id, valor")
+      .is("deleted_at", null)
+      .not("conta_bancaria_id", "is", null),
+  ]);
   if (!contas || contas.length === 0) return [];
-
-  const { data: despesas } = await supabase
-    .from("despesas")
-    .select("conta_bancaria_id, valor")
-    .is("deleted_at", null)
-    .not("conta_bancaria_id", "is", null);
 
   const gastoPorConta = new Map<string, number>();
   for (const d of despesas ?? []) {

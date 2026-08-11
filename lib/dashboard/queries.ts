@@ -214,14 +214,14 @@ export async function getDashboardData(
 
   const obrasComLixeira = await supabase
     .from("obras")
-    .select("id, nome, status")
+    .select("id, nome, status, orcamento_total")
     .is("deleted_at", null)
     .order("created_at", { ascending: false });
 
   const { data: obras } = obrasComLixeira.error
     ? await supabase
         .from("obras")
-        .select("id, nome, status")
+        .select("id, nome, status, orcamento_total")
         .order("created_at", { ascending: false })
     : obrasComLixeira;
 
@@ -242,20 +242,7 @@ export async function getDashboardData(
     };
   }
 
-  const obraComLixeira = await supabase
-    .from("obras")
-    .select("id, nome, orcamento_total")
-    .eq("id", obraSelecionada.id)
-    .is("deleted_at", null)
-    .maybeSingle();
-
-  const { data: obra } = obraComLixeira.error
-    ? await supabase
-        .from("obras")
-        .select("id, nome, orcamento_total")
-        .eq("id", obraSelecionada.id)
-        .maybeSingle()
-    : obraComLixeira;
+  const obra = obraSelecionada;
 
   const [
     { data: despesas },

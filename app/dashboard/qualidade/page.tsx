@@ -43,16 +43,12 @@ export default async function QualidadePage({
   const params = await searchParams;
   const supabase = createAdminClient();
 
-  const { data: obras } = await supabase
-    .from("obras")
-    .select("id, nome, status")
-    .is("deleted_at", null)
-    .order("created_at", { ascending: false });
-
-  const listaObras = obras ?? [];
-  const obraAtual = listaObras.find((o) => o.id === params.obra) ?? listaObras[0] ?? null;
-
-  const [{ data: fornecedores }, templatesQuery] = await Promise.all([
+  const [{ data: obras }, { data: fornecedores }, templatesQuery] = await Promise.all([
+    supabase
+      .from("obras")
+      .select("id, nome, status")
+      .is("deleted_at", null)
+      .order("created_at", { ascending: false }),
     supabase.from("fornecedores").select("id, nome").is("deleted_at", null).order("nome"),
     supabase
       .from("checklist_templates")
@@ -60,6 +56,9 @@ export default async function QualidadePage({
       .is("deleted_at", null)
       .order("nome"),
   ]);
+
+  const listaObras = obras ?? [];
+  const obraAtual = listaObras.find((o) => o.id === params.obra) ?? listaObras[0] ?? null;
 
   const moduloIndisponivel = Boolean(templatesQuery.error);
   const templates = (templatesQuery.data ?? []).map((t) => ({
@@ -81,14 +80,27 @@ export default async function QualidadePage({
     etapas = (data ?? []) as EtapaQualidade[];
 
     if (etapas.length > 0) {
-      const { data: itensPagos } = await supabase
-        .from("medicao_itens")
-        .select("etapa_id, percentual_medido, valor_medido, medicoes!inner(status)")
-        .in(
-          "etapa_id",
-          etapas.map((e) => e.id)
-        )
-        .eq("medicoes.status", "paga");
+      // Independentes entre si (uma olha medicao_itens, a outra
+      // contratos_fornecedor) - roda em paralelo em vez de sequencial.
+      const [{ data: itensPagos }, { data: contratosEtapa }] = await Promise.all([
+        supabase
+          .from("medicao_itens")
+          .select("etapa_id, percentual_medido, valor_medido, medicoes!inner(status)")
+          .in(
+            "etapa_id",
+            etapas.map((e) => e.id)
+          )
+          .eq("medicoes.status", "paga"),
+        // Contratos escopados a uma etapa especifica - so pra mostrar o link
+        // visual etapa -> contrato aqui na Qualidade. Se a coluna etapa_id
+        // ainda nao existir (migration nao aplicada), ignora silenciosamente.
+        supabase
+          .from("contratos_fornecedor")
+          .select("etapa_id, descricao, valor_contrato")
+          .eq("obra_id", obraAtual.id)
+          .is("deleted_at", null)
+          .not("etapa_id", "is", null),
+      ]);
 
       for (const item of itensPagos ?? []) {
         const atual = pagoPorEtapa.get(item.etapa_id) ?? { percentual: 0, valor: 0 };
@@ -97,15 +109,6 @@ export default async function QualidadePage({
         pagoPorEtapa.set(item.etapa_id, atual);
       }
 
-      // Contratos escopados a uma etapa especifica - so pra mostrar o link
-      // visual etapa -> contrato aqui na Qualidade. Se a coluna etapa_id
-      // ainda nao existir (migration nao aplicada), ignora silenciosamente.
-      const { data: contratosEtapa } = await supabase
-        .from("contratos_fornecedor")
-        .select("etapa_id, descricao, valor_contrato")
-        .eq("obra_id", obraAtual.id)
-        .is("deleted_at", null)
-        .not("etapa_id", "is", null);
       for (const contrato of (contratosEtapa ?? []) as { etapa_id: string | null; descricao: string | null; valor_contrato: number }[]) {
         if (!contrato.etapa_id) continue;
         contratoPorEtapa.set(contrato.etapa_id, {
