@@ -47,6 +47,33 @@ export async function GET(request: NextRequest) {
     return Response.json({ error: error.message }, { status: 500 });
   }
 
+  const despesas = data ?? [];
+  const idsDespesas = despesas.map((d) => d.id);
+  const { data: comprovantesData } =
+    idsDespesas.length > 0
+      ? await supabase
+          .from("despesa_comprovantes")
+          .select("despesa_id, tipo_documento, storage_bucket, storage_path")
+          .in("despesa_id", idsDespesas)
+      : { data: [] };
+
+  // Mesma validade de 7 dias do relatorio em PDF - CSV tambem costuma ser
+  // salvo/reaberto depois, entao o link nao pode expirar em 1h.
+  const VALIDADE_LINK_DOCUMENTO = 60 * 60 * 24 * 7;
+  const documentosPorDespesa = new Map<string, { nota: string | null; comprovante: string | null }>();
+  await Promise.all(
+    (comprovantesData ?? []).map(async (c) => {
+      if (!c.despesa_id) return;
+      const { data: signed } = await supabase.storage
+        .from(c.storage_bucket)
+        .createSignedUrl(c.storage_path, VALIDADE_LINK_DOCUMENTO);
+      const atual = documentosPorDespesa.get(c.despesa_id) ?? { nota: null, comprovante: null };
+      if (c.tipo_documento === "comprovante_pagamento") atual.comprovante = signed?.signedUrl ?? null;
+      else atual.nota = signed?.signedUrl ?? null;
+      documentosPorDespesa.set(c.despesa_id, atual);
+    })
+  );
+
   const header = [
     "Data",
     "Obra",
@@ -58,20 +85,27 @@ export async function GET(request: NextRequest) {
     "Valor",
     "Origem",
     "Registrado em",
+    "Link da nota",
+    "Link do comprovante",
   ];
 
-  const rows = (data ?? []).map((d) => [
-    d.data,
-    (d.obras as unknown as { nome: string } | null)?.nome,
-    (d.categorias as unknown as { nome: string } | null)?.nome,
-    (d.etapas as unknown as { nome: string } | null)?.nome,
-    (d.materiais as unknown as { nome: string } | null)?.nome,
-    d.descricao,
-    (d.fornecedores as unknown as { nome: string } | null)?.nome,
-    d.valor,
-    d.origem,
-    d.created_at,
-  ]);
+  const rows = despesas.map((d) => {
+    const documentos = documentosPorDespesa.get(d.id);
+    return [
+      d.data,
+      (d.obras as unknown as { nome: string } | null)?.nome,
+      (d.categorias as unknown as { nome: string } | null)?.nome,
+      (d.etapas as unknown as { nome: string } | null)?.nome,
+      (d.materiais as unknown as { nome: string } | null)?.nome,
+      d.descricao,
+      (d.fornecedores as unknown as { nome: string } | null)?.nome,
+      d.valor,
+      d.origem,
+      d.created_at,
+      documentos?.nota ?? "",
+      documentos?.comprovante ?? "",
+    ];
+  });
 
   const csv = [header, ...rows]
     .map((row) => row.map(csvCell).join(";"))

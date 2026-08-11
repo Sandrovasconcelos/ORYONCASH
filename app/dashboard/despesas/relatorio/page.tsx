@@ -176,11 +176,15 @@ export default async function RelatorioDespesasPage({
           .select("id, despesa_id, tipo_documento, storage_bucket, storage_path")
           .in("despesa_id", idsDespesas)
       : { data: [] };
+  // 7 dias em vez de 1 hora - esse relatorio costuma ser salvo em PDF ou
+  // impresso pra consulta futura, entao o link precisa sobreviver mais
+  // tempo que a sessao de quem gerou.
+  const VALIDADE_LINK_DOCUMENTO = 60 * 60 * 24 * 7;
   const comprovantesComUrl = await Promise.all(
     (comprovantesData ?? []).map(async (c) => {
       const { data: signed } = await supabase.storage
         .from(c.storage_bucket)
-        .createSignedUrl(c.storage_path, 60 * 60);
+        .createSignedUrl(c.storage_path, VALIDADE_LINK_DOCUMENTO);
       return { ...c, url: signed?.signedUrl ?? null };
     })
   );
@@ -359,14 +363,14 @@ export default async function RelatorioDespesasPage({
               <thead>
                 <tr>
                   <th className="print:w-[8%]">Data</th>
-                  <th className="print:w-[12%]">Obra</th>
-                  <th className="print:w-[11%]">Categoria</th>
-                  <th className="print:w-[11%]">Etapa</th>
-                  <th className="print:w-[12%]">Material</th>
-                  <th className="print:w-[12%]">Fornecedor</th>
-                  <th className="print:w-[22%]">Descrição</th>
-                  <th className="text-right print:w-[12%]">Valor</th>
-                  <th className="print:hidden">Documentos</th>
+                  <th className="print:w-[10%]">Obra</th>
+                  <th className="print:w-[10%]">Categoria</th>
+                  <th className="print:w-[10%]">Etapa</th>
+                  <th className="print:w-[10%]">Material</th>
+                  <th className="print:w-[10%]">Fornecedor</th>
+                  <th className="print:w-[16%]">Descrição</th>
+                  <th className="text-right print:w-[10%]">Valor</th>
+                  <th className="print:w-[16%]">Documentos</th>
                 </tr>
               </thead>
               <tbody>
@@ -382,14 +386,14 @@ export default async function RelatorioDespesasPage({
                       <td className="print:truncate">{nomeDe(d.fornecedores)}</td>
                       <td className="max-w-[220px] truncate">{d.descricao ?? "-"}</td>
                       <td className="text-right font-semibold">{formatBRL(d.valor)}</td>
-                      <td className="print:hidden">
+                      <td>
                         <div className="flex flex-col gap-1 whitespace-nowrap text-xs font-semibold">
                           {documentos?.nota && (
                             <a
                               href={documentos.nota}
                               target="_blank"
                               rel="noreferrer"
-                              className="text-status-info hover:underline"
+                              className="text-status-info hover:underline print:text-brand-black print:underline"
                             >
                               📄 Nota
                             </a>
@@ -399,7 +403,7 @@ export default async function RelatorioDespesasPage({
                               href={documentos.comprovante}
                               target="_blank"
                               rel="noreferrer"
-                              className="text-status-success hover:underline"
+                              className="text-status-success hover:underline print:text-brand-black print:underline"
                             >
                               💳 Comprovante
                             </a>
@@ -430,7 +434,7 @@ export default async function RelatorioDespesasPage({
                     <td className="text-right font-display text-base font-black text-brand-red">
                       {formatBRL(totalGasto)}
                     </td>
-                    <td className="print:hidden" />
+                    <td />
                   </tr>
                 </tfoot>
               )}
