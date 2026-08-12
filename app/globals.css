@@ -366,6 +366,19 @@ textarea:focus-visible {
   .report-block {
     break-inside: avoid;
   }
+
+  .oc-letterhead {
+    break-inside: avoid;
+    break-after: avoid;
+  }
+}
+
+/* Cor de fundo/texto do cabecalho do relatorio (letterhead) so aparece na
+   impressao/PDF se o navegador for instruido a manter graficos de fundo -
+   sem isso a maioria descarta background por padrao ao imprimir. */
+.oc-letterhead {
+  -webkit-print-color-adjust: exact;
+  print-color-adjust: exact;
 }
 
 @page {

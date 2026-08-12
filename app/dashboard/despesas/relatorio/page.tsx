@@ -273,25 +273,38 @@ export default async function RelatorioDespesasPage({
         </div>
       </div>
 
-      <div className="rounded-card border border-brand-gray-300/60 bg-white p-6 shadow-card print:rounded-none print:border-0 print:p-0 print:shadow-none sm:p-8">
-        <div className="report-block flex flex-col gap-4 border-b border-brand-gray-300/70 pb-6 sm:flex-row sm:items-start sm:justify-between">
-          <div className="flex items-center gap-3">
+      <div className="overflow-hidden rounded-card border border-brand-gray-300/60 bg-white shadow-card print:overflow-visible print:rounded-none print:border-0 print:shadow-none">
+        <div className="oc-letterhead report-block flex flex-wrap items-center justify-between gap-4 bg-brand-black px-6 py-6 text-white sm:px-8">
+          <div className="flex items-center gap-4">
             <Image
               src="/oryoncash-simbolo-oficial.png"
               alt=""
               width={265}
               height={250}
-              className="h-11 w-11 object-contain"
+              className="h-14 w-14 object-contain"
             />
             <div>
-              <p className="oc-eyebrow">OryonCash / Financeiro</p>
-              <h1 className="font-display text-2xl font-bold tracking-tight text-brand-black">
-                Relatório de Despesas
-              </h1>
-              <p className="mt-0.5 text-xs text-brand-gray-500">Gerado em {geradoEm}</p>
+              <p className="font-display text-xl font-extrabold tracking-tight text-white">
+                OryonCash
+              </p>
+              <p className="text-[11px] font-bold uppercase tracking-[0.16em] text-white/55">
+                Controle financeiro de obras
+              </p>
             </div>
           </div>
+          <div className="text-left sm:text-right">
+            <h1 className="font-display text-2xl font-bold tracking-tight text-white">
+              Relatório de Despesas
+            </h1>
+            <p className="mt-0.5 text-xs text-white/60">Gerado em {geradoEm}</p>
+          </div>
+        </div>
 
+        <div className="p-6 print:p-0 sm:p-8">
+        <div className="report-block flex flex-col gap-4 border-b border-brand-gray-300/70 pb-6 pt-6 print:pt-4 sm:flex-row sm:items-center sm:justify-between">
+          <p className="text-xs font-bold uppercase tracking-[0.12em] text-brand-gray-500">
+            Filtros aplicados
+          </p>
           <div className="flex flex-wrap gap-2 sm:justify-end">
             {filtrosAtivos.length > 0 ? (
               filtrosAtivos.map((filtro) => (
@@ -446,6 +459,7 @@ export default async function RelatorioDespesasPage({
           Documento gerado automaticamente pelo OryonCash em {geradoEm}. Não substitui nota fiscal
           ou comprovante de pagamento.
         </p>
+        </div>
       </div>
     </div>
   );
