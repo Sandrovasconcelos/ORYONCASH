@@ -62,6 +62,25 @@ export async function listEtapas() {
 }
 
 /**
+ * Poe etapas ainda nao concluidas (percentual_executado < 100) antes das
+ * ja concluidas, mantendo a ordem do cronograma (campo "ordem") dentro de
+ * cada grupo. Sem isso, uma obra com 20+ etapas trava a lista do WhatsApp
+ * (limite de 10 itens) sempre nas mesmas primeiras etapas cadastradas -
+ * mesmo que elas ja tenham sido finalizadas ha tempos e a obra ja esteja
+ * trabalhando em etapas mais adiante no cronograma.
+ */
+function ordenarPorProgresso<T extends { ordem: number; percentual_executado: number }>(
+  etapas: T[]
+): T[] {
+  return [...etapas].sort((a, b) => {
+    const aConcluida = a.percentual_executado >= 100 ? 1 : 0;
+    const bConcluida = b.percentual_executado >= 100 ? 1 : 0;
+    if (aConcluida !== bConcluida) return aConcluida - bConcluida;
+    return a.ordem - b.ordem;
+  });
+}
+
+/**
  * Etapas especificas da obra (importadas de um orcamento), com fallback
  * para o catalogo generico (obra_id nulo) quando a obra nao tem etapas
  * proprias cadastradas.
@@ -70,22 +89,22 @@ export async function listEtapasParaObra(obraId: string) {
   const supabase = createAdminClient();
   const { data: proprias } = await supabase
     .from("etapas")
-    .select("id, nome")
+    .select("id, nome, ordem, percentual_executado")
     .eq("obra_id", obraId)
     .is("deleted_at", null)
-    .order("ordem")
-    .limit(10);
+    .order("ordem");
 
-  if (proprias && proprias.length > 0) return proprias;
+  if (proprias && proprias.length > 0) {
+    return ordenarPorProgresso(proprias).slice(0, 10);
+  }
 
   const { data: genericas } = await supabase
     .from("etapas")
-    .select("id, nome")
+    .select("id, nome, ordem, percentual_executado")
     .is("obra_id", null)
     .is("deleted_at", null)
-    .order("ordem")
-    .limit(10);
-  return genericas ?? [];
+    .order("ordem");
+  return ordenarPorProgresso(genericas ?? []).slice(0, 10);
 }
 
 /**
