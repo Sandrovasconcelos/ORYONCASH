@@ -315,7 +315,7 @@ export async function findCategoriaById(id: string) {
   const supabase = createAdminClient();
   const { data } = await supabase
     .from("categorias")
-    .select("id, nome")
+    .select("id, nome, usa_etapa")
     .eq("id", id)
     .maybeSingle();
   return data;
@@ -391,7 +391,7 @@ export async function findCategoriaPorTexto(texto: string) {
   const supabase = createAdminClient();
   const { data: categorias } = await supabase
     .from("categorias")
-    .select("id, nome")
+    .select("id, nome, usa_etapa")
     .is("deleted_at", null);
   return encontrarUnicoPorNome(categorias ?? [], texto);
 }
@@ -602,7 +602,7 @@ export async function findOrCreateFornecedorPorNota(dados: {
 export async function createDespesa(input: {
   obraId: string;
   categoriaId: string;
-  etapaId: string;
+  etapaId: string | null;
   valor: number;
   descricao: string | null;
   materialId?: string | null;

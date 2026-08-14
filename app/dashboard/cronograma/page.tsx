@@ -29,6 +29,7 @@ import { DeleteCadastroButton } from "../delete-cadastro-button";
 import { ActionIcon } from "../action-icon";
 import { ObraSelector } from "../obra-selector";
 import { CronogramaTabs } from "./cronograma-tabs";
+import { DistribuicaoMensalTable } from "./distribuicao-mensal-table";
 import { GanttTimeline } from "./gantt-timeline";
 import { StatusAtividadesChart } from "../charts/status-atividades-chart";
 import { CurvaSChart } from "../charts/curva-s-chart";
@@ -290,6 +291,57 @@ export default async function CronogramaPage({
       }
     }
   }
+
+  let distribuicoesMensais: {
+    etapaId: string;
+    mes: string;
+    percentual: number;
+    duracaoDias: number;
+    observacao: string | null;
+  }[] = [];
+  if (etapas.length > 0) {
+    const { data: distribuicaoData } = await supabase
+      .from("etapa_distribuicao_mensal")
+      .select("etapa_id, mes, percentual, duracao_dias, observacao")
+      .in(
+        "etapa_id",
+        etapas.map((e) => e.id)
+      );
+    distribuicoesMensais = (distribuicaoData ?? []).map((d) => ({
+      etapaId: d.etapa_id,
+      mes: d.mes,
+      percentual: Number(d.percentual),
+      duracaoDias: d.duracao_dias,
+      observacao: d.observacao,
+    }));
+  }
+
+  // Os meses do cronograma sao derivados do intervalo entre a menor data de
+  // inicio prevista e a maior data de fim prevista das etapas da obra - sem
+  // precisar de uma tela separada pra "configurar meses" (menos uma coisa
+  // pra manter sincronizada com o que ja esta em Etapas).
+  const mesesCronograma: string[] = (() => {
+    const datas = etapas
+      .flatMap((e) => [e.data_inicio_prevista, e.data_fim_prevista])
+      .filter((d): d is string => Boolean(d));
+    if (datas.length === 0) return [];
+    const inicio = datas.reduce((min, d) => (d < min ? d : min));
+    const fim = datas.reduce((max, d) => (d > max ? d : max));
+    const [anoIni, mesIni] = inicio.split("-").map(Number);
+    const [anoFim, mesFim] = fim.split("-").map(Number);
+    const lista: string[] = [];
+    let ano = anoIni;
+    let mes = mesIni;
+    while (ano < anoFim || (ano === anoFim && mes <= mesFim)) {
+      lista.push(`${ano}-${String(mes).padStart(2, "0")}-01`);
+      mes += 1;
+      if (mes > 12) {
+        mes = 1;
+        ano += 1;
+      }
+    }
+    return lista;
+  })();
 
   const nomesEtapa = new Map(todasEtapas.map((e) => [e.id, e.nome]));
   const categoriasPorId = new Map(listaCategorias.map((c) => [c.id, c.nome]));
@@ -1364,11 +1416,45 @@ export default async function CronogramaPage({
     </div>
   );
 
+  const fisicoFinanceiroPanel = !obraAtual ? (
+    <div className="rounded-card border border-brand-gray-300/60 bg-white p-10 text-center text-sm text-brand-gray-500 shadow-card">
+      Cadastre uma obra primeiro.
+    </div>
+  ) : etapas.length === 0 ? (
+    <div className="flex flex-col gap-6">
+      <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+        <ObraSelector obras={listaObras} obraAtualId={obraAtual.id} basePath="/dashboard/cronograma" />
+      </div>
+      <div className="rounded-card border border-brand-gray-300/60 bg-white p-8 text-center shadow-card">
+        <p className="text-sm font-semibold text-brand-black">
+          Nenhuma etapa foi adicionada ao cronograma.
+        </p>
+        <p className="mt-1 text-xs text-brand-gray-500">
+          Cadastre etapas com valor orçado pra {obraAtual.nome} na aba Visão geral.
+        </p>
+      </div>
+    </div>
+  ) : (
+    <div className="flex flex-col gap-6">
+      <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+        <ObraSelector obras={listaObras} obraAtualId={obraAtual.id} basePath="/dashboard/cronograma" />
+      </div>
+      <div className="rounded-card border border-brand-gray-300/60 bg-white p-5 shadow-card">
+        <DistribuicaoMensalTable
+          etapas={etapas.map((e) => ({ id: e.id, nome: e.nome, valorOrcado: e.valor_orcado ?? 0 }))}
+          meses={mesesCronograma}
+          distribuicoes={distribuicoesMensais}
+        />
+      </div>
+    </div>
+  );
+
   return (
     <CronogramaTabs
       visaoGeralPanel={visaoGeralPanel}
       medicoesPanel={medicoesPanel}
       detalhadoPanel={detalhadoPanel}
+      fisicoFinanceiroPanel={fisicoFinanceiroPanel}
     />
   );
 }

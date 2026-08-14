@@ -511,6 +511,15 @@ async function handleDespesaCategoria(
     categoriaId: categoria.id,
     categoriaNome: categoria.nome,
   };
+
+  // Categorias que nao representam uma etapa fisica do cronograma (ex:
+  // Despesas Administrativas) pulam direto pro passo seguinte, sem
+  // perguntar etapa.
+  if (categoria.usa_etapa === false) {
+    await continuarAposEtapa(from, dados);
+    return;
+  }
+
   await saveSession(from, ESTADOS.DESPESA_ETAPA, dados);
   await sendListEtapas(from, dados.obraId!);
 }
@@ -531,7 +540,10 @@ async function handleDespesaEtapa(
     etapaId: etapa.id,
     etapaNome: etapa.nome,
   };
+  await continuarAposEtapa(from, dados);
+}
 
+async function continuarAposEtapa(from: string, dados: Dados) {
   // Categoria "Material" sempre exige selecionar/cadastrar um material,
   // mesmo quando a descricao ja veio preenchida por IA (audio/comprovante) -
   // senao o lancamento fica sem material_id (aparece "-" no dashboard).
@@ -752,9 +764,12 @@ async function enviarConfirmacao(from: string, dados: Dados) {
 ` +
     `🏗️ Obra: ${dados.obraNome}
 ` +
-    `📁 Categoria: ${dados.categoriaNome}
-` +
-    `📐 Etapa: ${dados.etapaNome}`;
+    `📁 Categoria: ${dados.categoriaNome}`;
+
+  if (dados.etapaNome) {
+    texto += `
+📐 Etapa: ${dados.etapaNome}`;
+  }
 
   if (dados.fornecedorNome) {
     texto += `
@@ -782,7 +797,7 @@ async function handleDespesaConfirmacao(
     const despesa = await createDespesa({
       obraId: dados.obraId!,
       categoriaId: dados.categoriaId!,
-      etapaId: dados.etapaId!,
+      etapaId: dados.etapaId ?? null,
       valor: dados.valor!,
       descricao: dados.descricao ?? null,
       fornecedorId: dados.fornecedorId ?? null,

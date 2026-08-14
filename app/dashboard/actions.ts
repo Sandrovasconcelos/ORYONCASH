@@ -502,6 +502,59 @@ export async function updateEtapaAction(formData: FormData) {
   revalidatePath("/dashboard");
 }
 
+/**
+ * Chamada direto de um Client Component (nao via <form action>), pelo
+ * modal de edicao da celula etapa x mes - por isso recebe um objeto em
+ * vez de FormData e devolve {ok, error} pro modal mostrar feedback.
+ */
+export async function salvarDistribuicaoEtapaMesAction(input: {
+  etapaId: string;
+  mes: string;
+  percentual: number;
+  duracaoDias: number;
+  observacao: string | null;
+}): Promise<{ ok: boolean; error?: string }> {
+  if (!input.etapaId || !input.mes) {
+    return { ok: false, error: "Dados incompletos." };
+  }
+  const percentual = Math.max(0, Math.min(100, input.percentual));
+  const duracaoDias = Math.max(0, Math.round(input.duracaoDias || 0));
+
+  const supabase = await createClient();
+  const { data: etapa } = await supabase
+    .from("etapas")
+    .select("nome")
+    .eq("id", input.etapaId)
+    .maybeSingle();
+
+  const { error } = await supabase.from("etapa_distribuicao_mensal").upsert(
+    {
+      etapa_id: input.etapaId,
+      mes: input.mes,
+      percentual,
+      duracao_dias: duracaoDias,
+      observacao: input.observacao,
+      updated_at: new Date().toISOString(),
+    },
+    { onConflict: "etapa_id,mes" }
+  );
+  if (error) return { ok: false, error: error.message };
+
+  const autorNome = await getAutorNomeDashboard();
+  await registrarAtividade({
+    tipo: "edicao",
+    entidade: "etapa",
+    entidadeId: input.etapaId,
+    origem: "dashboard",
+    autorNome,
+    resumo: `Distribuição mensal de "${etapa?.nome ?? input.etapaId}" (${input.mes}) editada por ${autorNome}: ${percentual}%`,
+    dadosDepois: input,
+  });
+
+  revalidatePath("/dashboard/cronograma");
+  return { ok: true };
+}
+
 export async function deleteEtapaAction(formData: FormData) {
   const id = String(formData.get("id") ?? "");
   const motivo = String(formData.get("motivo") ?? "").trim() || null;
@@ -618,12 +671,13 @@ export async function createMaterialAction(formData: FormData) {
 
 export async function createCategoriaAction(formData: FormData) {
   const nome = String(formData.get("nome") ?? "").trim();
+  const usaEtapa = formData.get("usa_etapa") === "on";
   if (!nome) return;
 
   const supabase = await createClient();
   const { data: categoria } = await supabase
     .from("categorias")
-    .insert({ nome })
+    .insert({ nome, usa_etapa: usaEtapa })
     .select("id")
     .single();
 
@@ -635,7 +689,7 @@ export async function createCategoriaAction(formData: FormData) {
     origem: "dashboard",
     autorNome,
     resumo: `Categoria "${nome}" cadastrada por ${autorNome}`,
-    dadosDepois: { nome },
+    dadosDepois: { nome, usa_etapa: usaEtapa },
   });
 
   revalidatePath("/dashboard/categorias");
@@ -647,6 +701,7 @@ export async function createCategoriaAction(formData: FormData) {
 export async function updateCategoriaAction(formData: FormData) {
   const id = String(formData.get("id") ?? "");
   const nome = String(formData.get("nome") ?? "").trim();
+  const usaEtapa = formData.get("usa_etapa") === "on";
   if (!id || !nome) return;
 
   const supabase = await createClient();
@@ -656,7 +711,7 @@ export async function updateCategoriaAction(formData: FormData) {
     .eq("id", id)
     .maybeSingle();
 
-  await supabase.from("categorias").update({ nome }).eq("id", id);
+  await supabase.from("categorias").update({ nome, usa_etapa: usaEtapa }).eq("id", id);
 
   const autorNome = await getAutorNomeDashboard();
   await registrarAtividade({
@@ -667,7 +722,7 @@ export async function updateCategoriaAction(formData: FormData) {
     autorNome,
     resumo: `Categoria "${nome}" editada por ${autorNome}`,
     dadosAntes: antes,
-    dadosDepois: { nome },
+    dadosDepois: { nome, usa_etapa: usaEtapa },
   });
 
   revalidatePath("/dashboard/categorias");

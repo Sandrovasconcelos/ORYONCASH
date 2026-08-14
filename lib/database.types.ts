@@ -39,6 +39,7 @@ export interface Database {
         Row: {
           id: string;
           nome: string;
+          usa_etapa: boolean;
           created_at: string;
           deleted_at: string | null;
           deleted_by: string | null;
@@ -47,6 +48,7 @@ export interface Database {
         Insert: {
           id?: string;
           nome: string;
+          usa_etapa?: boolean;
           created_at?: string;
           deleted_at?: string | null;
           deleted_by?: string | null;
@@ -111,6 +113,38 @@ export interface Database {
             columns: ["checklist_template_id"];
             isOneToOne: false;
             referencedRelation: "checklist_templates";
+            referencedColumns: ["id"];
+          },
+        ];
+      };
+      etapa_distribuicao_mensal: {
+        Row: {
+          id: string;
+          etapa_id: string;
+          mes: string;
+          percentual: number;
+          duracao_dias: number;
+          observacao: string | null;
+          created_at: string;
+          updated_at: string;
+        };
+        Insert: {
+          id?: string;
+          etapa_id: string;
+          mes: string;
+          percentual?: number;
+          duracao_dias?: number;
+          observacao?: string | null;
+          created_at?: string;
+          updated_at?: string;
+        };
+        Update: Partial<Database["public"]["Tables"]["etapa_distribuicao_mensal"]["Insert"]>;
+        Relationships: [
+          {
+            foreignKeyName: "etapa_distribuicao_mensal_etapa_id_fkey";
+            columns: ["etapa_id"];
+            isOneToOne: false;
+            referencedRelation: "etapas";
             referencedColumns: ["id"];
           },
         ];

@@ -597,7 +597,7 @@ export default async function DespesasPage({
                     </p>
                   </td>
                   <td className="px-5 py-4">
-                    <div className="flex items-center gap-2">
+                    <div className="flex flex-wrap items-center gap-2">
                       {documentosCobranca[0]?.url ? (
                         <Link
                           href={documentosCobranca[0].url}
@@ -605,17 +605,19 @@ export default async function DespesasPage({
                           rel="noreferrer"
                           aria-label="Ver conta ou nota"
                           title="Ver conta ou nota"
-                          className="inline-flex h-10 w-10 items-center justify-center rounded-brand-sm border border-status-info/25 bg-white text-status-info hover:bg-status-info hover:text-white"
+                          className="inline-flex items-center gap-1.5 whitespace-nowrap rounded-brand-sm border border-status-info/25 bg-white px-2.5 py-2 text-[11px] font-bold text-status-info hover:bg-status-info hover:text-white"
                         >
                           <ActionIcon name="file" />
+                          Nota
                         </Link>
                       ) : (
                         <span
                           aria-label="Sem conta ou nota"
                           title="Sem conta ou nota"
-                          className="inline-flex h-10 w-10 items-center justify-center rounded-brand-sm border border-brand-gray-300 bg-brand-gray-100 text-brand-gray-500"
+                          className="inline-flex items-center gap-1.5 whitespace-nowrap rounded-brand-sm border border-brand-gray-300 bg-brand-gray-100 px-2.5 py-2 text-[11px] font-bold text-brand-gray-500"
                         >
                           <ActionIcon name="file" />
+                          Nota
                         </span>
                       )}
                       {comprovantesPagamento[0]?.url ? (
@@ -625,17 +627,19 @@ export default async function DespesasPage({
                           rel="noreferrer"
                           aria-label="Ver comprovante de pagamento"
                           title="Ver comprovante de pagamento"
-                          className="inline-flex h-10 w-10 items-center justify-center rounded-brand-sm border border-status-success/25 bg-[#e9f8f0] text-status-success hover:bg-status-success hover:text-white"
+                          className="inline-flex items-center gap-1.5 whitespace-nowrap rounded-brand-sm border border-status-success/25 bg-[#e9f8f0] px-2.5 py-2 text-[11px] font-bold text-status-success hover:bg-status-success hover:text-white"
                         >
                           <ActionIcon name="payment" />
+                          Pago
                         </Link>
                       ) : (
                         <span
                           aria-label="Comprovante de pagamento pendente"
                           title="Comprovante de pagamento pendente"
-                          className="inline-flex h-10 w-10 items-center justify-center rounded-brand-sm border border-status-warning/25 bg-status-warning/10 text-status-warning"
+                          className="inline-flex items-center gap-1.5 whitespace-nowrap rounded-brand-sm border border-status-warning/25 bg-status-warning/10 px-2.5 py-2 text-[11px] font-bold text-status-warning"
                         >
                           <ActionIcon name="payment" />
+                          Pendente
                         </span>
                       )}
                     </div>

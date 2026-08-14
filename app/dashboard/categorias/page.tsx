@@ -18,7 +18,7 @@ export default async function CategoriasPage() {
     await Promise.all([
       supabase
         .from("categorias")
-        .select("id, nome, created_at")
+        .select("id, nome, usa_etapa, created_at")
         .is("deleted_at", null)
         .order("nome"),
       supabase.from("despesas").select("categoria_id, valor").is("deleted_at", null),
@@ -74,6 +74,21 @@ export default async function CategoriasPage() {
                 className="rounded-brand-sm border border-brand-gray-300 bg-white px-3 py-2 text-sm outline-none focus:border-brand-red"
               />
             </label>
+            <label className="flex items-start gap-2 text-sm text-brand-gray-700">
+              <input
+                type="checkbox"
+                name="usa_etapa"
+                defaultChecked
+                className="mt-0.5 h-4 w-4 accent-brand-red"
+              />
+              <span>
+                Pede etapa da obra no WhatsApp
+                <span className="block text-xs font-normal text-brand-gray-500">
+                  Desmarque pra categorias que não são uma etapa física do cronograma (ex:
+                  Despesas Administrativas) — o WhatsApp pula essa pergunta.
+                </span>
+              </span>
+            </label>
             <SubmitButton className="rounded-brand-sm bg-brand-red px-4 py-2 text-sm font-semibold text-white hover:bg-brand-red-700">
               Salvar categoria
             </SubmitButton>
@@ -94,6 +109,7 @@ export default async function CategoriasPage() {
             <thead className="bg-brand-gray-100 text-[11px] uppercase tracking-[0.12em] text-brand-gray-500">
               <tr>
                 <th className="px-5 py-3 font-extrabold">Categoria</th>
+                <th className="px-5 py-3 font-extrabold">Pede etapa?</th>
                 <th className="px-5 py-3 font-extrabold">Materiais</th>
                 <th className="px-5 py-3 font-extrabold">Lançamentos</th>
                 <th className="px-5 py-3 font-extrabold">Criada em</th>
@@ -111,6 +127,17 @@ export default async function CategoriasPage() {
                     >
                       {categoria.nome}
                     </Link>
+                  </td>
+                  <td className="px-5 py-4">
+                    {categoria.usa_etapa ? (
+                      <span className="inline-flex rounded-full bg-[#e9f8f0] px-3 py-1 text-xs font-bold text-status-success">
+                        Sim
+                      </span>
+                    ) : (
+                      <span className="inline-flex rounded-full bg-brand-gray-100 px-3 py-1 text-xs font-bold text-brand-gray-500">
+                        Não
+                      </span>
+                    )}
                   </td>
                   <td className="px-5 py-4">
                     <Badge>{materiaisPorCategoria.get(categoria.id) ?? 0}</Badge>
@@ -141,6 +168,21 @@ export default async function CategoriasPage() {
                               className="rounded-brand-sm border border-brand-gray-300 bg-white px-3 py-2 text-sm outline-none focus:border-brand-red"
                             />
                           </label>
+                          <label className="flex items-start gap-2 text-sm text-brand-gray-700">
+                            <input
+                              type="checkbox"
+                              name="usa_etapa"
+                              defaultChecked={categoria.usa_etapa}
+                              className="mt-0.5 h-4 w-4 accent-brand-red"
+                            />
+                            <span>
+                              Pede etapa da obra no WhatsApp
+                              <span className="block text-xs font-normal text-brand-gray-500">
+                                Desmarque pra categorias que não são uma etapa física do
+                                cronograma (ex: Despesas Administrativas).
+                              </span>
+                            </span>
+                          </label>
                           <SubmitButton className="rounded-brand-sm bg-brand-red px-4 py-2 text-sm font-semibold text-white hover:bg-brand-red-700">
                             Salvar edição
                           </SubmitButton>
@@ -164,7 +206,7 @@ export default async function CategoriasPage() {
 
               {lista.length === 0 && (
                 <tr>
-                  <td colSpan={5} className="px-5 py-10 text-center text-brand-gray-500">
+                  <td colSpan={6} className="px-5 py-10 text-center text-brand-gray-500">
                     Nenhuma categoria cadastrada ainda.
                   </td>
                 </tr>
