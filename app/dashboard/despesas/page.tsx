@@ -3,6 +3,7 @@ import { createAdminClient } from "@/lib/supabase/admin";
 import { formatBRL } from "@/lib/conversation/format";
 import { formatDataHoraBrasil } from "@/lib/format-date";
 import {
+  createDespesaAction,
   deleteDespesaAction,
   excluirComprovanteDespesaAction,
   reclassificarComprovanteDespesaAction,
@@ -412,13 +413,128 @@ export default async function DespesasPage({
               Visualize, filtre, edite e gere relatório das despesas registradas.
             </p>
           </div>
-          <div className="rounded-brand-sm bg-brand-gray-100 px-4 py-2 text-right">
-            <p className="text-[10px] font-extrabold uppercase tracking-[0.12em] text-brand-gray-500">
-              Total filtrado
-            </p>
-            <p className="font-display text-lg font-bold text-brand-red">
-              {formatBRL(totalFiltrado)}
-            </p>
+          <div className="flex items-center gap-3">
+            <div className="rounded-brand-sm bg-brand-gray-100 px-4 py-2 text-right">
+              <p className="text-[10px] font-extrabold uppercase tracking-[0.12em] text-brand-gray-500">
+                Total filtrado
+              </p>
+              <p className="font-display text-lg font-bold text-brand-red">
+                {formatBRL(totalFiltrado)}
+              </p>
+            </div>
+            <CadastroModal
+              titulo="Novo lançamento"
+              descricao="Registre uma despesa direto pelo dashboard."
+              botao="+ Novo lançamento"
+              variante="primario"
+              modalSize="wide"
+            >
+              <form action={createDespesaAction} className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
+                <label className="flex flex-col gap-1 text-sm text-brand-gray-700">
+                  Obra
+                  <select name="obra_id" required className="rounded-brand-sm border border-brand-gray-300 bg-white px-3 py-2 text-sm outline-none focus:border-brand-red">
+                    <option value="">Selecione</option>
+                    {(obras ?? []).map((obra) => (
+                      <option key={obra.id} value={obra.id}>
+                        {obra.nome}
+                      </option>
+                    ))}
+                  </select>
+                </label>
+                <label className="flex flex-col gap-1 text-sm text-brand-gray-700">
+                  Categoria
+                  <select name="categoria_id" required className="rounded-brand-sm border border-brand-gray-300 bg-white px-3 py-2 text-sm outline-none focus:border-brand-red">
+                    <option value="">Selecione</option>
+                    {(categorias ?? []).map((categoria) => (
+                      <option key={categoria.id} value={categoria.id}>
+                        {categoria.nome}
+                      </option>
+                    ))}
+                  </select>
+                </label>
+                <label className="flex flex-col gap-1 text-sm text-brand-gray-700">
+                  Etapa
+                  <select name="etapa_id" className="rounded-brand-sm border border-brand-gray-300 bg-white px-3 py-2 text-sm outline-none focus:border-brand-red">
+                    <option value="">Sem etapa</option>
+                    {(etapas ?? []).map((etapa) => (
+                      <option key={etapa.id} value={etapa.id}>
+                        {(obras ?? []).find((o) => o.id === etapa.obra_id)?.nome ?? "?"} — {etapa.nome}
+                      </option>
+                    ))}
+                  </select>
+                </label>
+                <label className="flex flex-col gap-1 text-sm text-brand-gray-700">
+                  Material
+                  <select name="material_id" className="rounded-brand-sm border border-brand-gray-300 bg-white px-3 py-2 text-sm outline-none focus:border-brand-red">
+                    <option value="">Sem material</option>
+                    {(materiais ?? []).map((material) => (
+                      <option key={material.id} value={material.id}>
+                        {material.nome}
+                      </option>
+                    ))}
+                  </select>
+                </label>
+                <label className="flex flex-col gap-1 text-sm text-brand-gray-700">
+                  Fornecedor
+                  <select name="fornecedor_id" className="rounded-brand-sm border border-brand-gray-300 bg-white px-3 py-2 text-sm outline-none focus:border-brand-red">
+                    <option value="">Sem fornecedor</option>
+                    {(fornecedores ?? []).map((fornecedor) => (
+                      <option key={fornecedor.id} value={fornecedor.id}>
+                        {fornecedor.nome}
+                      </option>
+                    ))}
+                  </select>
+                </label>
+                <label className="flex flex-col gap-1 text-sm text-brand-gray-700">
+                  Data
+                  <input
+                    type="date"
+                    name="data"
+                    defaultValue={new Date().toISOString().slice(0, 10)}
+                    required
+                    className="rounded-brand-sm border border-brand-gray-300 bg-white px-3 py-2 text-sm outline-none focus:border-brand-red"
+                  />
+                </label>
+                <label className="flex flex-col gap-1 text-sm text-brand-gray-700">
+                  Valor
+                  <input
+                    name="valor"
+                    placeholder="0,00"
+                    required
+                    className="rounded-brand-sm border border-brand-gray-300 bg-white px-3 py-2 text-sm outline-none focus:border-brand-red"
+                  />
+                </label>
+                <label className="flex flex-col gap-1 text-sm text-brand-gray-700">
+                  Quantidade
+                  <input
+                    name="quantidade"
+                    placeholder="Ex: 50"
+                    className="rounded-brand-sm border border-brand-gray-300 bg-white px-3 py-2 text-sm outline-none focus:border-brand-red"
+                  />
+                </label>
+                <label className="flex flex-col gap-1 text-sm text-brand-gray-700">
+                  Valor unitário
+                  <input
+                    name="valor_unitario"
+                    placeholder="Ex: 53,00"
+                    className="rounded-brand-sm border border-brand-gray-300 bg-white px-3 py-2 text-sm outline-none focus:border-brand-red"
+                  />
+                </label>
+                <label className="flex flex-col gap-1 text-sm text-brand-gray-700 sm:col-span-2 lg:col-span-3">
+                  Descrição
+                  <textarea
+                    name="descricao"
+                    rows={2}
+                    className="rounded-brand-sm border border-brand-gray-300 bg-white px-3 py-2 text-sm outline-none focus:border-brand-red"
+                  />
+                </label>
+                <div className="sm:col-span-2 lg:col-span-3">
+                  <SubmitButton className="rounded-brand-sm bg-brand-red px-5 py-2 text-sm font-semibold text-white hover:bg-brand-red-700">
+                    Salvar lançamento
+                  </SubmitButton>
+                </div>
+              </form>
+            </CadastroModal>
           </div>
         </div>
 

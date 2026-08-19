@@ -1032,6 +1032,60 @@ export async function deleteFornecedorAction(formData: FormData) {
   revalidatePath("/dashboard/lixeira");
 }
 
+export async function createDespesaAction(formData: FormData) {
+  const obraId = String(formData.get("obra_id") ?? "");
+  const categoriaId = String(formData.get("categoria_id") ?? "");
+  const valor = parseValorBR(String(formData.get("valor") ?? "0")) ?? 0;
+  if (!obraId || !categoriaId || valor <= 0) return;
+
+  const etapaId = String(formData.get("etapa_id") ?? "") || null;
+  const materialId = String(formData.get("material_id") ?? "") || null;
+  const fornecedorId = String(formData.get("fornecedor_id") ?? "") || null;
+  const quantidade = parseValorBR(String(formData.get("quantidade") ?? "")) ?? null;
+  const valorUnitario = parseValorBR(String(formData.get("valor_unitario") ?? "")) ?? null;
+  const data = String(formData.get("data") ?? "") || hojeNoBrasil();
+  const descricao = String(formData.get("descricao") ?? "").trim() || null;
+
+  const supabase = await createClient();
+  const autorNome = await getAutorNomeDashboard();
+
+  const depois = {
+    obra_id: obraId,
+    categoria_id: categoriaId,
+    etapa_id: etapaId,
+    material_id: materialId,
+    fornecedor_id: fornecedorId,
+    valor,
+    quantidade,
+    valor_unitario: valorUnitario,
+    data,
+    descricao,
+    origem: "dashboard" as const,
+  };
+
+  let { data: despesa, error } = await supabase.from("despesas").insert(depois).select("id").single();
+  if (error?.message.toLowerCase().includes("quantidade") || error?.message.toLowerCase().includes("valor_unitario")) {
+    const { quantidade: _q, valor_unitario: _vu, ...semQuantidade } = depois;
+    void _q;
+    void _vu;
+    ({ data: despesa, error } = await supabase.from("despesas").insert(semQuantidade).select("id").single());
+  }
+  if (error || !despesa) return;
+
+  await registrarAtividade({
+    tipo: "criacao",
+    entidade: "despesa",
+    entidadeId: despesa.id,
+    origem: "dashboard",
+    autorNome,
+    resumo: `Despesa de ${formatBRL(valor)} lançada por ${autorNome}`,
+    dadosDepois: depois,
+  });
+
+  revalidatePath("/dashboard/despesas");
+  revalidatePath("/dashboard");
+}
+
 export async function updateDespesaAction(formData: FormData) {
   const id = String(formData.get("id") ?? "");
   if (!id) return;
