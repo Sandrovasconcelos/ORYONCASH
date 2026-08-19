@@ -1,4 +1,4 @@
-import { sendList } from "@/lib/whatsapp/messages";
+import { sendList, sendText } from "@/lib/whatsapp/messages";
 import {
   listObrasAtivas,
   listCategorias,
@@ -11,93 +11,62 @@ import {
 import { formatBRL } from "./format";
 import { CAMPO_IDS } from "./states";
 
+/**
+ * Lista numerada em texto simples - sem limite de 10 itens como as
+ * mensagens de lista interativa da API do WhatsApp. A pessoa responde com
+ * o número da posição ou digitando o nome (resolverPorNumeroOuNome em
+ * queries.ts trata os dois casos, usando a mesma ordem desta lista).
+ */
+function formatarListaNumerada(itens: { nome: string }[]): string {
+  return itens.map((item, indice) => `${indice + 1}. ${item.nome}`).join("\n");
+}
+
 export async function sendListObras(to: string) {
   const obras = await listObrasAtivas();
-  await sendList(to, {
-    headerText: "🏗️ Seleção de obra",
-    bodyText:
-      "Toque na obra onde o lançamento deve entrar. Só aparecem as 10 primeiras aqui - se a sua não estiver na lista, digite o nome dela.",
-    buttonText: "🏗️ Ver obras",
-    sections: [
-      { rows: obras.map((o) => ({ id: `obra:${o.id}`, title: o.nome })) },
-    ],
-  });
+  await sendText(
+    to,
+    `🏗️ *Selecione a obra*\n\n${formatarListaNumerada(obras)}\n\nResponda com o número ou digite o nome.`
+  );
 }
 
 export async function sendListCategorias(to: string) {
   const categorias = await listCategorias();
-  await sendList(to, {
-    headerText: "📁 Seleção de categoria",
-    bodyText:
-      "Escolha o grupo correto para essa despesa. Só aparecem as 10 primeiras aqui - se a sua não estiver na lista, digite o nome dela.",
-    buttonText: "📁 Ver categorias",
-    sections: [
-      {
-        rows: categorias.map((c) => ({ id: `categoria:${c.id}`, title: c.nome })),
-      },
-    ],
-  });
+  await sendText(
+    to,
+    `📁 *Selecione a categoria*\n\n${formatarListaNumerada(categorias)}\n\nResponda com o número ou digite o nome.`
+  );
 }
 
 export async function sendListEtapas(to: string, obraId: string) {
   const etapas = await listEtapasParaObra(obraId);
-  await sendList(to, {
-    headerText: "📐 Etapa da obra",
-    bodyText:
-      "Em qual etapa da construção ocorreu essa despesa? Mostra as 10 etapas ainda não concluídas mais próximas no cronograma - se a sua não estiver na lista, digite o nome dela.",
-    buttonText: "📐 Ver etapas",
-    sections: [
-      { rows: etapas.map((e) => ({ id: `etapa:${e.id}`, title: e.nome })) },
-    ],
-  });
+  await sendText(
+    to,
+    `📐 *Em qual etapa da obra?*\n\n${formatarListaNumerada(etapas)}\n\nResponda com o número ou digite o nome.`
+  );
 }
 
 export async function sendListFornecedores(to: string) {
   const fornecedores = await listFornecedores();
-  await sendList(to, {
-    headerText: "🏢 Seleção de fornecedor",
-    bodyText:
-      "Escolha quem recebeu ou emitiu essa cobrança. Só aparecem os 10 primeiros aqui - se não estiver na lista, digite o nome.",
-    buttonText: "🏢 Ver fornecedores",
-    sections: [
-      {
-        rows: fornecedores.map((f) => ({ id: `fornecedor:${f.id}`, title: f.nome })),
-      },
-    ],
-  });
+  await sendText(
+    to,
+    `🏢 *Selecione o fornecedor*\n\n${formatarListaNumerada(fornecedores)}\n\nResponda com o número ou digite o nome.`
+  );
 }
 
 export async function sendListMateriais(to: string) {
   const materiais = await listMateriais();
-  await sendList(to, {
-    headerText: "📦 Seleção de material",
-    bodyText:
-      "Escolha o material relacionado ao lançamento. Só aparecem os 10 primeiros aqui - se não estiver na lista, digite o nome.",
-    buttonText: "📦 Ver materiais",
-    sections: [
-      {
-        rows: materiais.map((m) => ({ id: `material:${m.id}`, title: m.nome })),
-      },
-    ],
-  });
+  await sendText(
+    to,
+    `📦 *Selecione o material*\n\n${formatarListaNumerada(materiais)}\n\nResponda com o número ou digite o nome.`
+  );
 }
 
 export async function sendListMateriaisParaDespesa(to: string) {
-  const materiais = (await listMateriais()).slice(0, 9);
-  await sendList(to, {
-    headerText: "📦 Qual material?",
-    bodyText:
-      "Escolha um material cadastrado, digite o nome se não estiver nos 9 mostrados, ou toque em '+ Novo Material' para cadastrar.",
-    buttonText: "📦 Ver materiais",
-    sections: [
-      {
-        rows: [
-          ...materiais.map((m) => ({ id: `material:${m.id}`, title: m.nome })),
-          { id: "material:novo", title: "➕ Novo Material" },
-        ],
-      },
-    ],
-  });
+  const materiais = await listMateriais();
+  await sendText(
+    to,
+    `📦 *Qual material?*\n\n${formatarListaNumerada(materiais)}\n\nResponda com o número, digite o nome, ou digite *novo* pra cadastrar um material novo.`
+  );
 }
 
 export async function sendListDespesasRecentes(to: string) {

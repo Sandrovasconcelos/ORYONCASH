@@ -28,6 +28,12 @@ export function hojeNoBrasil(): string {
   return `${ano}-${mes}-${dia}`;
 }
 
+// Teto de seguranca pras listas mandadas por texto no WhatsApp (antes era
+// 10, limite da mensagem interativa de lista da API) - mensagem de texto
+// nao tem esse limite, mas ainda vale proteger contra uma mensagem gigante
+// se o cadastro crescer muito.
+const TETO_LISTA_TEXTO = 60;
+
 export async function listObrasAtivas() {
   const supabase = createAdminClient();
   const { data } = await supabase
@@ -36,7 +42,7 @@ export async function listObrasAtivas() {
     .eq("status", "ativa")
     .is("deleted_at", null)
     .order("created_at", { ascending: false })
-    .limit(10);
+    .limit(TETO_LISTA_TEXTO);
   return data ?? [];
 }
 
@@ -44,10 +50,10 @@ export async function listCategorias() {
   const supabase = createAdminClient();
   const { data } = await supabase
     .from("categorias")
-    .select("id, nome")
+    .select("id, nome, usa_etapa")
     .is("deleted_at", null)
     .order("nome")
-    .limit(10);
+    .limit(TETO_LISTA_TEXTO);
   return data ?? [];
 }
 
@@ -96,7 +102,7 @@ export async function listEtapasParaObra(obraId: string) {
     .order("ordem");
 
   if (proprias && proprias.length > 0) {
-    return ordenarPorProgresso(proprias).slice(0, 10);
+    return ordenarPorProgresso(proprias).slice(0, TETO_LISTA_TEXTO);
   }
 
   const { data: genericas } = await supabase
@@ -105,7 +111,7 @@ export async function listEtapasParaObra(obraId: string) {
     .is("obra_id", null)
     .is("deleted_at", null)
     .order("ordem");
-  return ordenarPorProgresso(genericas ?? []).slice(0, 10);
+  return ordenarPorProgresso(genericas ?? []).slice(0, TETO_LISTA_TEXTO);
 }
 
 /**
@@ -367,52 +373,43 @@ function encontrarUnicoPorNome<T extends { nome: string }>(
   return candidatos.length === 1 ? candidatos[0] : null;
 }
 
+/**
+ * Extensao de encontrarUnicoPorNome pra aceitar tambem o numero da posicao
+ * na lista numerada mandada por texto (ex: "3") - precisa ser chamado com
+ * exatamente os mesmos itens, na mesma ordem, que foram numerados na
+ * mensagem (listObrasAtivas/listCategorias/etc, sem limite).
+ */
+function resolverPorNumeroOuNome<T extends { nome: string }>(itens: T[], texto: string): T | null {
+  const termo = texto.trim();
+  if (/^\d+$/.test(termo)) {
+    return itens[Number(termo) - 1] ?? null;
+  }
+  return encontrarUnicoPorNome(itens, texto);
+}
+
 export async function findEtapaPorTexto(obraId: string, texto: string) {
-  const supabase = createAdminClient();
-  const { data: etapas } = await supabase
-    .from("etapas")
-    .select("id, nome")
-    .eq("obra_id", obraId)
-    .is("deleted_at", null)
-    .order("ordem");
-  return encontrarUnicoPorNome(etapas ?? [], texto);
+  const etapas = await listEtapasParaObra(obraId);
+  return resolverPorNumeroOuNome(etapas, texto);
 }
 
 export async function findObraPorTexto(texto: string) {
-  const supabase = createAdminClient();
-  const { data: obras } = await supabase
-    .from("obras")
-    .select("id, nome")
-    .eq("status", "ativa")
-    .is("deleted_at", null);
-  return encontrarUnicoPorNome(obras ?? [], texto);
+  const obras = await listObrasAtivas();
+  return resolverPorNumeroOuNome(obras, texto);
 }
 
 export async function findCategoriaPorTexto(texto: string) {
-  const supabase = createAdminClient();
-  const { data: categorias } = await supabase
-    .from("categorias")
-    .select("id, nome, usa_etapa")
-    .is("deleted_at", null);
-  return encontrarUnicoPorNome(categorias ?? [], texto);
+  const categorias = await listCategorias();
+  return resolverPorNumeroOuNome(categorias, texto);
 }
 
 export async function findFornecedorPorTexto(texto: string) {
-  const supabase = createAdminClient();
-  const { data: fornecedores } = await supabase
-    .from("fornecedores")
-    .select("id, nome")
-    .is("deleted_at", null);
-  return encontrarUnicoPorNome(fornecedores ?? [], texto);
+  const fornecedores = await listFornecedores();
+  return resolverPorNumeroOuNome(fornecedores, texto);
 }
 
 export async function findMaterialPorTexto(texto: string) {
-  const supabase = createAdminClient();
-  const { data: materiais } = await supabase
-    .from("materiais")
-    .select("id, nome")
-    .is("deleted_at", null);
-  return encontrarUnicoPorNome(materiais ?? [], texto);
+  const materiais = await listMateriais();
+  return resolverPorNumeroOuNome(materiais, texto);
 }
 
 export async function createObra(nome: string, orcamentoTotal: number) {
@@ -663,7 +660,7 @@ export async function listFornecedores() {
     .select("id, nome")
     .is("deleted_at", null)
     .order("nome")
-    .limit(10);
+    .limit(TETO_LISTA_TEXTO);
   return data ?? [];
 }
 
@@ -685,7 +682,7 @@ export async function listMateriais() {
     .select("id, nome")
     .is("deleted_at", null)
     .order("nome")
-    .limit(10);
+    .limit(TETO_LISTA_TEXTO);
   return data ?? [];
 }
 

@@ -631,7 +631,7 @@ async function handleDespesaMaterial(
     return;
   }
 
-  if (message.replyId === "material:novo") {
+  if (message.replyId === "material:novo" || message.text?.trim().toLowerCase() === "novo") {
     await saveSession(from, ESTADOS.DESPESA_MATERIAL_NOVO, dados);
     await sendText(
       from,
