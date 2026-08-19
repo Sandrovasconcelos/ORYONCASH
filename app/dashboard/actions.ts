@@ -2357,6 +2357,52 @@ export async function aprovarEPagarMedicaoAction(formData: FormData) {
   revalidatePath("/dashboard");
 }
 
+export async function upsertOrcamentoMaterialEtapaAction(formData: FormData) {
+  const etapaId = String(formData.get("etapa_id") ?? "");
+  const materialId = String(formData.get("material_id") ?? "");
+  const quantidadeOrcada = parseValorBR(String(formData.get("quantidade_orcada") ?? "0"));
+  if (!etapaId || !materialId || !quantidadeOrcada || quantidadeOrcada <= 0) return;
+
+  const supabase = await createClient();
+  const { data: material } = await supabase
+    .from("materiais")
+    .select("nome")
+    .eq("id", materialId)
+    .maybeSingle();
+  const { data: etapa } = await supabase
+    .from("etapas")
+    .select("nome, obra_id")
+    .eq("id", etapaId)
+    .maybeSingle();
+
+  await supabase
+    .from("orcamento_material_etapa")
+    .upsert({ etapa_id: etapaId, material_id: materialId, quantidade_orcada: quantidadeOrcada }, { onConflict: "etapa_id,material_id" });
+
+  const autorNome = await getAutorNomeDashboard();
+  await registrarAtividade({
+    tipo: "edicao",
+    entidade: "obra",
+    entidadeId: etapa?.obra_id,
+    origem: "dashboard",
+    autorNome,
+    resumo: `Orçamento de ${material?.nome ?? "material"} na etapa "${etapa?.nome ?? etapaId}" definido em ${quantidadeOrcada} por ${autorNome}`,
+    dadosDepois: { etapaId, materialId, quantidadeOrcada },
+  });
+
+  revalidatePath("/dashboard/execucao");
+}
+
+export async function deleteOrcamentoMaterialEtapaAction(formData: FormData) {
+  const id = String(formData.get("id") ?? "");
+  if (!id) return;
+
+  const supabase = await createClient();
+  await supabase.from("orcamento_material_etapa").delete().eq("id", id);
+
+  revalidatePath("/dashboard/execucao");
+}
+
 export async function liberarPagamentoEtapaAction(formData: FormData) {
   const etapaId = String(formData.get("etapa_id") ?? "");
   const categoriaIdInformada = String(formData.get("categoria_id") ?? "") || null;

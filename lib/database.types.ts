@@ -999,6 +999,39 @@ export interface Database {
           },
         ];
       };
+      orcamento_material_etapa: {
+        Row: {
+          id: string;
+          etapa_id: string;
+          material_id: string;
+          quantidade_orcada: number;
+          created_at: string;
+        };
+        Insert: {
+          id?: string;
+          etapa_id: string;
+          material_id: string;
+          quantidade_orcada: number;
+          created_at?: string;
+        };
+        Update: Partial<Database["public"]["Tables"]["orcamento_material_etapa"]["Insert"]>;
+        Relationships: [
+          {
+            foreignKeyName: "orcamento_material_etapa_etapa_id_fkey";
+            columns: ["etapa_id"];
+            isOneToOne: false;
+            referencedRelation: "etapas";
+            referencedColumns: ["id"];
+          },
+          {
+            foreignKeyName: "orcamento_material_etapa_material_id_fkey";
+            columns: ["material_id"];
+            isOneToOne: false;
+            referencedRelation: "materiais";
+            referencedColumns: ["id"];
+          },
+        ];
+      };
     };
     Views: Record<string, never>;
     Functions: Record<string, never>;

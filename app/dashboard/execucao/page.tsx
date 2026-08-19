@@ -10,10 +10,12 @@ import {
   createChecklistTemplateAction,
   deleteChecklistItemAction,
   deleteChecklistTemplateAction,
+  deleteOrcamentoMaterialEtapaAction,
   iniciarInspecaoAction,
   prepararMedicaoAction,
   updateChecklistTemplateAction,
   updateMedicaoAction,
+  upsertOrcamentoMaterialEtapaAction,
   vincularChecklistEtapaAction,
 } from "../actions";
 import { CadastroModal } from "../cadastro-modal";
@@ -81,25 +83,28 @@ export default async function ExecucaoPage({
   const params = await searchParams;
   const supabase = createAdminClient();
 
-  const [{ data: obras }, { data: fornecedores }, { data: categorias }, templatesQuery] = await Promise.all([
-    supabase
-      .from("obras")
-      .select("id, nome, status, orcamento_total, categoria_medicao_padrao_id")
-      .is("deleted_at", null)
-      .order("created_at", { ascending: false }),
-    supabase.from("fornecedores").select("id, nome").is("deleted_at", null).order("nome"),
-    supabase.from("categorias").select("id, nome").order("nome"),
-    supabase
-      .from("checklist_templates")
-      .select("id, nome, descricao, checklist_itens(id, descricao, critico, ordem)")
-      .is("deleted_at", null)
-      .order("nome"),
-  ]);
+  const [{ data: obras }, { data: fornecedores }, { data: categorias }, { data: materiais }, templatesQuery] =
+    await Promise.all([
+      supabase
+        .from("obras")
+        .select("id, nome, status, orcamento_total, categoria_medicao_padrao_id")
+        .is("deleted_at", null)
+        .order("created_at", { ascending: false }),
+      supabase.from("fornecedores").select("id, nome").is("deleted_at", null).order("nome"),
+      supabase.from("categorias").select("id, nome").order("nome"),
+      supabase.from("materiais").select("id, nome").is("deleted_at", null).order("nome"),
+      supabase
+        .from("checklist_templates")
+        .select("id, nome, descricao, checklist_itens(id, descricao, critico, ordem)")
+        .is("deleted_at", null)
+        .order("nome"),
+    ]);
 
   const listaObras = obras ?? [];
   const obraAtual = listaObras.find((o) => o.id === params.obra) ?? listaObras[0] ?? null;
   const listaFornecedores = fornecedores ?? [];
   const listaCategorias = categorias ?? [];
+  const listaMateriais = materiais ?? [];
   const nomesFornecedor = new Map(listaFornecedores.map((f) => [f.id, f.nome]));
 
   const moduloIndisponivel = Boolean(templatesQuery.error);
@@ -325,6 +330,45 @@ export default async function ExecucaoPage({
     .order("ordem");
   const etapas = (etapasData ?? []) as EtapaExecucao[];
   const idsEtapas = etapas.map((e) => e.id);
+
+  const orcamentosPorEtapa = new Map<
+    string,
+    { id: string; materialId: string; materialNome: string; orcado: number; realizado: number }[]
+  >();
+  if (idsEtapas.length > 0) {
+    const [{ data: orcamentosData }, { data: despesasComQuantidade }] = await Promise.all([
+      supabase
+        .from("orcamento_material_etapa")
+        .select("id, etapa_id, material_id, quantidade_orcada, materiais(nome)")
+        .in("etapa_id", idsEtapas),
+      supabase
+        .from("despesas")
+        .select("etapa_id, material_id, quantidade")
+        .in("etapa_id", idsEtapas)
+        .not("material_id", "is", null)
+        .not("quantidade", "is", null)
+        .is("deleted_at", null),
+    ]);
+
+    const realizadoPorChave = new Map<string, number>();
+    for (const d of despesasComQuantidade ?? []) {
+      if (!d.etapa_id || !d.material_id || d.quantidade == null) continue;
+      const chave = `${d.etapa_id}::${d.material_id}`;
+      realizadoPorChave.set(chave, (realizadoPorChave.get(chave) ?? 0) + Number(d.quantidade));
+    }
+
+    for (const o of orcamentosData ?? []) {
+      const lista = orcamentosPorEtapa.get(o.etapa_id) ?? [];
+      lista.push({
+        id: o.id,
+        materialId: o.material_id,
+        materialNome: (o.materiais as unknown as { nome: string } | null)?.nome ?? "-",
+        orcado: Number(o.quantidade_orcada),
+        realizado: realizadoPorChave.get(`${o.etapa_id}::${o.material_id}`) ?? 0,
+      });
+      orcamentosPorEtapa.set(o.etapa_id, lista);
+    }
+  }
 
   const { data: medicoesData } = await supabase
     .from("medicoes")
@@ -1004,6 +1048,77 @@ export default async function ExecucaoPage({
                                   </div>
                                 ))}
                               </div>
+                            </section>
+
+                            {/* Seção E — Materiais (orçado x realizado) */}
+                            <section className="flex flex-col gap-4 border-t border-brand-gray-300/60 pt-6">
+                              <h3 className="text-sm font-extrabold text-brand-black">
+                                Materiais — orçado x realizado
+                              </h3>
+
+                              <div className="flex flex-col gap-2">
+                                {(orcamentosPorEtapa.get(etapa.id) ?? []).length === 0 && (
+                                  <p className="text-xs text-brand-gray-500">
+                                    Nenhum material com quantidade orçada nesta etapa ainda.
+                                  </p>
+                                )}
+                                {(orcamentosPorEtapa.get(etapa.id) ?? []).map((o) => {
+                                  const percentual = o.orcado > 0 ? Math.round((o.realizado / o.orcado) * 100) : 0;
+                                  const estourou = o.realizado > o.orcado;
+                                  return (
+                                    <div key={o.id} className="rounded-brand-sm border border-brand-gray-300/60 p-3">
+                                      <div className="flex items-center justify-between gap-2">
+                                        <p className="text-xs font-bold text-brand-black">{o.materialNome}</p>
+                                        <div className="flex items-center gap-2">
+                                          <span
+                                            className={`text-xs font-bold ${estourou ? "text-status-danger" : "text-brand-gray-700"}`}
+                                          >
+                                            {o.realizado} / {o.orcado}
+                                          </span>
+                                          <form action={deleteOrcamentoMaterialEtapaAction}>
+                                            <input type="hidden" name="id" value={o.id} />
+                                            <button
+                                              type="submit"
+                                              className="text-brand-gray-400 hover:text-status-danger"
+                                              title="Remover orçamento"
+                                            >
+                                              <ActionIcon name="trash" />
+                                            </button>
+                                          </form>
+                                        </div>
+                                      </div>
+                                      <div className="mt-2 h-2 w-full overflow-hidden rounded-full bg-brand-gray-100">
+                                        <div
+                                          className={`h-full rounded-full ${estourou ? "bg-status-danger" : "bg-[color:var(--status-success)]"}`}
+                                          style={{ width: `${Math.min(100, percentual)}%` }}
+                                        />
+                                      </div>
+                                    </div>
+                                  );
+                                })}
+                              </div>
+
+                              <form
+                                action={upsertOrcamentoMaterialEtapaAction}
+                                className="grid grid-cols-1 gap-2 sm:grid-cols-[1fr_120px_auto]"
+                              >
+                                <input type="hidden" name="etapa_id" value={etapa.id} />
+                                <select name="material_id" required className="oc-input">
+                                  <option value="">Selecione o material</option>
+                                  {listaMateriais.map((m) => (
+                                    <option key={m.id} value={m.id}>
+                                      {m.nome}
+                                    </option>
+                                  ))}
+                                </select>
+                                <input
+                                  name="quantidade_orcada"
+                                  placeholder="Qtd orçada"
+                                  required
+                                  className="oc-input"
+                                />
+                                <SubmitButton className="oc-button oc-button-primary">Definir</SubmitButton>
+                              </form>
                             </section>
                           </div>
                         </CadastroModal>
