@@ -311,6 +311,36 @@ async function tentarVincularContaBancaria(
   }
 }
 
+export type DespesaDuplicada = {
+  valor: number;
+  data: string;
+  obraNome: string;
+};
+
+/**
+ * Checa se ja existe alguma despesa (nao apagada) com esse mesmo numero de
+ * documento vinculado - usado pra avisar antes de lancar uma nota fiscal
+ * que ja foi processada antes (reenvio acidental).
+ */
+export async function buscarDespesasPorNumeroDocumento(
+  numeroDocumento: string
+): Promise<DespesaDuplicada[]> {
+  const termo = numeroDocumento.trim();
+  if (!termo) return [];
+
+  const supabase = createAdminClient();
+  const { data, error } = await supabase
+    .from("despesa_comprovantes")
+    .select("despesa_id, despesas!inner(valor, data, deleted_at, obras(nome))")
+    .eq("numero_documento", termo);
+  if (error || !data) return [];
+
+  return data
+    .map((item) => item.despesas as unknown as { valor: number; data: string; deleted_at: string | null; obras: { nome: string } | null })
+    .filter((d) => !d.deleted_at)
+    .map((d) => ({ valor: d.valor, data: d.data, obraNome: d.obras?.nome ?? "-" }));
+}
+
 export async function findObraById(id: string) {
   const supabase = createAdminClient();
   const { data } = await supabase

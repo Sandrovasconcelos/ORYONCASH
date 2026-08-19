@@ -2,7 +2,7 @@ import type { IncomingMessage, IncomingMedia } from "@/lib/whatsapp/parse";
 import { sendText, sendButtons } from "@/lib/whatsapp/messages";
 import { getSession, saveSession, resetSession, type Session } from "@/lib/whatsapp/session";
 import { downloadWhatsAppMedia } from "@/lib/whatsapp/media";
-import { extractInvoiceData, type InvoiceItem } from "@/lib/gemini/extractInvoice";
+import { extractInvoiceData, type InvoiceItem, type InvoiceData } from "@/lib/gemini/extractInvoice";
 import { extractOrcamentoData, type OrcamentoEtapa } from "@/lib/gemini/extractOrcamento";
 import { extractDespesaDeAudio } from "@/lib/gemini/extractDespesaAudio";
 import { extractSpreadsheetAsText } from "@/lib/orcamento/parseSpreadsheet";
@@ -43,6 +43,7 @@ import {
   findFornecedorById,
   findDespesaCompletaById,
   buscarDespesasPorTexto,
+  buscarDespesasPorNumeroDocumento,
   updateDespesaCampo,
   deleteDespesaPorId,
   listDespesasRecentes,
@@ -72,6 +73,8 @@ type ItemNotaClassificado = InvoiceItem & {
 
 type Dados = {
   valor?: number;
+  quantidade?: number | null;
+  valorUnitario?: number | null;
   obraId?: string;
   obraNome?: string;
   categoriaId?: string;
@@ -89,6 +92,8 @@ type Dados = {
   notaItensClassificados?: ItemNotaClassificado[];
   itemCategoriaIdTemp?: string;
   itemCategoriaNomeTemp?: string;
+
+  notaPendente?: InvoiceData;
 
   orcamentoEtapas?: OrcamentoEtapa[];
   orcamentoValorTotal?: number | null;
@@ -298,6 +303,8 @@ export async function handleIncomingMessage(message: IncomingMessage) {
     case ESTADOS.RESUMO_OBRA:
       return handleResumoObra(from, message);
 
+    case ESTADOS.NOTA_DUPLICADA_CONFIRMACAO:
+      return handleNotaDuplicadaConfirmacao(from, message, session);
     case ESTADOS.NOTA_AGUARDANDO_OBRA:
       return handleNotaAguardandoObra(from, message, session);
     case ESTADOS.NOTA_ITEM_CATEGORIA:
@@ -848,6 +855,8 @@ async function handleDespesaConfirmacao(
       etapaId: dados.etapaId ?? null,
       valor: dados.valor!,
       descricao: dados.descricao ?? null,
+      quantidade: dados.quantidade ?? null,
+      valorUnitario: dados.valorUnitario ?? null,
       fornecedorId: dados.fornecedorId ?? null,
       materialId: dados.materialId ?? null,
       criadoPorTelefone: from,
@@ -1102,6 +1111,65 @@ async function handleNotaFiscalRecebida(
     return;
   }
 
+  if (!options.forcarNovaDespesa && invoice.numeroDocumento) {
+    const duplicadas = await buscarDespesasPorNumeroDocumento(invoice.numeroDocumento);
+    if (duplicadas.length > 0) {
+      const dadosPendentes: Dados = { notaPendente: invoice, comprovante };
+      await saveSession(from, ESTADOS.NOTA_DUPLICADA_CONFIRMACAO, dadosPendentes);
+      const linhasExistentes = duplicadas
+        .slice(0, 3)
+        .map((d) => `• ${formatBRL(d.valor)} — ${d.obraNome} (${formatDataBR(d.data)})`)
+        .join("\n");
+      await sendButtons(
+        from,
+        `⚠️ *Nota já lançada antes?*\n\nO documento nº ${invoice.numeroDocumento} já tem despesa(s) registrada(s):\n${linhasExistentes}\n\nQuer lançar mesmo assim ou cancelar?`,
+        [
+          { id: "nota_duplicada:continuar", title: "Lançar mesmo assim" },
+          { id: "nota_duplicada:cancelar", title: "Cancelar" },
+        ]
+      );
+      return;
+    }
+  }
+
+  await continuarProcessamentoNota(from, invoice, comprovante);
+}
+
+function formatDataBR(data: string): string {
+  const [ano, mes, dia] = data.split("-");
+  return `${dia}/${mes}/${ano}`;
+}
+
+async function handleNotaDuplicadaConfirmacao(
+  from: string,
+  message: IncomingMessage,
+  session: Session
+) {
+  const dados = session.dados_coletados as Dados;
+
+  if (message.replyId === "nota_duplicada:cancelar") {
+    await sendText(from, "🚫 Ok, não lancei essa nota de novo.");
+    await resetSession(from);
+    await sendMenuPrincipal(from);
+    return;
+  }
+
+  if (message.replyId !== "nota_duplicada:continuar" || !dados.notaPendente) {
+    await sendButtons(from, "⚠️ Lançar essa nota mesmo já tendo uma parecida registrada?", [
+      { id: "nota_duplicada:continuar", title: "Lançar mesmo assim" },
+      { id: "nota_duplicada:cancelar", title: "Cancelar" },
+    ]);
+    return;
+  }
+
+  await continuarProcessamentoNota(from, dados.notaPendente, dados.comprovante);
+}
+
+async function continuarProcessamentoNota(
+  from: string,
+  invoice: InvoiceData,
+  comprovante: Dados["comprovante"] | undefined
+) {
   const obras = await listObrasAtivas();
   if (obras.length === 0) {
     await sendText(
@@ -1131,6 +1199,8 @@ async function handleNotaFiscalRecebida(
     await iniciarDespesaUnicaExtraida(from, {
       valor: invoice.itens[0].valorTotal,
       descricao: invoice.itens[0].descricao,
+      quantidade: invoice.itens[0].quantidade,
+      valorUnitario: invoice.itens[0].valorUnitario,
       fornecedorId: fornecedor.id,
       fornecedorNome: fornecedor.nome,
       comprovante,
@@ -1203,6 +1273,8 @@ async function iniciarDespesaUnicaExtraida(
   extraido: {
     valor: number;
     descricao: string;
+    quantidade?: number | null;
+    valorUnitario?: number | null;
     fornecedorId?: string;
     fornecedorNome?: string;
     comprovante?: Dados["comprovante"];
@@ -1222,6 +1294,8 @@ async function iniciarDespesaUnicaExtraida(
   const dados: Dados = {
     valor: extraido.valor,
     descricao: extraido.descricao,
+    quantidade: extraido.quantidade ?? null,
+    valorUnitario: extraido.valorUnitario ?? null,
     fornecedorId: extraido.fornecedorId,
     fornecedorNome: extraido.fornecedorNome,
     comprovante: extraido.comprovante,

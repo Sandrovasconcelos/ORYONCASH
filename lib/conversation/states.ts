@@ -24,6 +24,7 @@ export const ESTADOS = {
 
   RESUMO_OBRA: "resumo_obra",
 
+  NOTA_DUPLICADA_CONFIRMACAO: "nota_duplicada_confirmacao",
   NOTA_AGUARDANDO_OBRA: "nota_aguardando_obra",
   NOTA_ITEM_CATEGORIA: "nota_item_categoria",
   NOTA_ITEM_ETAPA: "nota_item_etapa",
