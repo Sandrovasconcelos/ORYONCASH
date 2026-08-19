@@ -1459,6 +1459,8 @@ export async function enviarRelatorioPdfWhatsAppAction(formData: FormData) {
     material: String(formData.get("material") ?? "") || undefined,
     fornecedor: String(formData.get("fornecedor") ?? "") || undefined,
     ids: String(formData.get("ids") ?? "") || undefined,
+    dataInicio: String(formData.get("dataInicio") ?? "") || undefined,
+    dataFim: String(formData.get("dataFim") ?? "") || undefined,
   };
   const queryString = String(formData.get("query_string") ?? "");
   const voltarPara = `/dashboard/despesas/relatorio${queryString ? `?${queryString}` : ""}`;

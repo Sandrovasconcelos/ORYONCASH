@@ -18,6 +18,8 @@ type Filtros = {
   fornecedor?: string;
   ids?: string;
   whatsapp?: string;
+  dataInicio?: string;
+  dataFim?: string;
 };
 
 function nomeDe(relacao: unknown): string {
@@ -146,6 +148,8 @@ export default async function RelatorioDespesasPage({
     if (params.etapa) query = query.eq("etapa_id", params.etapa);
     if (params.material) query = query.eq("material_id", params.material);
     if (params.fornecedor) query = query.eq("fornecedor_id", params.fornecedor);
+    if (params.dataInicio) query = query.gte("data", params.dataInicio);
+    if (params.dataFim) query = query.lte("data", params.dataFim);
   }
 
   const [{ data }, obraFiltro, categoriaFiltro, etapaFiltro, materialFiltro, fornecedorFiltro] =
@@ -248,6 +252,17 @@ export default async function RelatorioDespesasPage({
           valor: (fornecedorFiltro.data as { nome: string } | null)?.nome ?? "-",
         }
       : null,
+    params.dataInicio || params.dataFim
+      ? {
+          rotulo: "Período filtrado",
+          valor:
+            params.dataInicio && params.dataFim
+              ? `${formatDataBrasil(params.dataInicio)} a ${formatDataBrasil(params.dataFim)}`
+              : params.dataInicio
+                ? `A partir de ${formatDataBrasil(params.dataInicio)}`
+                : `Até ${formatDataBrasil(params.dataFim!)}`,
+        }
+      : null,
   ].filter(Boolean) as { rotulo: string; valor: string }[]);
 
   const queryString = new URLSearchParams(
@@ -255,6 +270,11 @@ export default async function RelatorioDespesasPage({
       string,
       string,
     ][]
+  ).toString();
+  const queryStringSemPeriodo = new URLSearchParams(
+    Object.entries(params).filter(
+      ([chave, value]) => !["whatsapp", "dataInicio", "dataFim"].includes(chave) && Boolean(value)
+    ) as [string, string][]
   ).toString();
 
   const geradoEm = formatDataHoraBrasil(new Date().toISOString());
@@ -286,6 +306,8 @@ export default async function RelatorioDespesasPage({
             <input type="hidden" name="material" value={params.material ?? ""} />
             <input type="hidden" name="fornecedor" value={params.fornecedor ?? ""} />
             <input type="hidden" name="ids" value={params.ids ?? ""} />
+            <input type="hidden" name="dataInicio" value={params.dataInicio ?? ""} />
+            <input type="hidden" name="dataFim" value={params.dataFim ?? ""} />
             <input type="hidden" name="query_string" value={queryString} />
             <SubmitButton className="oc-button oc-button-soft" pendingText="Enviando...">
               Enviar por WhatsApp
@@ -300,6 +322,38 @@ export default async function RelatorioDespesasPage({
           <PrintButton />
         </div>
       </div>
+
+      <form
+        action="/dashboard/despesas/relatorio"
+        method="get"
+        className="flex flex-wrap items-end gap-3 rounded-brand-sm border border-brand-gray-300/60 bg-white p-4 shadow-card print:hidden"
+      >
+        <input type="hidden" name="obra" value={params.obra ?? ""} />
+        <input type="hidden" name="categoria" value={params.categoria ?? ""} />
+        <input type="hidden" name="etapa" value={params.etapa ?? ""} />
+        <input type="hidden" name="material" value={params.material ?? ""} />
+        <input type="hidden" name="fornecedor" value={params.fornecedor ?? ""} />
+        <input type="hidden" name="ids" value={params.ids ?? ""} />
+        <label className="flex flex-col gap-1 text-xs font-semibold text-brand-gray-700">
+          Data início
+          <input type="date" name="dataInicio" defaultValue={params.dataInicio ?? ""} className="oc-input" />
+        </label>
+        <label className="flex flex-col gap-1 text-xs font-semibold text-brand-gray-700">
+          Data fim
+          <input type="date" name="dataFim" defaultValue={params.dataFim ?? ""} className="oc-input" />
+        </label>
+        <button type="submit" className="oc-button oc-button-primary">
+          Filtrar período
+        </button>
+        {(params.dataInicio || params.dataFim) && (
+          <Link
+            href={`/dashboard/despesas/relatorio${queryStringSemPeriodo ? `?${queryStringSemPeriodo}` : ""}`}
+            className="text-xs font-semibold text-brand-gray-500 hover:text-brand-red"
+          >
+            Limpar período
+          </Link>
+        )}
+      </form>
 
       {feedbackWhatsapp && (
         <div className={`rounded-brand-sm border p-3 text-xs font-semibold print:hidden ${feedbackWhatsapp.classe}`}>

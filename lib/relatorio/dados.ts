@@ -8,6 +8,8 @@ export type FiltrosRelatorio = {
   material?: string;
   fornecedor?: string;
   ids?: string;
+  dataInicio?: string;
+  dataFim?: string;
 };
 
 export type DespesaRelatorio = {
@@ -91,6 +93,8 @@ export async function buscarDadosRelatorio(filtros: FiltrosRelatorio): Promise<D
     if (filtros.etapa) query = query.eq("etapa_id", filtros.etapa);
     if (filtros.material) query = query.eq("material_id", filtros.material);
     if (filtros.fornecedor) query = query.eq("fornecedor_id", filtros.fornecedor);
+    if (filtros.dataInicio) query = query.gte("data", filtros.dataInicio);
+    if (filtros.dataFim) query = query.lte("data", filtros.dataFim);
   }
 
   const [{ data }, obraFiltro, categoriaFiltro, etapaFiltro, materialFiltro, fornecedorFiltro] =
@@ -159,6 +163,17 @@ export async function buscarDadosRelatorio(filtros: FiltrosRelatorio): Promise<D
           : null,
         filtros.fornecedor
           ? { rotulo: "Fornecedor", valor: (fornecedorFiltro.data as { nome: string } | null)?.nome ?? "-" }
+          : null,
+        filtros.dataInicio || filtros.dataFim
+          ? {
+              rotulo: "Período filtrado",
+              valor:
+                filtros.dataInicio && filtros.dataFim
+                  ? `${formatDataBrasil(filtros.dataInicio)} a ${formatDataBrasil(filtros.dataFim)}`
+                  : filtros.dataInicio
+                    ? `A partir de ${formatDataBrasil(filtros.dataInicio)}`
+                    : `Até ${formatDataBrasil(filtros.dataFim!)}`,
+            }
           : null,
       ].filter(Boolean) as { rotulo: string; valor: string }[]);
 

@@ -21,6 +21,8 @@ export async function GET(request: NextRequest) {
     material: params.get("material") ?? undefined,
     fornecedor: params.get("fornecedor") ?? undefined,
     ids: params.get("ids") ?? undefined,
+    dataInicio: params.get("dataInicio") ?? undefined,
+    dataFim: params.get("dataFim") ?? undefined,
   };
 
   const dados = await buscarDadosRelatorio(filtros);
