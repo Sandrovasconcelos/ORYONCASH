@@ -496,7 +496,7 @@ export default async function DespesasPage({
       )}
 
       <div className="overflow-hidden overflow-x-auto rounded-card border border-brand-gray-300/60 bg-white shadow-card">
-        <table className="w-full min-w-[1120px] text-left text-sm">
+        <table className="w-full min-w-[760px] text-left text-sm">
           <thead className="bg-brand-gray-100 text-[11px] uppercase tracking-[0.12em] text-brand-gray-500">
             <tr>
               <th className="w-10 px-5 py-3">
@@ -504,13 +504,8 @@ export default async function DespesasPage({
               </th>
               <th className="px-5 py-3 font-extrabold">Data</th>
               <th className="px-5 py-3 font-extrabold">Lançamento</th>
-              <th className="px-5 py-3 font-extrabold">Classificação</th>
-              <th className="px-5 py-3 font-extrabold">Material / Fornecedor</th>
               <th className="px-5 py-3 text-right font-extrabold">Valor</th>
               <th className="px-5 py-3 font-extrabold">Comprovante</th>
-              <th className="px-5 py-3 font-extrabold">Conta</th>
-              <th className="px-5 py-3 font-extrabold">Origem</th>
-              <th className="px-5 py-3 font-extrabold">Registrado</th>
               <th className="px-5 py-3 text-right font-extrabold">Ações</th>
             </tr>
           </thead>
@@ -558,38 +553,48 @@ export default async function DespesasPage({
                           <ActionIcon name="receipt" />
                         </div>
                         <div className="min-w-0">
-                          <p className="font-semibold text-brand-black">{obraNome}</p>
-                          <p className="mt-1 max-w-[280px] truncate text-xs text-brand-gray-500">
+                          <div className="flex flex-wrap items-center gap-x-2 gap-y-1">
+                            <p className="font-semibold text-brand-black">{obraNome}</p>
+                            <span className="inline-flex w-fit rounded-full bg-brand-red/10 px-2 py-0.5 text-[10px] font-bold text-brand-red">
+                              {categoriaNome}
+                            </span>
+                            {etapaNome !== "-" && (
+                              <span className="text-[11px] text-brand-gray-500">{etapaNome}</span>
+                            )}
+                          </div>
+                          <p className="mt-1 max-w-[340px] truncate text-xs text-brand-gray-500">
                             {d.descricao ?? "Sem descrição"}
                           </p>
-                          <p className="mt-1 text-[11px] font-bold text-brand-red">
-                            Clique para ver detalhes
-                          </p>
-                          {grupoNota && (
-                            <p
-                              className="mt-1.5 inline-flex w-fit items-center gap-1 rounded-full px-2 py-0.5 text-[10px] font-extrabold"
-                              style={{ background: `${grupoNota.cor}1a`, color: grupoNota.cor }}
-                            >
-                              🧾 Mesma nota · {grupoNota.indice}/{grupoNota.total}
+                          {(materialNome !== "-" || fornecedorNome !== "-") && (
+                            <p className="mt-1 max-w-[340px] truncate text-[11px] text-brand-gray-400">
+                              {[materialNome, fornecedorNome].filter((v) => v !== "-").join(" · ")}
                             </p>
                           )}
+                          <div className="mt-1.5 flex flex-wrap items-center gap-1.5">
+                            <span className="inline-flex w-fit rounded-full bg-status-info/10 px-2 py-0.5 text-[10px] font-bold text-status-info">
+                              {contaBancariaInfo.contas_bancarias?.nome ?? "Sem conta"}
+                            </span>
+                            <span
+                              className={
+                                d.origem === "whatsapp"
+                                  ? "inline-flex w-fit rounded-full bg-[#e9f8f0] px-2 py-0.5 text-[10px] font-bold capitalize text-status-success"
+                                  : "inline-flex w-fit rounded-full bg-brand-gray-100 px-2 py-0.5 text-[10px] font-bold capitalize text-brand-gray-700"
+                              }
+                            >
+                              {d.origem}
+                            </span>
+                            {grupoNota && (
+                              <span
+                                className="inline-flex w-fit items-center gap-1 rounded-full px-2 py-0.5 text-[10px] font-extrabold"
+                                style={{ background: `${grupoNota.cor}1a`, color: grupoNota.cor }}
+                              >
+                                🧾 Mesma nota · {grupoNota.indice}/{grupoNota.total}
+                              </span>
+                            )}
+                          </div>
                         </div>
                       </div>
                     </OpenDespesaModalButton>
-                  </td>
-                  <td className="px-5 py-4">
-                    <div className="flex flex-col gap-2">
-                      <span className="inline-flex w-fit rounded-full bg-brand-red/10 px-3 py-1 text-xs font-bold text-brand-red">
-                        {categoriaNome}
-                      </span>
-                      <span className="text-xs leading-5 text-brand-gray-500">{etapaNome}</span>
-                    </div>
-                  </td>
-                  <td className="px-5 py-4">
-                    <p className="max-w-[260px] font-medium text-brand-black">{materialNome}</p>
-                    <p className="mt-1 max-w-[260px] truncate text-xs text-brand-gray-500">
-                      {fornecedorNome}
-                    </p>
                   </td>
                   <td className="px-5 py-4 text-right">
                     <p className="font-display text-lg font-bold text-brand-black">
@@ -643,36 +648,6 @@ export default async function DespesasPage({
                         </span>
                       )}
                     </div>
-                  </td>
-                  <td className="px-5 py-4">
-                    {contaBancariaInfo.contas_bancarias?.nome ? (
-                      <span className="inline-flex w-fit rounded-full bg-status-info/10 px-3 py-1 text-xs font-bold text-status-info">
-                        {contaBancariaInfo.contas_bancarias.nome}
-                      </span>
-                    ) : (
-                      <span className="inline-flex w-fit rounded-full bg-brand-gray-100 px-3 py-1 text-xs font-bold text-brand-gray-500">
-                        Sem conta
-                      </span>
-                    )}
-                  </td>
-                  <td className="px-5 py-4">
-                    <div className="flex flex-col gap-1">
-                      <span
-                        className={
-                          d.origem === "whatsapp"
-                            ? "inline-flex w-fit rounded-full bg-[#e9f8f0] px-3 py-1 text-xs font-bold capitalize text-status-success"
-                            : "inline-flex w-fit rounded-full bg-brand-gray-100 px-3 py-1 text-xs font-bold capitalize text-brand-gray-700"
-                        }
-                      >
-                        {d.origem}
-                      </span>
-                      <span className="max-w-[180px] truncate text-xs text-brand-gray-500">
-                        por {d.criado_por_nome || d.criado_por_telefone || "Dashboard"}
-                      </span>
-                    </div>
-                  </td>
-                  <td className="whitespace-nowrap px-5 py-4 text-brand-gray-500">
-                    {formatDataHoraBrasil(d.created_at)}
                   </td>
                   <td className="px-5 py-4 text-right">
                     <div className="flex items-center justify-end gap-2 whitespace-nowrap">

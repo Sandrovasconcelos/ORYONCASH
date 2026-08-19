@@ -22,6 +22,8 @@ export type DespesaRelatorio = {
   etapaNome: string;
   materialNome: string;
   fornecedorNome: string;
+  notaUrl: string | null;
+  comprovanteUrl: string | null;
 };
 
 export type DadosRelatorio = {
@@ -118,6 +120,32 @@ export async function buscarDadosRelatorio(filtros: FiltrosRelatorio): Promise<D
     ]);
 
   const despesasBrutas = data ?? [];
+
+  const idsDespesas = despesasBrutas.map((d) => d.id);
+  const { data: comprovantesData } =
+    idsDespesas.length > 0
+      ? await supabase
+          .from("despesa_comprovantes")
+          .select("despesa_id, tipo_documento, storage_bucket, storage_path")
+          .in("despesa_id", idsDespesas)
+      : { data: [] };
+  // 7 dias em vez de 1 hora - o PDF costuma ser salvo/reaberto ou mandado
+  // por WhatsApp bem depois de gerado, entao o link nao pode expirar cedo.
+  const VALIDADE_LINK_DOCUMENTO = 60 * 60 * 24 * 7;
+  const documentosPorDespesa = new Map<string, { nota: string | null; comprovante: string | null }>();
+  await Promise.all(
+    (comprovantesData ?? []).map(async (c) => {
+      if (!c.despesa_id) return;
+      const { data: signed } = await supabase.storage
+        .from(c.storage_bucket)
+        .createSignedUrl(c.storage_path, VALIDADE_LINK_DOCUMENTO);
+      const atual = documentosPorDespesa.get(c.despesa_id) ?? { nota: null, comprovante: null };
+      if (c.tipo_documento === "comprovante_pagamento") atual.comprovante = signed?.signedUrl ?? null;
+      else atual.nota = signed?.signedUrl ?? null;
+      documentosPorDespesa.set(c.despesa_id, atual);
+    })
+  );
+
   const despesas: DespesaRelatorio[] = despesasBrutas.map((d) => ({
     id: d.id,
     valor: d.valor,
@@ -128,6 +156,8 @@ export async function buscarDadosRelatorio(filtros: FiltrosRelatorio): Promise<D
     etapaNome: nomeDe(d.etapas),
     materialNome: nomeDe(d.materiais),
     fornecedorNome: nomeDe(d.fornecedores),
+    notaUrl: documentosPorDespesa.get(d.id)?.nota ?? null,
+    comprovanteUrl: documentosPorDespesa.get(d.id)?.comprovante ?? null,
   }));
 
   const totalGasto = despesas.reduce((soma, d) => soma + d.valor, 0);

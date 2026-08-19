@@ -1,6 +1,6 @@
 import fs from "node:fs/promises";
 import path from "node:path";
-import { Document, Page, Text, View, StyleSheet, Image, renderToBuffer } from "@react-pdf/renderer";
+import { Document, Page, Text, View, StyleSheet, Image, Link, renderToBuffer } from "@react-pdf/renderer";
 import { formatBRL } from "@/lib/conversation/format";
 import type { DadosRelatorio, DespesaRelatorio } from "./dados";
 
@@ -70,11 +70,13 @@ const styles = StyleSheet.create({
   breakdownItem: {
     flexDirection: "row",
     justifyContent: "space-between",
-    paddingVertical: 3.5,
+    paddingTop: 3.5,
     borderTopWidth: 1,
     borderTopColor: CINZA_100,
     fontSize: 8,
   },
+  breakdownTrack: { height: 4, backgroundColor: CINZA_100, borderRadius: 2, marginTop: 3, marginBottom: 5 },
+  breakdownFill: { height: 4, borderRadius: 2 },
 
   obraBar: {
     flexDirection: "row",
@@ -105,6 +107,10 @@ const styles = StyleSheet.create({
   td: { fontSize: 8, paddingHorizontal: 5, color: PRETO },
   tdMuted: { fontSize: 8, paddingHorizontal: 5, color: CINZA_500 },
   tdValor: { fontSize: 8, paddingHorizontal: 5, textAlign: "right", fontFamily: "Helvetica-Bold" },
+  tdLink: { fontSize: 7.5, fontFamily: "Helvetica-Bold" },
+  tdLinkNota: { color: "#0369a1" },
+  tdLinkComprovante: { color: "#047857" },
+  tdSemDocumento: { fontSize: 7.5, color: CINZA_500 },
 
   rodape: { position: "absolute", bottom: 18, left: 30, right: 30, textAlign: "center" },
   rodapeTexto: { fontSize: 7, color: CINZA_500 },
@@ -118,12 +124,13 @@ const styles = StyleSheet.create({
 });
 
 const COLS = {
-  data: 0.07,
-  categoria: 0.15,
-  etapa: 0.15,
-  fornecedor: 0.18,
-  descricao: 0.32,
-  valor: 0.13,
+  data: 0.06,
+  categoria: 0.13,
+  etapa: 0.13,
+  fornecedor: 0.15,
+  descricao: 0.24,
+  valor: 0.11,
+  documentos: 0.18,
 };
 
 function agruparPorObra(despesas: DespesaRelatorio[]): { obraNome: string; total: number; itens: DespesaRelatorio[] }[] {
@@ -218,12 +225,26 @@ function RelatorioDocument({
           <View style={styles.breakdownCard}>
             <Text style={styles.breakdownTitulo}>Gasto por categoria</Text>
             {dados.porCategoria.length > 0 ? (
-              dados.porCategoria.map((item) => (
-                <View key={item.nome} style={styles.breakdownItem}>
-                  <Text style={{ color: item.total === maiorCategoria ? VERMELHO : PRETO }}>{item.nome}</Text>
-                  <Text style={{ fontFamily: "Helvetica-Bold" }}>{formatBRL(item.total)}</Text>
-                </View>
-              ))
+              dados.porCategoria.map((item) => {
+                const percentual = dados.totalGasto > 0 ? (item.total / dados.totalGasto) * 100 : 0;
+                const destaque = item.total === maiorCategoria;
+                return (
+                  <View key={item.nome}>
+                    <View style={styles.breakdownItem}>
+                      <Text style={{ color: destaque ? VERMELHO : PRETO }}>{item.nome}</Text>
+                      <Text style={{ fontFamily: "Helvetica-Bold" }}>{formatBRL(item.total)}</Text>
+                    </View>
+                    <View style={styles.breakdownTrack}>
+                      <View
+                        style={[
+                          styles.breakdownFill,
+                          { width: `${Math.max(2, Math.min(100, percentual))}%`, backgroundColor: destaque ? VERMELHO : CINZA_700 },
+                        ]}
+                      />
+                    </View>
+                  </View>
+                );
+              })
             ) : (
               <Text style={{ fontSize: 8, color: CINZA_500 }}>Nenhum registro.</Text>
             )}
@@ -231,12 +252,26 @@ function RelatorioDocument({
           <View style={styles.breakdownCard}>
             <Text style={styles.breakdownTitulo}>Gasto por etapa</Text>
             {dados.porEtapa.length > 0 ? (
-              dados.porEtapa.map((item) => (
-                <View key={item.nome} style={styles.breakdownItem}>
-                  <Text style={{ color: item.total === maiorEtapa ? VERMELHO : PRETO }}>{item.nome}</Text>
-                  <Text style={{ fontFamily: "Helvetica-Bold" }}>{formatBRL(item.total)}</Text>
-                </View>
-              ))
+              dados.porEtapa.map((item) => {
+                const percentual = dados.totalGasto > 0 ? (item.total / dados.totalGasto) * 100 : 0;
+                const destaque = item.total === maiorEtapa;
+                return (
+                  <View key={item.nome}>
+                    <View style={styles.breakdownItem}>
+                      <Text style={{ color: destaque ? VERMELHO : PRETO }}>{item.nome}</Text>
+                      <Text style={{ fontFamily: "Helvetica-Bold" }}>{formatBRL(item.total)}</Text>
+                    </View>
+                    <View style={styles.breakdownTrack}>
+                      <View
+                        style={[
+                          styles.breakdownFill,
+                          { width: `${Math.max(2, Math.min(100, percentual))}%`, backgroundColor: destaque ? VERMELHO : CINZA_700 },
+                        ]}
+                      />
+                    </View>
+                  </View>
+                );
+              })
             ) : (
               <Text style={{ fontSize: 8, color: CINZA_500 }}>Nenhum registro.</Text>
             )}
@@ -258,6 +293,7 @@ function RelatorioDocument({
                 <Text style={[styles.th, { width: `${COLS.fornecedor * 100}%` }]}>Fornecedor</Text>
                 <Text style={[styles.th, { width: `${COLS.descricao * 100}%` }]}>Descrição</Text>
                 <Text style={[styles.th, { width: `${COLS.valor * 100}%`, textAlign: "right" }]}>Valor</Text>
+                <Text style={[styles.th, { width: `${COLS.documentos * 100}%` }]}>Documentos</Text>
               </View>
 
               {grupo.itens.map((d, indice) => (
@@ -274,10 +310,23 @@ function RelatorioDocument({
                   <Text style={[styles.td, { width: `${COLS.fornecedor * 100}%` }]}>{d.fornecedorNome}</Text>
                   <Text style={[styles.td, { width: `${COLS.descricao * 100}%` }]}>{d.descricao ?? "-"}</Text>
                   <Text style={[styles.tdValor, { width: `${COLS.valor * 100}%` }]}>{formatBRL(d.valor)}</Text>
+                  <View style={{ width: `${COLS.documentos * 100}%`, paddingHorizontal: 5, flexDirection: "row", gap: 6 }}>
+                    {d.notaUrl && (
+                      <Link src={d.notaUrl} style={[styles.tdLink, styles.tdLinkNota]}>
+                        Nota
+                      </Link>
+                    )}
+                    {d.comprovanteUrl && (
+                      <Link src={d.comprovanteUrl} style={[styles.tdLink, styles.tdLinkComprovante]}>
+                        Comprov.
+                      </Link>
+                    )}
+                    {!d.notaUrl && !d.comprovanteUrl && <Text style={styles.tdSemDocumento}>-</Text>}
+                  </View>
                 </View>
               ))}
 
-              <View style={styles.tableFootRow}>
+              <View style={styles.tableFootRow} wrap={false}>
                 <Text
                   style={[
                     styles.td,
@@ -296,6 +345,7 @@ function RelatorioDocument({
                 <Text style={[styles.tdValor, { width: `${COLS.valor * 100}%`, color: VERMELHO, fontSize: 9 }]}>
                   {formatBRL(grupo.total)}
                 </Text>
+                <View style={{ width: `${COLS.documentos * 100}%` }} />
               </View>
             </View>
           </View>
