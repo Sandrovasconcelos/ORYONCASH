@@ -3,6 +3,7 @@ const GEMINI_MODEL = process.env.GEMINI_MODEL || "gemini-flash-latest";
 export type InvoiceItem = {
   descricao: string;
   quantidade: number;
+  valorUnitario: number | null;
   valorTotal: number;
 };
 
@@ -77,6 +78,11 @@ Regras:
 - "itens": se for nota/conta com vários produtos/serviços, retorne um item por
   produto/serviço. Se for um comprovante de pagamento único, retorne um único
   item com quantidade 1 e uma descrição clara do pagamento.
+  "valorUnitario": o valor unitário do item (coluna "V. UNIT" ou equivalente),
+  quando aparecer no documento. Se não aparecer explicitamente mas quantidade
+  e valorTotal estiverem claros, calcule valorTotal / quantidade. Use null só
+  se não for possível determinar (ex: comprovante de pagamento único sem
+  discriminação de item).
 - "valorTotalNota": valor total do documento. Use null se não conseguir
   identificar.
 - Responda APENAS com o JSON, sem texto adicional.`;
@@ -109,9 +115,10 @@ const RESPONSE_SCHEMA = {
         properties: {
           descricao: { type: "string" },
           quantidade: { type: "number" },
+          valorUnitario: { type: "number", nullable: true },
           valorTotal: { type: "number" },
         },
-        required: ["descricao", "quantidade", "valorTotal"],
+        required: ["descricao", "quantidade", "valorUnitario", "valorTotal"],
       },
     },
     valorTotalNota: { type: "number", nullable: true },

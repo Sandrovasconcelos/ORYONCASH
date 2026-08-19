@@ -228,6 +228,8 @@ export interface Database {
           conta_bancaria_id: string | null;
           descricao: string | null;
           valor: number;
+          quantidade: number | null;
+          valor_unitario: number | null;
           data: string;
           origem: "whatsapp" | "dashboard";
           criado_por_telefone: string | null;
@@ -247,6 +249,8 @@ export interface Database {
           conta_bancaria_id?: string | null;
           descricao?: string | null;
           valor: number;
+          quantidade?: number | null;
+          valor_unitario?: number | null;
           data?: string;
           origem?: "whatsapp" | "dashboard";
           criado_por_telefone?: string | null;

@@ -1544,10 +1544,13 @@ async function handleNotaItemEtapa(
 async function enviarConfirmacaoNota(from: string, dados: Dados) {
   const itens = dados.notaItensClassificados ?? [];
   const linhasItens = itens
-    .map(
-      (item, i) =>
-        `${i + 1}. ${item.descricao} — ${formatBRL(item.valorTotal)}\n   📁 ${item.categoriaNome} · 📐 ${item.etapaNome}`
-    )
+    .map((item, i) => {
+      const qtdELinha =
+        item.quantidade !== 1
+          ? `${item.quantidade}x${item.valorUnitario ? ` de ${formatBRL(item.valorUnitario)}` : ""} = `
+          : "";
+      return `${i + 1}. ${item.descricao} — ${qtdELinha}${formatBRL(item.valorTotal)}\n   📁 ${item.categoriaNome} · 📐 ${item.etapaNome}`;
+    })
     .join("\n");
   const somaItens = itens.reduce((soma, item) => soma + item.valorTotal, 0);
 
@@ -1606,7 +1609,9 @@ async function handleNotaConfirmacao(
         categoriaId: item.categoriaId,
         etapaId: item.etapaId,
         valor: item.valorTotal,
-        descricao: `${item.descricao} (${item.quantidade}x)`,
+        descricao: item.descricao,
+        quantidade: item.quantidade,
+        valorUnitario: item.valorUnitario,
         materialId: material?.id ?? null,
         fornecedorId: dados.fornecedorId ?? null,
         criadoPorTelefone: from,

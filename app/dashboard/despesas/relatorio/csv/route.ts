@@ -15,7 +15,7 @@ export async function GET(request: NextRequest) {
   let query = supabase
     .from("despesas")
     .select(
-      "id, valor, descricao, data, origem, created_at, obras(nome), categorias(nome), etapas(nome), materiais(nome), fornecedores(nome)"
+      "id, valor, quantidade, valor_unitario, descricao, data, origem, created_at, obras(nome), categorias(nome), etapas(nome), materiais(nome), fornecedores(nome)"
     )
     .is("deleted_at", null)
     .order("data", { ascending: false })
@@ -86,6 +86,8 @@ export async function GET(request: NextRequest) {
     "Material",
     "Descricao",
     "Fornecedor",
+    "Quantidade",
+    "Valor unitario",
     "Valor",
     "Origem",
     "Registrado em",
@@ -103,6 +105,8 @@ export async function GET(request: NextRequest) {
       (d.materiais as unknown as { nome: string } | null)?.nome,
       d.descricao,
       (d.fornecedores as unknown as { nome: string } | null)?.nome,
+      d.quantidade ?? "",
+      d.valor_unitario ?? "",
       d.valor,
       d.origem,
       d.created_at,

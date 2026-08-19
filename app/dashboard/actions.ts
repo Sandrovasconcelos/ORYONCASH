@@ -1041,6 +1041,8 @@ export async function updateDespesaAction(formData: FormData) {
   const materialId = String(formData.get("material_id") ?? "") || null;
   const fornecedorId = String(formData.get("fornecedor_id") ?? "") || null;
   const contaBancariaId = String(formData.get("conta_bancaria_id") ?? "") || null;
+  const quantidade = parseValorBR(String(formData.get("quantidade") ?? "")) ?? null;
+  const valorUnitario = parseValorBR(String(formData.get("valor_unitario") ?? "")) ?? null;
 
   const supabase = await createClient();
   const { data: antes } = await supabase
@@ -1057,6 +1059,8 @@ export async function updateDespesaAction(formData: FormData) {
     fornecedor_id: fornecedorId,
     conta_bancaria_id: contaBancariaId,
     valor,
+    quantidade,
+    valor_unitario: valorUnitario,
     data: String(formData.get("data") ?? ""),
     descricao: String(formData.get("descricao") ?? "").trim() || null,
   };
@@ -1065,7 +1069,24 @@ export async function updateDespesaAction(formData: FormData) {
   if (updateError?.message.toLowerCase().includes("conta_bancaria_id")) {
     const { conta_bancaria_id: _contaBancariaIdIgnorado, ...depoisSemContaBancaria } = depois;
     void _contaBancariaIdIgnorado;
-    await supabase.from("despesas").update(depoisSemContaBancaria).eq("id", id);
+    const { error: erroSemConta } = await supabase
+      .from("despesas")
+      .update(depoisSemContaBancaria)
+      .eq("id", id);
+    if (erroSemConta?.message.toLowerCase().includes("quantidade") || erroSemConta?.message.toLowerCase().includes("valor_unitario")) {
+      const { quantidade: _q, valor_unitario: _vu, ...semQuantidade } = depoisSemContaBancaria;
+      void _q;
+      void _vu;
+      await supabase.from("despesas").update(semQuantidade).eq("id", id);
+    }
+  } else if (
+    updateError?.message.toLowerCase().includes("quantidade") ||
+    updateError?.message.toLowerCase().includes("valor_unitario")
+  ) {
+    const { quantidade: _q, valor_unitario: _vu, ...semQuantidade } = depois;
+    void _q;
+    void _vu;
+    await supabase.from("despesas").update(semQuantidade).eq("id", id);
   }
 
   const autorNome = await getAutorNomeDashboard();

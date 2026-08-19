@@ -113,7 +113,7 @@ export default async function DespesasPage({
       let queryCompleta = supabase
         .from("despesas")
         .select(
-          "id, obra_id, categoria_id, etapa_id, material_id, fornecedor_id, conta_bancaria_id, valor, descricao, data, origem, created_at, criado_por_nome, criado_por_telefone, obras(nome), categorias(nome), etapas(nome), materiais(nome), fornecedores(nome, cnpj, cpf, chave_pix, conta_banco, conta_agencia, conta_numero), contas_bancarias(nome)"
+          "id, obra_id, categoria_id, etapa_id, material_id, fornecedor_id, conta_bancaria_id, valor, quantidade, valor_unitario, descricao, data, origem, created_at, criado_por_nome, criado_por_telefone, obras(nome), categorias(nome), etapas(nome), materiais(nome), fornecedores(nome, cnpj, cpf, chave_pix, conta_banco, conta_agencia, conta_numero), contas_bancarias(nome)"
         )
         .is("deleted_at", null)
         .order("data", { ascending: false })
@@ -127,6 +127,35 @@ export default async function DespesasPage({
 
       const resultadoCompleto = await queryCompleta;
       if (!resultadoCompleto.error) return resultadoCompleto;
+
+      // Migration de quantidade/valor_unitario pode nao ter rodado ainda -
+      // tenta sem esses dois primeiro (preserva conta bancaria e fornecedor).
+      let querySemQuantidade = supabase
+        .from("despesas")
+        .select(
+          "id, obra_id, categoria_id, etapa_id, material_id, fornecedor_id, conta_bancaria_id, valor, descricao, data, origem, created_at, criado_por_nome, criado_por_telefone, obras(nome), categorias(nome), etapas(nome), materiais(nome), fornecedores(nome, cnpj, cpf, chave_pix, conta_banco, conta_agencia, conta_numero), contas_bancarias(nome)"
+        )
+        .is("deleted_at", null)
+        .order("data", { ascending: false })
+        .order("created_at", { ascending: false })
+        .limit(1000);
+      if (params.obra) querySemQuantidade = querySemQuantidade.eq("obra_id", params.obra);
+      if (params.categoria) querySemQuantidade = querySemQuantidade.eq("categoria_id", params.categoria);
+      if (params.etapa) querySemQuantidade = querySemQuantidade.eq("etapa_id", params.etapa);
+      if (params.material) querySemQuantidade = querySemQuantidade.eq("material_id", params.material);
+      if (params.fornecedor) querySemQuantidade = querySemQuantidade.eq("fornecedor_id", params.fornecedor);
+
+      const resultadoSemQuantidade = await querySemQuantidade;
+      if (!resultadoSemQuantidade.error) {
+        return {
+          ...resultadoSemQuantidade,
+          data: (resultadoSemQuantidade.data ?? []).map((d) => ({
+            ...d,
+            quantidade: null,
+            valor_unitario: null,
+          })),
+        };
+      }
 
       // Ou as colunas novas do fornecedor (cpf/chave_pix/conta_*) ou a
       // migration de contas bancarias podem nao existir ainda - tenta sem
@@ -147,7 +176,16 @@ export default async function DespesasPage({
       if (params.fornecedor) querySemContaBancaria = querySemContaBancaria.eq("fornecedor_id", params.fornecedor);
 
       const resultadoSemContaBancaria = await querySemContaBancaria;
-      if (!resultadoSemContaBancaria.error) return resultadoSemContaBancaria;
+      if (!resultadoSemContaBancaria.error) {
+        return {
+          ...resultadoSemContaBancaria,
+          data: (resultadoSemContaBancaria.data ?? []).map((d) => ({
+            ...d,
+            quantidade: null,
+            valor_unitario: null,
+          })),
+        };
+      }
 
       // Colunas novas do fornecedor (cpf/chave_pix/conta_*) tambem podem nao
       // existir ainda - refaz so com os campos ja garantidos.
@@ -165,7 +203,17 @@ export default async function DespesasPage({
       if (params.etapa) queryReduzida = queryReduzida.eq("etapa_id", params.etapa);
       if (params.material) queryReduzida = queryReduzida.eq("material_id", params.material);
       if (params.fornecedor) queryReduzida = queryReduzida.eq("fornecedor_id", params.fornecedor);
-      return queryReduzida;
+      const resultadoReduzido = await queryReduzida;
+      return {
+        ...resultadoReduzido,
+        data: (resultadoReduzido.data ?? []).map((d) => ({
+          ...d,
+          conta_bancaria_id: null,
+          contas_bancarias: null,
+          quantidade: null,
+          valor_unitario: null,
+        })),
+      };
     })(),
   ]);
 
@@ -570,6 +618,12 @@ export default async function DespesasPage({
                               {[materialNome, fornecedorNome].filter((v) => v !== "-").join(" · ")}
                             </p>
                           )}
+                          {d.quantidade != null && (
+                            <p className="mt-1 text-[11px] font-semibold text-brand-gray-600">
+                              {valorInputBR(d.quantidade)}
+                              {d.valor_unitario != null ? ` × ${formatBRL(d.valor_unitario)}` : ""}
+                            </p>
+                          )}
                           <div className="mt-1.5 flex flex-wrap items-center gap-1.5">
                             <span className="inline-flex w-fit rounded-full bg-status-info/10 px-2 py-0.5 text-[10px] font-bold text-status-info">
                               {contaBancariaInfo.contas_bancarias?.nome ?? "Sem conta"}
@@ -836,6 +890,24 @@ export default async function DespesasPage({
                               name="valor"
                               defaultValue={valorInputBR(d.valor)}
                               required
+                              className="rounded-brand-sm border border-brand-gray-300 bg-white px-3 py-2 text-sm outline-none focus:border-brand-red"
+                            />
+                          </label>
+                          <label className="flex flex-col gap-1 text-sm text-brand-gray-700">
+                            Quantidade
+                            <input
+                              name="quantidade"
+                              defaultValue={d.quantidade != null ? valorInputBR(d.quantidade) : ""}
+                              placeholder="Ex: 50"
+                              className="rounded-brand-sm border border-brand-gray-300 bg-white px-3 py-2 text-sm outline-none focus:border-brand-red"
+                            />
+                          </label>
+                          <label className="flex flex-col gap-1 text-sm text-brand-gray-700">
+                            Valor unitário
+                            <input
+                              name="valor_unitario"
+                              defaultValue={d.valor_unitario != null ? valorInputBR(d.valor_unitario) : ""}
+                              placeholder="Ex: 53,00"
                               className="rounded-brand-sm border border-brand-gray-300 bg-white px-3 py-2 text-sm outline-none focus:border-brand-red"
                             />
                           </label>

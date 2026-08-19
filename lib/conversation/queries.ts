@@ -1,6 +1,9 @@
 import { createAdminClient } from "@/lib/supabase/admin";
 import { encontrarContaBancariaCorrespondente } from "@/lib/dashboard/queries";
 import { notificarLancamento } from "@/lib/alertas/notificar";
+import type { Database } from "@/lib/database.types";
+
+type DespesaInsert = Database["public"]["Tables"]["despesas"]["Insert"];
 
 const COMPROVANTES_BUCKET = "comprovantes";
 
@@ -603,41 +606,54 @@ export async function createDespesa(input: {
   etapaId: string | null;
   valor: number;
   descricao: string | null;
+  quantidade?: number | null;
+  valorUnitario?: number | null;
   materialId?: string | null;
   fornecedorId?: string | null;
   criadoPorTelefone?: string | null;
   criadoPorNome?: string | null;
 }) {
   const supabase = createAdminClient();
-  const base = {
+  const comAutoria: DespesaInsert = {
     obra_id: input.obraId,
     categoria_id: input.categoriaId,
     etapa_id: input.etapaId,
     valor: input.valor,
     descricao: input.descricao,
+    quantidade: input.quantidade ?? null,
+    valor_unitario: input.valorUnitario ?? null,
     material_id: input.materialId ?? null,
     fornecedor_id: input.fornecedorId ?? null,
     data: hojeNoBrasil(),
     origem: "whatsapp" as const,
-  };
-
-  const comAutoria = {
-    ...base,
     criado_por_telefone: input.criadoPorTelefone ?? null,
     criado_por_nome: input.criadoPorNome ?? null,
   };
 
-  let result = await supabase
-    .from("despesas")
-    .insert(comAutoria)
-    .select("id")
-    .single();
-
-  if (
-    result.error &&
-    result.error.message.toLowerCase().includes("criado_por")
-  ) {
-    result = await supabase.from("despesas").insert(base).select("id").single();
+  // Retenta sem criado_por_* e/ou quantidade/valor_unitario se essas
+  // migrations ainda nao tiverem rodado no banco - mesma logica defensiva
+  // ja usada em outros pontos do app pra colunas novas.
+  let payload = comAutoria;
+  let result = await supabase.from("despesas").insert(payload).select("id").single();
+  for (let tentativa = 0; tentativa < 2 && result.error; tentativa++) {
+    const msg = result.error.message.toLowerCase();
+    if (msg.includes("criado_por") && "criado_por_telefone" in payload) {
+      const { criado_por_telefone: _telefoneIgnorado, criado_por_nome: _nomeIgnorado, ...resto } = payload;
+      void _telefoneIgnorado;
+      void _nomeIgnorado;
+      payload = resto;
+    } else if (
+      (msg.includes("quantidade") || msg.includes("valor_unitario")) &&
+      "quantidade" in payload
+    ) {
+      const { quantidade: _quantidadeIgnorada, valor_unitario: _valorUnitarioIgnorado, ...resto } = payload;
+      void _quantidadeIgnorada;
+      void _valorUnitarioIgnorado;
+      payload = resto;
+    } else {
+      break;
+    }
+    result = await supabase.from("despesas").insert(payload).select("id").single();
   }
 
   if (result.error) throw result.error;
