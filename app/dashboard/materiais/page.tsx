@@ -5,8 +5,15 @@ import { CadastroModal } from "../cadastro-modal";
 import { DeleteCadastroButton } from "../delete-cadastro-button";
 import { ActionIcon } from "../action-icon";
 import { SubmitButton } from "../submit-button";
+import { PrecoUnitarioChart } from "../charts/preco-unitario-chart";
+import { formatBRL } from "@/lib/conversation/format";
 
 export const dynamic = "force-dynamic";
+
+function formatDataCurta(data: string): string {
+  const [ano, mes, dia] = data.split("-");
+  return `${dia}/${mes}/${ano.slice(2)}`;
+}
 
 function inferirTipo(nome: string) {
   const normalizado = nome
@@ -24,15 +31,23 @@ function inferirTipo(nome: string) {
 
 export default async function MateriaisPage() {
   const supabase = createAdminClient();
-  const [{ data: materiais }, { data: categorias }, { data: despesas }] = await Promise.all([
-    supabase
-      .from("materiais")
-      .select("id, nome, categoria_id, created_at, categorias(nome)")
-      .is("deleted_at", null)
-      .order("nome"),
-    supabase.from("categorias").select("id, nome").is("deleted_at", null).order("nome"),
-    supabase.from("despesas").select("material_id, valor").is("deleted_at", null),
-  ]);
+  const [{ data: materiais }, { data: categorias }, { data: despesas }, { data: despesasComPreco }] =
+    await Promise.all([
+      supabase
+        .from("materiais")
+        .select("id, nome, categoria_id, created_at, categorias(nome)")
+        .is("deleted_at", null)
+        .order("nome"),
+      supabase.from("categorias").select("id, nome").is("deleted_at", null).order("nome"),
+      supabase.from("despesas").select("material_id, valor").is("deleted_at", null),
+      supabase
+        .from("despesas")
+        .select("material_id, data, valor_unitario, quantidade, fornecedores(nome)")
+        .is("deleted_at", null)
+        .not("material_id", "is", null)
+        .not("valor_unitario", "is", null)
+        .order("data", { ascending: true }),
+    ]);
 
   const lista = materiais ?? [];
   const usoPorMaterial = new Map<string, number>();
@@ -46,6 +61,22 @@ export default async function MateriaisPage() {
   for (const despesa of despesas ?? []) {
     if (!despesa.material_id) continue;
     usoPorMaterial.set(despesa.material_id, (usoPorMaterial.get(despesa.material_id) ?? 0) + 1);
+  }
+
+  const precosPorMaterial = new Map<
+    string,
+    { data: string; valorUnitario: number; quantidade: number | null; fornecedorNome: string }[]
+  >();
+  for (const d of despesasComPreco ?? []) {
+    if (!d.material_id || d.valor_unitario == null) continue;
+    const listaPrecos = precosPorMaterial.get(d.material_id) ?? [];
+    listaPrecos.push({
+      data: d.data,
+      valorUnitario: Number(d.valor_unitario),
+      quantidade: d.quantidade,
+      fornecedorNome: (d.fornecedores as unknown as { nome: string } | null)?.nome ?? "-",
+    });
+    precosPorMaterial.set(d.material_id, listaPrecos);
   }
 
   return (
@@ -161,6 +192,65 @@ export default async function MateriaisPage() {
                     </td>
                   <td className="px-5 py-4 text-right">
                       <div className="flex items-center justify-end gap-2">
+                        {(() => {
+                          const precos = precosPorMaterial.get(material.id) ?? [];
+                          if (precos.length === 0) return null;
+                          const valores = precos.map((p) => p.valorUnitario);
+                          const minimo = Math.min(...valores);
+                          const maximo = Math.max(...valores);
+                          const media = valores.reduce((s, v) => s + v, 0) / valores.length;
+                          const ultimo = precos[precos.length - 1];
+                          return (
+                            <CadastroModal
+                              titulo={`Histórico de preço — ${material.nome}`}
+                              descricao="Evolução do valor unitário nos lançamentos com nota fiscal."
+                              botao="Preço"
+                              icone={<ActionIcon name="calculator" />}
+                              variante="icone"
+                              modalSize="wide"
+                            >
+                              <div className="flex flex-col gap-5">
+                                <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
+                                  <ResumoCard label="Mínimo" valor={formatBRL(minimo)} />
+                                  <ResumoCard label="Máximo" valor={formatBRL(maximo)} />
+                                  <ResumoCard label="Média" valor={formatBRL(media)} />
+                                  <ResumoCard label="Último" valor={formatBRL(ultimo.valorUnitario)} />
+                                </div>
+                                <PrecoUnitarioChart
+                                  pontos={precos.map((p) => ({
+                                    data: formatDataCurta(p.data),
+                                    valorUnitario: p.valorUnitario,
+                                    fornecedorNome: p.fornecedorNome,
+                                  }))}
+                                />
+                                <div className="overflow-x-auto rounded-card border border-brand-gray-300/70">
+                                  <table className="w-full min-w-[480px] text-left text-sm">
+                                    <thead className="bg-brand-gray-100 text-[11px] uppercase tracking-[0.12em] text-brand-gray-500">
+                                      <tr>
+                                        <th className="px-4 py-2 font-extrabold">Data</th>
+                                        <th className="px-4 py-2 font-extrabold">Fornecedor</th>
+                                        <th className="px-4 py-2 text-right font-extrabold">Qtd</th>
+                                        <th className="px-4 py-2 text-right font-extrabold">Valor unitário</th>
+                                      </tr>
+                                    </thead>
+                                    <tbody className="divide-y divide-brand-gray-300/40">
+                                      {[...precos].reverse().map((p, indice) => (
+                                        <tr key={indice}>
+                                          <td className="px-4 py-2 text-brand-gray-700">{formatDataCurta(p.data)}</td>
+                                          <td className="px-4 py-2 text-brand-gray-700">{p.fornecedorNome}</td>
+                                          <td className="px-4 py-2 text-right text-brand-gray-700">{p.quantidade ?? "-"}</td>
+                                          <td className="px-4 py-2 text-right font-semibold text-brand-black">
+                                            {formatBRL(p.valorUnitario)}
+                                          </td>
+                                        </tr>
+                                      ))}
+                                    </tbody>
+                                  </table>
+                                </div>
+                              </div>
+                            </CadastroModal>
+                          );
+                        })()}
                         <CadastroModal
                           titulo="Editar material"
                           descricao="Padronize nome e categoria para melhorar a seleção no WhatsApp."
