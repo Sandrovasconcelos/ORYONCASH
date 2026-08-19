@@ -44,6 +44,11 @@ export async function sendMenuPrincipal(to: string) {
             title: "🗑️ Remover cadastro",
             description: "Enviar obra, material ou fornecedor para remoção",
           },
+          {
+            id: MENU_IDS.RELATORIO,
+            title: "📄 Relatório",
+            description: "Gerar e receber o PDF de despesas por aqui",
+          },
         ],
       },
     ],

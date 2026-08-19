@@ -9,6 +9,7 @@ import { extractSpreadsheetAsText } from "@/lib/orcamento/parseSpreadsheet";
 import { formatBRL, parseValorBR } from "./format";
 import { ESTADOS, MENU_IDS, CAMPO_IDS, TIPO_REMOVER_IDS, COMANDOS_CANCELAR } from "./states";
 import { sendMenuPrincipal } from "./menu";
+import { sendListPeriodoRelatorio, gerarEEnviarRelatorio } from "./relatorio";
 import {
   sendListObras,
   sendListCategorias,
@@ -19,6 +20,7 @@ import {
   sendListCamposParaCorrigir,
   sendListMateriais,
   sendListMateriaisParaDespesa,
+  sendListObrasParaRelatorio,
 } from "./lists";
 import {
   findObraById,
@@ -336,6 +338,11 @@ export async function handleIncomingMessage(message: IncomingMessage) {
     case ESTADOS.REMOVER_CONFIRMACAO:
       return handleRemoverConfirmacao(from, message, session);
 
+    case ESTADOS.RELATORIO_OBRA:
+      return handleRelatorioObra(from, message);
+    case ESTADOS.RELATORIO_PERIODO:
+      return handleRelatorioPeriodo(from, message, session);
+
     default:
       await resetSession(from);
       await sendMenuPrincipal(from);
@@ -371,9 +378,50 @@ async function handleMenu(from: string, message: IncomingMessage) {
     case MENU_IDS.REMOVER_CADASTRO:
       await iniciarRemoverCadastro(from);
       return;
+    case MENU_IDS.RELATORIO:
+      await iniciarRelatorio(from);
+      return;
     default:
       await sendMenuPrincipal(from);
   }
+}
+
+// ---------- Relatório por WhatsApp ----------
+
+async function iniciarRelatorio(from: string) {
+  await saveSession(from, ESTADOS.RELATORIO_OBRA, {});
+  await sendListObrasParaRelatorio(from);
+}
+
+async function handleRelatorioObra(from: string, message: IncomingMessage) {
+  const texto = message.text?.trim().toLowerCase();
+  if (texto === "0" || texto === "todas") {
+    await saveSession(from, ESTADOS.RELATORIO_PERIODO, { obraId: "todas", obraNome: "Todas as obras" });
+    await sendListPeriodoRelatorio(from);
+    return;
+  }
+
+  const obra = message.text ? await findObraPorTexto(message.text) : null;
+  if (!obra) {
+    await sendListObrasParaRelatorio(from);
+    return;
+  }
+
+  await saveSession(from, ESTADOS.RELATORIO_PERIODO, { obraId: obra.id, obraNome: obra.nome });
+  await sendListPeriodoRelatorio(from);
+}
+
+async function handleRelatorioPeriodo(from: string, message: IncomingMessage, session: Session) {
+  const dados = session.dados_coletados as Dados;
+  if (!message.replyId?.startsWith("periodo:")) {
+    await sendListPeriodoRelatorio(from);
+    return;
+  }
+
+  await sendText(from, "📄 Gerando o relatório, só um instante...");
+  await gerarEEnviarRelatorio(from, dados.obraId === "todas" ? null : dados.obraId ?? null, message.replyId);
+  await resetSession(from);
+  await sendMenuPrincipal(from);
 }
 
 async function iniciarVerResumo(from: string) {

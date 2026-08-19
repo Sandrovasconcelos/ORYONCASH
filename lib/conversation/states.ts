@@ -45,6 +45,9 @@ export const ESTADOS = {
   REMOVER_TIPO: "remover_tipo",
   REMOVER_SELECIONANDO_ITEM: "remover_selecionando_item",
   REMOVER_CONFIRMACAO: "remover_confirmacao",
+
+  RELATORIO_OBRA: "relatorio_obra",
+  RELATORIO_PERIODO: "relatorio_periodo",
 } as const;
 
 export const MENU_IDS = {
@@ -55,6 +58,14 @@ export const MENU_IDS = {
   VER_RESUMO: "menu:ver_resumo",
   CORRIGIR_LANCAMENTO: "menu:corrigir_lancamento",
   REMOVER_CADASTRO: "menu:remover_cadastro",
+  RELATORIO: "menu:relatorio",
+} as const;
+
+export const PERIODO_RELATORIO_IDS = {
+  MES_ATUAL: "periodo:mes_atual",
+  MES_PASSADO: "periodo:mes_passado",
+  ANO_ATUAL: "periodo:ano_atual",
+  TUDO: "periodo:tudo",
 } as const;
 
 export const TIPO_REMOVER_IDS = {

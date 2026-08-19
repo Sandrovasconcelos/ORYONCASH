@@ -29,6 +29,14 @@ export async function sendListObras(to: string) {
   );
 }
 
+export async function sendListObrasParaRelatorio(to: string) {
+  const obras = await listObrasAtivas();
+  await sendText(
+    to,
+    `📄 *Relatório de despesas — qual obra?*\n\n0. Todas as obras\n${formatarListaNumerada(obras)}\n\nResponda com o número ou digite o nome.`
+  );
+}
+
 export async function sendListCategorias(to: string) {
   const categorias = await listCategorias();
   await sendText(
