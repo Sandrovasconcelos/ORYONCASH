@@ -298,6 +298,7 @@ export async function updateObraAction(formData: FormData) {
   const nome = String(formData.get("nome") ?? "").trim();
   const orcamentoTotal = parseValorBR(String(formData.get("orcamento") ?? "0")) ?? 0;
   const status = String(formData.get("status") ?? "ativa") as "ativa" | "concluida";
+  const categoriaMedicaoPadraoId = String(formData.get("categoria_medicao_padrao_id") ?? "") || null;
   if (!id || !nome) return;
 
   const supabase = await createClient();
@@ -307,7 +308,12 @@ export async function updateObraAction(formData: FormData) {
     .eq("id", id)
     .maybeSingle();
 
-  const depois = { nome, orcamento_total: orcamentoTotal, status };
+  const depois = {
+    nome,
+    orcamento_total: orcamentoTotal,
+    status,
+    categoria_medicao_padrao_id: categoriaMedicaoPadraoId,
+  };
   await supabase.from("obras").update(depois).eq("id", id);
 
   const autorNome = await getAutorNomeDashboard();

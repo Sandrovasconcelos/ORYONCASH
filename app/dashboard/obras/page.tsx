@@ -37,6 +37,7 @@ type ObraComLixeira = {
   nome: string;
   orcamento_total: number;
   status: "ativa" | "concluida";
+  categoria_medicao_padrao_id: string | null;
   created_at: string;
   deleted_at: string | null;
   deleted_by: string | null;
@@ -47,7 +48,7 @@ async function buscarObrasComFallback(supabase: ReturnType<typeof createAdminCli
   const comLixeira = await supabase
     .from("obras")
     .select(
-      "id, nome, orcamento_total, status, created_at, deleted_at, deleted_by, deleted_reason"
+      "id, nome, orcamento_total, status, categoria_medicao_padrao_id, created_at, deleted_at, deleted_by, deleted_reason"
     )
     .order("created_at", { ascending: false });
 
@@ -60,7 +61,7 @@ async function buscarObrasComFallback(supabase: ReturnType<typeof createAdminCli
 
   const semLixeira = await supabase
     .from("obras")
-    .select("id, nome, orcamento_total, status, created_at")
+    .select("id, nome, orcamento_total, status, categoria_medicao_padrao_id, created_at")
     .order("created_at", { ascending: false });
 
   return {
@@ -78,7 +79,7 @@ async function buscarObrasComFallback(supabase: ReturnType<typeof createAdminCli
 
 export default async function ObrasPage() {
   const supabase = createAdminClient();
-  const [obrasQuery, { data: despesas }, { data: etapas }] = await Promise.all([
+  const [obrasQuery, { data: despesas }, { data: etapas }, { data: categorias }] = await Promise.all([
     buscarObrasComFallback(supabase),
     supabase.from("despesas").select("obra_id, etapa_id, valor").is("deleted_at", null),
     supabase
@@ -86,7 +87,9 @@ export default async function ObrasPage() {
       .select("id, obra_id, nome, ordem, valor_orcado, created_at")
       .is("deleted_at", null)
       .order("ordem"),
+    supabase.from("categorias").select("id, nome").is("deleted_at", null).order("nome"),
   ]);
+  const listaCategorias = categorias ?? [];
 
   const todasAsObras = obrasQuery.data;
   const lixeiraIndisponivel = obrasQuery.lixeiraIndisponivel;
@@ -282,6 +285,24 @@ export default async function ObrasPage() {
                                   <option value="ativa">Ativa</option>
                                   <option value="concluida">Concluída</option>
                                 </select>
+                              </label>
+                              <label className="flex flex-col gap-1 text-sm text-brand-gray-700">
+                                Categoria padrão para pagamentos de etapas
+                                <select
+                                  name="categoria_medicao_padrao_id"
+                                  defaultValue={obra.categoria_medicao_padrao_id ?? ""}
+                                  className="rounded-brand-sm border border-brand-gray-300 bg-white px-3 py-2 text-sm outline-none focus:border-brand-red"
+                                >
+                                  <option value="">Nenhuma (escolher na hora de liberar)</option>
+                                  {listaCategorias.map((c) => (
+                                    <option key={c.id} value={c.id}>
+                                      {c.nome}
+                                    </option>
+                                  ))}
+                                </select>
+                                <span className="text-xs font-normal text-brand-gray-500">
+                                  Usada automaticamente ao liberar pagamento de etapa em Execução.
+                                </span>
                               </label>
                               <SubmitButton className="rounded-brand-sm bg-brand-red px-4 py-2 text-sm font-semibold text-white hover:bg-brand-red-700">
                                 Salvar edição
