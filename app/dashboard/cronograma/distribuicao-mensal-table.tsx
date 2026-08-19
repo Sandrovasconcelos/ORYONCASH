@@ -66,7 +66,18 @@ export function DistribuicaoMensalTable({
   const etapaAtual = celula ? etapas.find((e) => e.id === celula.etapaId) ?? null : null;
   const distribuicaoAtual = celula ? mapa.get(chave(celula.etapaId, celula.mes)) ?? null : null;
 
-  let acumulado = 0;
+  const acumuladoPorMes = new Map<string, number>();
+  {
+    let soma = 0;
+    for (const mes of meses) {
+      const totalMesValor = etapas.reduce((s, e) => {
+        const d = mapa.get(chave(e.id, mes));
+        return s + (d ? (e.valorOrcado * d.percentual) / 100 : 0);
+      }, 0);
+      soma += totalOrcamento > 0 ? (totalMesValor / totalOrcamento) * 100 : 0;
+      acumuladoPorMes.set(mes, soma);
+    }
+  }
 
   return (
     <div className="flex flex-col gap-4">
@@ -187,7 +198,7 @@ export function DistribuicaoMensalTable({
                     return soma + (d ? (e.valorOrcado * d.percentual) / 100 : 0);
                   }, 0);
                   const totalMesPct = totalOrcamento > 0 ? (totalMesValor / totalOrcamento) * 100 : 0;
-                  acumulado += totalMesPct;
+                  const acumulado = acumuladoPorMes.get(mes) ?? 0;
                   return (
                     <td key={mes} className="text-center text-xs">
                       <span className="block font-bold text-brand-black">

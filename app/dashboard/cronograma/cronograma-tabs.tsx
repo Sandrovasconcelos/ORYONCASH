@@ -3,9 +3,7 @@
 import { useState } from "react";
 
 const ABAS = [
-  { id: "visaoGeral", label: "Visão geral", descricao: "Curva S, indicadores e etapas" },
-  { id: "medicoes", label: "Medições", descricao: "Preparar, aprovar e pagar" },
-  { id: "detalhado", label: "Cronograma detalhado", descricao: "Fases, atividades e Gantt" },
+  { id: "visaoGeral", label: "Visão geral", descricao: "Curva S, indicadores e contratos" },
   { id: "fisicoFinanceiro", label: "Físico-financeiro", descricao: "Distribuição mensal por etapa" },
 ] as const;
 
@@ -13,20 +11,14 @@ type AbaId = (typeof ABAS)[number]["id"];
 
 export function CronogramaTabs({
   visaoGeralPanel,
-  medicoesPanel,
-  detalhadoPanel,
   fisicoFinanceiroPanel,
 }: {
   visaoGeralPanel: React.ReactNode;
-  medicoesPanel: React.ReactNode;
-  detalhadoPanel: React.ReactNode;
   fisicoFinanceiroPanel: React.ReactNode;
 }) {
   const [aba, setAba] = useState<AbaId>("visaoGeral");
   const paineis: Record<AbaId, React.ReactNode> = {
     visaoGeral: visaoGeralPanel,
-    medicoes: medicoesPanel,
-    detalhado: detalhadoPanel,
     fisicoFinanceiro: fisicoFinanceiroPanel,
   };
 
@@ -35,7 +27,7 @@ export function CronogramaTabs({
       <div
         role="tablist"
         aria-label="Seções de cronograma"
-        className="grid grid-cols-1 gap-2 rounded-card border border-brand-gray-300/60 bg-white p-2 shadow-card sm:grid-cols-2 lg:grid-cols-4"
+        className="grid grid-cols-1 gap-2 rounded-card border border-brand-gray-300/60 bg-white p-2 shadow-card sm:grid-cols-2"
       >
         {ABAS.map((item) => {
           const ativo = aba === item.id;

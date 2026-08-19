@@ -16,6 +16,7 @@ export interface Database {
           orcamento_total: number;
           data_inicio: string | null;
           status: "ativa" | "concluida";
+          categoria_medicao_padrao_id: string | null;
           created_at: string;
           deleted_at: string | null;
           deleted_by: string | null;
@@ -27,6 +28,7 @@ export interface Database {
           orcamento_total?: number;
           data_inicio?: string | null;
           status?: "ativa" | "concluida";
+          categoria_medicao_padrao_id?: string | null;
           created_at?: string;
           deleted_at?: string | null;
           deleted_by?: string | null;

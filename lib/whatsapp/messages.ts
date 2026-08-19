@@ -15,6 +15,15 @@ export async function sendText(to: string, body: string) {
   });
 }
 
+/** Manda um documento (PDF, etc.) por link publico/assinado. Precisa de uma URL acessivel sem login. */
+export async function sendDocument(to: string, link: string, filename: string, caption?: string) {
+  return sendWhatsAppMessage({
+    to,
+    type: "document",
+    document: { link, filename, caption },
+  });
+}
+
 export async function sendList(
   to: string,
   opts: {

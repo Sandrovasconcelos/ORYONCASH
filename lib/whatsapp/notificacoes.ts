@@ -1,4 +1,6 @@
 import type { Alerta } from "@/lib/alertas/queries";
+import type { ResumoPeriodo } from "@/lib/alertas/resumos";
+import { formatBRL } from "@/lib/conversation/format";
 
 const SECOES: { tipo: Alerta["tipo"]; titulo: string }[] = [
   { tipo: "etapa_atrasada", titulo: "⚠️ *Etapas atrasadas*" },
@@ -30,4 +32,85 @@ export function formatarMensagemAlertas(alertas: Alerta[]): string | null {
   }
 
   return blocos.join("\n");
+}
+
+function formatarBlocoPorObraEtapa(porObraEtapa: ResumoPeriodo["porObraEtapa"]): string[] {
+  const porObra = new Map<string, { etapaNome: string | null; total: number }[]>();
+  for (const item of porObraEtapa) {
+    const lista = porObra.get(item.obraNome) ?? [];
+    lista.push({ etapaNome: item.etapaNome, total: item.total });
+    porObra.set(item.obraNome, lista);
+  }
+
+  const blocos: string[] = [];
+  for (const [obraNome, itens] of porObra) {
+    const totalObra = itens.reduce((soma, i) => soma + i.total, 0);
+    blocos.push(`*${obraNome}* — ${formatBRL(totalObra)}`);
+    for (const item of itens) {
+      blocos.push(`   • ${item.etapaNome ?? "Sem etapa"}: ${formatBRL(item.total)}`);
+    }
+  }
+  return blocos;
+}
+
+export function formatarResumoDiario(dataLabel: string, resumo: ResumoPeriodo): string {
+  if (resumo.total === 0) {
+    return [`🏗️ *OryonCash* — Resumo do dia`, `_${dataLabel}_`, "", "Nenhum lançamento hoje."].join("\n");
+  }
+
+  const blocos = [
+    `🏗️ *OryonCash* — Resumo do dia`,
+    `_${dataLabel}_`,
+    "",
+    `💰 Total: *${formatBRL(resumo.total)}*`,
+  ];
+
+  if (resumo.porConta.length > 0) {
+    blocos.push("", "🏦 *Por conta*", ...resumo.porConta.map((c) => `• ${c.nome}: ${formatBRL(c.total)}`));
+  }
+
+  const blocoObraEtapa = formatarBlocoPorObraEtapa(resumo.porObraEtapa);
+  if (blocoObraEtapa.length > 0) {
+    blocos.push("", "🏗️ *Por obra/etapa*", ...blocoObraEtapa);
+  }
+
+  return blocos.join("\n");
+}
+
+export function formatarResumoSemanal(periodoLabel: string, resumo: ResumoPeriodo): string {
+  if (resumo.total === 0) {
+    return [`🏗️ *OryonCash* — Resumo da semana`, `_${periodoLabel}_`, "", "Nenhum lançamento na semana."].join(
+      "\n"
+    );
+  }
+
+  const blocos = [
+    `🏗️ *OryonCash* — Resumo da semana`,
+    `_${periodoLabel}_`,
+    "",
+    `💰 Total: *${formatBRL(resumo.total)}*`,
+  ];
+
+  if (resumo.porConta.length > 0) {
+    blocos.push("", "🏦 *Por conta*", ...resumo.porConta.map((c) => `• ${c.nome}: ${formatBRL(c.total)}`));
+  }
+
+  const blocoObraEtapa = formatarBlocoPorObraEtapa(resumo.porObraEtapa);
+  if (blocoObraEtapa.length > 0) {
+    blocos.push("", "🏗️ *Por obra/etapa*", ...blocoObraEtapa);
+  }
+
+  return blocos.join("\n");
+}
+
+export function formatarNotificacaoLancamento(input: {
+  valor: number;
+  categoriaNome: string;
+  obraNome: string | null;
+  autorNome: string | null;
+}): string {
+  const partes = [`💸 Novo lançamento — ${formatBRL(input.valor)} em ${input.categoriaNome}`];
+  if (input.obraNome) partes.push(`Obra: ${input.obraNome}`);
+  if (input.autorNome) partes.push(`Por: ${input.autorNome}`);
+  return partes.join("\n");
 }

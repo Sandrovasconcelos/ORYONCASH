@@ -8,12 +8,6 @@ export type Alerta = {
   mensagem: string;
 };
 
-const PESO_STATUS_ATIVIDADE: Record<string, number> = {
-  concluida: 1,
-  em_andamento: 0.5,
-  a_fazer: 0,
-};
-
 function parseISO(data: string): Date {
   const [ano, mes, dia] = data.split("-").map(Number);
   return new Date(Date.UTC(ano, mes - 1, dia));
@@ -24,10 +18,12 @@ function diasEntre(a: Date, b: Date): number {
 }
 
 /**
- * Mesmo "schedule variance" usado em gantt-timeline.tsx (statusPrazoFase):
- * compara % do prazo ja decorrido com % realmente executado.
+ * "Schedule variance": compara % do prazo ja decorrido com % realmente
+ * executado. Fonte de progresso e prazo e a propria etapa
+ * (percentual_executado + datas previstas) - o cronograma detalhado
+ * (fases/atividades) saiu da interface e nao alimenta mais nada aqui.
  */
-function faseEstaAtrasada(percentualReal: number, inicio: Date, fim: Date, hoje: Date): boolean {
+function etapaEstaAtrasada(percentualReal: number, inicio: Date, fim: Date, hoje: Date): boolean {
   if (percentualReal >= 100) return false;
   if (hoje < inicio) return false;
   if (hoje > fim) return true;
@@ -49,48 +45,34 @@ async function buscarEtapasAtrasadas(): Promise<Alerta[]> {
   if (!obras || obras.length === 0) return [];
   const nomesObra = new Map(obras.map((o) => [o.id, o.nome]));
 
-  const { data: fases } = await supabase
-    .from("obra_cronograma_fases")
-    .select("id, obra_id, nome, data_inicio_prevista, data_fim_prevista")
+  const { data: etapas } = await supabase
+    .from("etapas")
+    .select("id, obra_id, nome, data_inicio_prevista, data_fim_prevista, percentual_executado")
     .in(
       "obra_id",
       obras.map((o) => o.id)
-    );
-  if (!fases || fases.length === 0) return [];
-
-  const { data: atividades } = await supabase
-    .from("obra_cronograma_atividades")
-    .select("fase_id, status")
-    .in(
-      "fase_id",
-      fases.map((f) => f.id)
-    );
-
-  const atividadesPorFase = new Map<string, { status: string }[]>();
-  for (const atividade of atividades ?? []) {
-    const lista = atividadesPorFase.get(atividade.fase_id) ?? [];
-    lista.push(atividade);
-    atividadesPorFase.set(atividade.fase_id, lista);
-  }
+    )
+    .is("deleted_at", null)
+    .not("data_inicio_prevista", "is", null)
+    .not("data_fim_prevista", "is", null);
+  if (!etapas || etapas.length === 0) return [];
 
   const alertas: Alerta[] = [];
-  for (const fase of fases) {
-    const atividadesFase = atividadesPorFase.get(fase.id) ?? [];
-    const percentual =
-      atividadesFase.length === 0
-        ? 0
-        : Math.round(
-            (atividadesFase.reduce((soma, a) => soma + (PESO_STATUS_ATIVIDADE[a.status] ?? 0), 0) /
-              atividadesFase.length) *
-              100
-          );
-
-    if (faseEstaAtrasada(percentual, parseISO(fase.data_inicio_prevista), parseISO(fase.data_fim_prevista), hoje)) {
-      const obraNome = nomesObra.get(fase.obra_id) ?? "Obra";
+  for (const etapa of etapas) {
+    if (!etapa.data_inicio_prevista || !etapa.data_fim_prevista || !etapa.obra_id) continue;
+    if (
+      etapaEstaAtrasada(
+        Number(etapa.percentual_executado),
+        parseISO(etapa.data_inicio_prevista),
+        parseISO(etapa.data_fim_prevista),
+        hoje
+      )
+    ) {
+      const obraNome = nomesObra.get(etapa.obra_id) ?? "Obra";
       alertas.push({
         tipo: "etapa_atrasada",
         obraNome,
-        mensagem: `${fase.nome} (${obraNome})`,
+        mensagem: `${etapa.nome} (${obraNome})`,
       });
     }
   }

@@ -15,7 +15,7 @@ const NAV_GROUPS = [
     titulo: "Obra",
     itens: [
       { href: "/dashboard/obras", label: "Obras", icon: "building" },
-      { href: "/dashboard/qualidade", label: "Qualidade", icon: "check" },
+      { href: "/dashboard/execucao", label: "Execução", icon: "check" },
       { href: "/dashboard/cronograma", label: "Cronograma", icon: "calendar" },
     ],
   },

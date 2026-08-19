@@ -1,5 +1,6 @@
 import { createAdminClient } from "@/lib/supabase/admin";
 import { encontrarContaBancariaCorrespondente } from "@/lib/dashboard/queries";
+import { notificarLancamento } from "@/lib/alertas/notificar";
 
 const COMPROVANTES_BUCKET = "comprovantes";
 
@@ -643,6 +644,15 @@ export async function createDespesa(input: {
   }
 
   if (result.error) throw result.error;
+
+  notificarLancamento({
+    valor: input.valor,
+    categoriaId: input.categoriaId,
+    obraId: input.obraId,
+    autorTelefone: input.criadoPorTelefone ?? null,
+    autorNome: input.criadoPorNome ?? null,
+  }).catch((error) => console.error("Falha ao notificar lançamento por WhatsApp:", error));
+
   return result.data;
 }
 

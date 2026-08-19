@@ -36,7 +36,7 @@ const LIXEIRA_ENTIDADES = {
   checklist_template: {
     tabela: "checklist_templates",
     nome: "Modelo de checklist",
-    rota: "/dashboard/qualidade",
+    rota: "/dashboard/execucao",
   },
   conta_bancaria: {
     tabela: "contas_bancarias",
@@ -1523,7 +1523,7 @@ export async function createChecklistTemplateAction(formData: FormData) {
     dadosDepois: { nome, descricao },
   });
 
-  revalidatePath("/dashboard/qualidade");
+  revalidatePath("/dashboard/execucao");
 }
 
 export async function updateChecklistTemplateAction(formData: FormData) {
@@ -1554,7 +1554,7 @@ export async function updateChecklistTemplateAction(formData: FormData) {
     dadosDepois: depois,
   });
 
-  revalidatePath("/dashboard/qualidade");
+  revalidatePath("/dashboard/execucao");
 }
 
 export async function deleteChecklistTemplateAction(formData: FormData) {
@@ -1587,7 +1587,7 @@ export async function deleteChecklistTemplateAction(formData: FormData) {
     dadosAntes: template,
   });
 
-  revalidatePath("/dashboard/qualidade");
+  revalidatePath("/dashboard/execucao");
 }
 
 export async function createChecklistItemAction(formData: FormData) {
@@ -1616,7 +1616,7 @@ export async function createChecklistItemAction(formData: FormData) {
     dadosDepois: { descricao, critico, ordem },
   });
 
-  revalidatePath("/dashboard/qualidade");
+  revalidatePath("/dashboard/execucao");
 }
 
 export async function deleteChecklistItemAction(formData: FormData) {
@@ -1644,7 +1644,7 @@ export async function deleteChecklistItemAction(formData: FormData) {
     dadosAntes: item,
   });
 
-  revalidatePath("/dashboard/qualidade");
+  revalidatePath("/dashboard/execucao");
 }
 
 export async function vincularChecklistEtapaAction(formData: FormData) {
@@ -1677,7 +1677,7 @@ export async function vincularChecklistEtapaAction(formData: FormData) {
     dadosDepois: { checklist_template_id: templateId, fornecedor_id: fornecedorId },
   });
 
-  revalidatePath("/dashboard/qualidade");
+  revalidatePath("/dashboard/execucao");
 }
 
 async function anexarEvidenciaInspecao(input: {
@@ -1802,7 +1802,7 @@ export async function iniciarInspecaoAction(formData: FormData) {
     dadosDepois: { resultado, observacao, respostas },
   });
 
-  revalidatePath("/dashboard/qualidade");
+  revalidatePath("/dashboard/execucao");
 }
 
 // ---------- Cronograma e Medições ----------
@@ -1844,6 +1844,7 @@ export async function atualizarProgressoEtapaAction(formData: FormData) {
   });
 
   revalidatePath("/dashboard/cronograma");
+  revalidatePath("/dashboard/execucao");
 }
 
 export async function prepararMedicaoAction(formData: FormData) {
@@ -2131,6 +2132,218 @@ export async function registrarPagamentoMedicaoAction(formData: FormData) {
     resumo: `Pagamento de medição registrado (${formatBRL(Number(medicao.valor_total))}, ${itens.length} despesa(s) geradas) por ${autorNome}`,
   });
 
+  revalidatePath("/dashboard/cronograma");
+  revalidatePath("/dashboard/despesas");
+  revalidatePath("/dashboard");
+}
+
+export async function aprovarEPagarMedicaoAction(formData: FormData) {
+  const medicaoId = String(formData.get("id") ?? "");
+  if (!medicaoId) return;
+
+  const supabase = await createClient();
+  const autorNome = await getAutorNomeDashboard();
+
+  const { data: medicaoAprovada } = await supabase
+    .from("medicoes")
+    .update({ status: "aprovada", aprovado_por: autorNome, aprovado_em: new Date().toISOString() })
+    .eq("id", medicaoId)
+    .eq("status", "preparada")
+    .select("obra_id, valor_total")
+    .maybeSingle();
+  if (!medicaoAprovada) return;
+
+  await registrarAtividade({
+    tipo: "edicao",
+    entidade: "obra",
+    entidadeId: medicaoAprovada.obra_id,
+    origem: "dashboard",
+    autorNome,
+    resumo: `Medição de ${formatBRL(Number(medicaoAprovada.valor_total))} aprovada por ${autorNome}`,
+  });
+
+  const { data: medicao } = await supabase
+    .from("medicoes")
+    .select("obra_id, categoria_id, periodo_inicio, periodo_fim, status, valor_total")
+    .eq("id", medicaoId)
+    .eq("status", "aprovada")
+    .maybeSingle();
+  if (!medicao) return;
+
+  const { data: itens } = await supabase
+    .from("medicao_itens")
+    .select("id, etapa_id, fornecedor_id, percentual_medido, valor_medido")
+    .eq("medicao_id", medicaoId);
+  if (!itens || itens.length === 0) return;
+
+  const { data: etapasNomes } = await supabase
+    .from("etapas")
+    .select("id, nome")
+    .in(
+      "id",
+      itens.map((i) => i.etapa_id)
+    );
+  const nomePorEtapa = new Map((etapasNomes ?? []).map((e) => [e.id, e.nome]));
+  const periodo = `${medicao.periodo_inicio} a ${medicao.periodo_fim}`;
+
+  for (const item of itens) {
+    const nomeEtapa = nomePorEtapa.get(item.etapa_id) ?? "etapa";
+    const { data: despesa } = await supabase
+      .from("despesas")
+      .insert({
+        obra_id: medicao.obra_id,
+        categoria_id: medicao.categoria_id,
+        etapa_id: item.etapa_id,
+        fornecedor_id: item.fornecedor_id,
+        valor: item.valor_medido,
+        descricao: `Medição ${periodo} — ${nomeEtapa} (${item.percentual_medido}% executado)`,
+        data: hojeNoBrasil(),
+        origem: "dashboard",
+      })
+      .select("id")
+      .single();
+
+    if (despesa) {
+      await supabase.from("medicao_itens").update({ despesa_id: despesa.id }).eq("id", item.id);
+    }
+  }
+
+  await supabase
+    .from("medicoes")
+    .update({ status: "paga", pago_em: new Date().toISOString() })
+    .eq("id", medicaoId);
+
+  await registrarAtividade({
+    tipo: "criacao",
+    entidade: "obra",
+    entidadeId: medicao.obra_id,
+    origem: "dashboard",
+    autorNome,
+    resumo: `Pagamento de medição registrado (${formatBRL(Number(medicao.valor_total))}, ${itens.length} despesa(s) geradas) por ${autorNome}`,
+  });
+
+  revalidatePath("/dashboard/execucao");
+  revalidatePath("/dashboard/cronograma");
+  revalidatePath("/dashboard/despesas");
+  revalidatePath("/dashboard");
+}
+
+export async function liberarPagamentoEtapaAction(formData: FormData) {
+  const etapaId = String(formData.get("etapa_id") ?? "");
+  const categoriaIdInformada = String(formData.get("categoria_id") ?? "") || null;
+  if (!etapaId) return;
+
+  const supabase = await createClient();
+
+  const { data: etapa } = await supabase
+    .from("etapas")
+    .select("id, nome, obra_id, valor_orcado, percentual_executado, situacao_qualidade, fornecedor_id")
+    .eq("id", etapaId)
+    .maybeSingle();
+  if (!etapa || !etapa.obra_id) return;
+
+  const categoriaId =
+    categoriaIdInformada ??
+    (
+      await supabase
+        .from("obras")
+        .select("categoria_medicao_padrao_id")
+        .eq("id", etapa.obra_id)
+        .maybeSingle()
+    ).data?.categoria_medicao_padrao_id ??
+    null;
+  if (!categoriaId) return;
+
+  const { data: itensAnteriores } = await supabase
+    .from("medicao_itens")
+    .select("percentual_medido")
+    .eq("etapa_id", etapaId);
+  const jaMedido = (itensAnteriores ?? []).reduce(
+    (soma, item) => soma + Number(item.percentual_medido),
+    0
+  );
+
+  const [itemElegivel] = calcularItensElegiveisParaMedicao(
+    [
+      {
+        id: etapa.id,
+        nome: etapa.nome,
+        valorOrcado: Number(etapa.valor_orcado ?? 0),
+        percentualExecutado: Number(etapa.percentual_executado),
+        situacaoQualidade: etapa.situacao_qualidade,
+        fornecedorId: etapa.fornecedor_id,
+      },
+    ],
+    new Map([[etapa.id, jaMedido]])
+  );
+  if (!itemElegivel) return;
+
+  const autorNome = await getAutorNomeDashboard();
+  const hoje = hojeNoBrasil();
+
+  const { data: medicao } = await supabase
+    .from("medicoes")
+    .insert({
+      obra_id: etapa.obra_id,
+      categoria_id: categoriaId,
+      periodo_inicio: hoje,
+      periodo_fim: hoje,
+      status: "paga",
+      valor_total: itemElegivel.valorMedido,
+      observacao: "Liberação rápida",
+      criado_por: autorNome,
+      aprovado_por: autorNome,
+      aprovado_em: new Date().toISOString(),
+      pago_em: new Date().toISOString(),
+    })
+    .select("id")
+    .single();
+  if (!medicao) return;
+
+  const codigoLiberacao = medicao.id.slice(0, 8);
+
+  const { data: medicaoItem } = await supabase
+    .from("medicao_itens")
+    .insert({
+      medicao_id: medicao.id,
+      etapa_id: etapa.id,
+      fornecedor_id: itemElegivel.fornecedorId,
+      percentual_medido: itemElegivel.percentualMedido,
+      valor_medido: itemElegivel.valorMedido,
+    })
+    .select("id")
+    .single();
+
+  const { data: despesa } = await supabase
+    .from("despesas")
+    .insert({
+      obra_id: etapa.obra_id,
+      categoria_id: categoriaId,
+      etapa_id: etapa.id,
+      fornecedor_id: itemElegivel.fornecedorId,
+      valor: itemElegivel.valorMedido,
+      descricao: `Liberação #${codigoLiberacao} — ${etapa.nome} (${itemElegivel.percentualMedido}% executado)`,
+      data: hoje,
+      origem: "dashboard",
+    })
+    .select("id")
+    .single();
+
+  if (despesa && medicaoItem) {
+    await supabase.from("medicao_itens").update({ despesa_id: despesa.id }).eq("id", medicaoItem.id);
+  }
+
+  await registrarAtividade({
+    tipo: "criacao",
+    entidade: "obra",
+    entidadeId: etapa.obra_id,
+    origem: "dashboard",
+    autorNome,
+    resumo: `Liberação #${codigoLiberacao}: pagamento de ${formatBRL(itemElegivel.valorMedido)} liberado para a etapa "${etapa.nome}" (${itemElegivel.percentualMedido}%) por ${autorNome}`,
+    dadosDepois: { medicaoId: medicao.id, etapaId: etapa.id, valor: itemElegivel.valorMedido },
+  });
+
+  revalidatePath("/dashboard/execucao");
   revalidatePath("/dashboard/cronograma");
   revalidatePath("/dashboard/despesas");
   revalidatePath("/dashboard");
