@@ -5,6 +5,8 @@ import { formatBRL } from "@/lib/conversation/format";
 import { formatDataBrasil, formatDataHoraBrasil } from "@/lib/format-date";
 import { ActionIcon, type ActionIconName } from "../../action-icon";
 import { PrintButton } from "./print-button";
+import { enviarRelatorioPdfWhatsAppAction } from "../../actions";
+import { SubmitButton } from "../../submit-button";
 
 export const dynamic = "force-dynamic";
 
@@ -15,6 +17,7 @@ type Filtros = {
   material?: string;
   fornecedor?: string;
   ids?: string;
+  whatsapp?: string;
 };
 
 function nomeDe(relacao: unknown): string {
@@ -248,10 +251,23 @@ export default async function RelatorioDespesasPage({
   ].filter(Boolean) as { rotulo: string; valor: string }[]);
 
   const queryString = new URLSearchParams(
-    Object.entries(params).filter(([, value]) => Boolean(value)) as [string, string][]
+    Object.entries(params).filter(([chave, value]) => chave !== "whatsapp" && Boolean(value)) as [
+      string,
+      string,
+    ][]
   ).toString();
 
   const geradoEm = formatDataHoraBrasil(new Date().toISOString());
+
+  const WHATSAPP_FEEDBACK: Record<string, { texto: string; classe: string }> = {
+    enviado: { texto: "Relatório enviado por WhatsApp.", classe: "border-status-success/30 bg-status-success/10 text-status-success" },
+    erro: { texto: "Não deu pra enviar o relatório. Tente de novo.", classe: "border-status-danger/30 bg-status-danger/10 text-status-danger" },
+    sem_numero: {
+      texto: "Nenhum número de WhatsApp configurado em Configurações.",
+      classe: "border-status-warning/30 bg-status-warning/10 text-status-warning",
+    },
+  };
+  const feedbackWhatsapp = params.whatsapp ? WHATSAPP_FEEDBACK[params.whatsapp] : null;
 
   return (
     <div className="flex flex-col gap-6">
@@ -263,6 +279,18 @@ export default async function RelatorioDespesasPage({
           ← Voltar aos lançamentos
         </Link>
         <div className="flex items-center gap-3">
+          <form action={enviarRelatorioPdfWhatsAppAction}>
+            <input type="hidden" name="obra" value={params.obra ?? ""} />
+            <input type="hidden" name="categoria" value={params.categoria ?? ""} />
+            <input type="hidden" name="etapa" value={params.etapa ?? ""} />
+            <input type="hidden" name="material" value={params.material ?? ""} />
+            <input type="hidden" name="fornecedor" value={params.fornecedor ?? ""} />
+            <input type="hidden" name="ids" value={params.ids ?? ""} />
+            <input type="hidden" name="query_string" value={queryString} />
+            <SubmitButton className="oc-button oc-button-soft" pendingText="Enviando...">
+              Enviar por WhatsApp
+            </SubmitButton>
+          </form>
           <Link
             href={`/dashboard/despesas/relatorio/csv${queryString ? `?${queryString}` : ""}`}
             className="oc-button oc-button-soft"
@@ -272,6 +300,12 @@ export default async function RelatorioDespesasPage({
           <PrintButton />
         </div>
       </div>
+
+      {feedbackWhatsapp && (
+        <div className={`rounded-brand-sm border p-3 text-xs font-semibold print:hidden ${feedbackWhatsapp.classe}`}>
+          {feedbackWhatsapp.texto}
+        </div>
+      )}
 
       <div className="overflow-hidden rounded-card border border-brand-gray-300/60 bg-white shadow-card print:overflow-visible print:rounded-none print:border-0 print:shadow-none">
         <div className="oc-letterhead report-block flex flex-wrap items-center justify-between gap-4 bg-brand-black px-6 py-6 text-white sm:px-8">

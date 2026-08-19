@@ -74,7 +74,7 @@ function formatarDataBRCurta(dataISO: string): string {
   return `${dia}/${mes}/${ano}`;
 }
 
-async function numeroNotificacao(): Promise<string | null> {
+export async function numeroNotificacao(): Promise<string | null> {
   const supabase = createAdminClient();
   const { data: config } = await supabase
     .from("configuracoes_notificacao")

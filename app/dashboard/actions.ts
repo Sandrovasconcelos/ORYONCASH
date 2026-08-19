@@ -9,7 +9,11 @@ import { calcularItensElegiveisParaMedicao } from "@/lib/dashboard/queries";
 import { extractSpreadsheetAsText } from "@/lib/orcamento/parseSpreadsheet";
 import { extractOrcamentoData } from "@/lib/gemini/extractOrcamento";
 import { registrarAtividade } from "@/lib/atividades";
-import { enviarNotificacaoDiaria } from "@/lib/alertas/notificar";
+import { enviarNotificacaoDiaria, numeroNotificacao } from "@/lib/alertas/notificar";
+import { buscarDadosRelatorio, type FiltrosRelatorio } from "@/lib/relatorio/dados";
+import { gerarRelatorioPdfBuffer } from "@/lib/relatorio/pdf";
+import { sendDocument } from "@/lib/whatsapp/messages";
+import { formatDataHoraBrasil } from "@/lib/format-date";
 
 const LIXEIRA_ENTIDADES = {
   obra: { tabela: "obras", nome: "Obra", rota: "/dashboard/obras" },
@@ -1445,6 +1449,48 @@ export async function testarNotificacaoAction() {
     redirect(`/dashboard/configuracoes?teste=enviado&alertas=${resultado.alertas?.length ?? 0}`);
   }
   redirect(`/dashboard/configuracoes?teste=sem_envio&motivo=${encodeURIComponent(resultado.motivo ?? "")}`);
+}
+
+export async function enviarRelatorioPdfWhatsAppAction(formData: FormData) {
+  const filtros: FiltrosRelatorio = {
+    obra: String(formData.get("obra") ?? "") || undefined,
+    categoria: String(formData.get("categoria") ?? "") || undefined,
+    etapa: String(formData.get("etapa") ?? "") || undefined,
+    material: String(formData.get("material") ?? "") || undefined,
+    fornecedor: String(formData.get("fornecedor") ?? "") || undefined,
+    ids: String(formData.get("ids") ?? "") || undefined,
+  };
+  const queryString = String(formData.get("query_string") ?? "");
+  const voltarPara = `/dashboard/despesas/relatorio${queryString ? `?${queryString}` : ""}`;
+
+  const numero = await numeroNotificacao();
+  if (!numero) {
+    redirect(`${voltarPara}${queryString ? "&" : "?"}whatsapp=sem_numero`);
+  }
+
+  const supabase = await createClient();
+  const dados = await buscarDadosRelatorio(filtros);
+  const geradoEm = formatDataHoraBrasil(new Date().toISOString());
+  const buffer = await gerarRelatorioPdfBuffer(dados, geradoEm);
+
+  const storagePath = `relatorios/${Date.now()}-${crypto.randomUUID()}.pdf`;
+  const { error: uploadError } = await supabase.storage
+    .from("comprovantes")
+    .upload(storagePath, buffer, { contentType: "application/pdf", upsert: false });
+  if (uploadError) {
+    redirect(`${voltarPara}${queryString ? "&" : "?"}whatsapp=erro`);
+  }
+
+  const { data: signed } = await supabase.storage
+    .from("comprovantes")
+    .createSignedUrl(storagePath, 60 * 60 * 24);
+  if (!signed?.signedUrl) {
+    redirect(`${voltarPara}${queryString ? "&" : "?"}whatsapp=erro`);
+  }
+
+  await sendDocument(numero, signed.signedUrl, "relatorio-oryoncash.pdf", "📄 Relatório de despesas — OryonCash");
+
+  redirect(`${voltarPara}${queryString ? "&" : "?"}whatsapp=enviado`);
 }
 
 export type ImportarOrcamentoResultado =
