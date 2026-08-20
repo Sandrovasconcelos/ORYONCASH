@@ -1032,6 +1032,20 @@ export interface Database {
           },
         ];
       };
+      webhook_rate_limit: {
+        Row: {
+          telefone: string;
+          contador: number;
+          janela_inicio: string;
+        };
+        Insert: {
+          telefone: string;
+          contador?: number;
+          janela_inicio?: string;
+        };
+        Update: Partial<Database["public"]["Tables"]["webhook_rate_limit"]["Insert"]>;
+        Relationships: [];
+      };
     };
     Views: Record<string, never>;
     Functions: Record<string, never>;

@@ -3,6 +3,7 @@ import { verifyWebhookSignature, isAllowedNumber } from "@/lib/whatsapp/verify";
 import { parseIncomingMessage } from "@/lib/whatsapp/parse";
 import { handleIncomingMessage } from "@/lib/conversation/engine";
 import { createAdminClient } from "@/lib/supabase/admin";
+import { excedeuLimiteDeTaxa } from "@/lib/whatsapp/rateLimit";
 
 /**
  * A Meta reentrega webhooks que nao respondem rapido o suficiente (ou por
@@ -62,6 +63,11 @@ export async function POST(request: NextRequest) {
   }
 
   if (!(await isAllowedNumber(message.from))) {
+    return NextResponse.json({ ok: true });
+  }
+
+  if (await excedeuLimiteDeTaxa(message.from)) {
+    console.error(`Rate limit excedido pro numero ${message.from}`);
     return NextResponse.json({ ok: true });
   }
 
