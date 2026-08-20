@@ -412,7 +412,7 @@ function encontrarUnicoPorNome<T extends { nome: string }>(
  * exatamente os mesmos itens, na mesma ordem, que foram numerados na
  * mensagem (listObrasAtivas/listCategorias/etc, sem limite).
  */
-function resolverPorNumeroOuNome<T extends { nome: string }>(itens: T[], texto: string): T | null {
+export function resolverPorNumeroOuNome<T extends { nome: string }>(itens: T[], texto: string): T | null {
   const termo = texto.trim();
   if (/^\d+$/.test(termo)) {
     return itens[Number(termo) - 1] ?? null;

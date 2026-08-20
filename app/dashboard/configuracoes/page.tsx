@@ -58,7 +58,7 @@ export default async function ConfiguracoesPage({
             <p className="text-sm font-semibold text-brand-black">🔔 Notificações no WhatsApp</p>
             <p className="text-xs text-brand-gray-500">
               1x por dia, de manhã, o OryonCash manda um resumo dos pontos de atenção pra esse
-              número. Cada mensagem chega com o cabeçalho "🏗️ OryonCash — Alerta diário" — o
+              número. Cada mensagem chega com o cabeçalho &quot;🏗️ OryonCash — Alerta diário&quot; — o
               WhatsApp não deixa personalizar o nome ou a foto de quem envia, só o conteúdo.
             </p>
           </div>

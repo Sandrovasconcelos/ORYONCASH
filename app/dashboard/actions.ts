@@ -568,12 +568,10 @@ export async function salvarDistribuicaoEtapaMesAction(input: {
 export async function deleteEtapaAction(formData: FormData) {
   const id = String(formData.get("id") ?? "");
   const motivo = String(formData.get("motivo") ?? "").trim() || null;
-  let obraId = String(formData.get("obra_id") ?? "");
   if (!id) return;
 
   const supabase = await createClient();
   const { data: etapa } = await supabase.from("etapas").select("*").eq("id", id).maybeSingle();
-  obraId = obraId || etapa?.obra_id || "";
 
   const autorNome = await getAutorNomeDashboard();
   await supabase
@@ -2993,7 +2991,9 @@ export async function createContaBancariaAction(formData: FormData) {
 
   const supabase = await createClient();
   const dados = { nome, banco, agencia, numero, titular, documento, saldo_inicial: saldoInicial };
-  let { data: conta, error } = await supabase.from("contas_bancarias").insert(dados).select("id").single();
+  const primeiraTentativa = await supabase.from("contas_bancarias").insert(dados).select("id").single();
+  let conta = primeiraTentativa.data;
+  const error = primeiraTentativa.error;
   if (error?.message.toLowerCase().includes("titular") || error?.message.toLowerCase().includes("documento")) {
     ({ data: conta } = await supabase
       .from("contas_bancarias")

@@ -76,7 +76,7 @@ export async function GET(request: NextRequest) {
   const usados = new Set<string>();
   const pastaPorDespesa = new Map<string, string>();
   for (const d of despesas) {
-    let base = slug(`${formatDataBrasil(d.data)}-${d.descricao || nomeDe(d.obras)}`) || d.id.slice(0, 8);
+    const base = slug(`${formatDataBrasil(d.data)}-${d.descricao || nomeDe(d.obras)}`) || d.id.slice(0, 8);
     let pasta = base;
     let sufixo = 2;
     while (usados.has(pasta)) {
