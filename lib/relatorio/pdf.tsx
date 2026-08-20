@@ -125,12 +125,13 @@ const styles = StyleSheet.create({
 
 const COLS = {
   data: 0.06,
-  categoria: 0.13,
-  etapa: 0.13,
-  fornecedor: 0.15,
-  descricao: 0.24,
+  categoria: 0.12,
+  etapa: 0.12,
+  fornecedor: 0.13,
+  descricao: 0.19,
+  qtd: 0.11,
   valor: 0.11,
-  documentos: 0.18,
+  documentos: 0.16,
 };
 
 function agruparPorObra(despesas: DespesaRelatorio[]): { obraNome: string; total: number; itens: DespesaRelatorio[] }[] {
@@ -172,7 +173,7 @@ function RelatorioDocument({
   const maiorEtapa = Math.max(0, ...dados.porEtapa.map((c) => c.total));
   const grupos = agruparPorObra(dados.despesas);
   const larguraDescritiva =
-    (COLS.data + COLS.categoria + COLS.etapa + COLS.fornecedor + COLS.descricao) * 100;
+    (COLS.data + COLS.categoria + COLS.etapa + COLS.fornecedor + COLS.descricao + COLS.qtd) * 100;
 
   return (
     <Document>
@@ -292,6 +293,7 @@ function RelatorioDocument({
                 <Text style={[styles.th, { width: `${COLS.etapa * 100}%` }]}>Etapa</Text>
                 <Text style={[styles.th, { width: `${COLS.fornecedor * 100}%` }]}>Fornecedor</Text>
                 <Text style={[styles.th, { width: `${COLS.descricao * 100}%` }]}>Descrição</Text>
+                <Text style={[styles.th, { width: `${COLS.qtd * 100}%` }]}>Qtd</Text>
                 <Text style={[styles.th, { width: `${COLS.valor * 100}%`, textAlign: "right" }]}>Valor</Text>
                 <Text style={[styles.th, { width: `${COLS.documentos * 100}%` }]}>Documentos</Text>
               </View>
@@ -309,6 +311,11 @@ function RelatorioDocument({
                   <Text style={[styles.td, { width: `${COLS.etapa * 100}%` }]}>{d.etapaNome}</Text>
                   <Text style={[styles.td, { width: `${COLS.fornecedor * 100}%` }]}>{d.fornecedorNome}</Text>
                   <Text style={[styles.td, { width: `${COLS.descricao * 100}%` }]}>{d.descricao ?? "-"}</Text>
+                  <Text style={[styles.tdMuted, { width: `${COLS.qtd * 100}%` }]}>
+                    {d.quantidade != null
+                      ? `${d.quantidade}${d.valorUnitario != null ? ` × ${formatBRL(d.valorUnitario)}` : ""}`
+                      : "-"}
+                  </Text>
                   <Text style={[styles.tdValor, { width: `${COLS.valor * 100}%` }]}>{formatBRL(d.valor)}</Text>
                   <View style={{ width: `${COLS.documentos * 100}%`, paddingHorizontal: 5, flexDirection: "row", gap: 6 }}>
                     {d.notaUrl && (

@@ -15,6 +15,8 @@ export type FiltrosRelatorio = {
 export type DespesaRelatorio = {
   id: string;
   valor: number;
+  quantidade: number | null;
+  valorUnitario: number | null;
   descricao: string | null;
   data: string;
   obraNome: string;
@@ -81,7 +83,7 @@ export async function buscarDadosRelatorio(filtros: FiltrosRelatorio): Promise<D
   let query = supabase
     .from("despesas")
     .select(
-      "id, valor, descricao, data, obras(nome), categorias(nome), etapas(nome), materiais(nome), fornecedores(nome)"
+      "id, valor, quantidade, valor_unitario, descricao, data, obras(nome), categorias(nome), etapas(nome), materiais(nome), fornecedores(nome)"
     )
     .is("deleted_at", null)
     .order("data", { ascending: false })
@@ -149,6 +151,8 @@ export async function buscarDadosRelatorio(filtros: FiltrosRelatorio): Promise<D
   const despesas: DespesaRelatorio[] = despesasBrutas.map((d) => ({
     id: d.id,
     valor: d.valor,
+    quantidade: d.quantidade,
+    valorUnitario: d.valor_unitario,
     descricao: d.descricao,
     data: d.data,
     obraNome: nomeDe(d.obras),

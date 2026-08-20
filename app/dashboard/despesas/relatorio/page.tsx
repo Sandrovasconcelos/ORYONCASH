@@ -134,7 +134,7 @@ export default async function RelatorioDespesasPage({
   let query = supabase
     .from("despesas")
     .select(
-      "id, valor, descricao, data, origem, created_at, obras(nome), categorias(nome), etapas(nome), materiais(nome), fornecedores(nome)"
+      "id, valor, quantidade, valor_unitario, descricao, data, origem, created_at, obras(nome), categorias(nome), etapas(nome), materiais(nome), fornecedores(nome)"
     )
     .is("deleted_at", null)
     .order("data", { ascending: false })
@@ -470,6 +470,7 @@ export default async function RelatorioDespesasPage({
                   <th className="print:w-[10%]">Material</th>
                   <th className="print:w-[10%]">Fornecedor</th>
                   <th className="print:w-[16%]">Descrição</th>
+                  <th className="print:w-[9%]">Qtd</th>
                   <th className="text-right print:w-[10%]">Valor</th>
                   <th className="print:w-[16%]">Documentos</th>
                 </tr>
@@ -486,6 +487,16 @@ export default async function RelatorioDespesasPage({
                       <td className="print:truncate">{nomeDe(d.materiais)}</td>
                       <td className="print:truncate">{nomeDe(d.fornecedores)}</td>
                       <td className="max-w-[220px] truncate">{d.descricao ?? "-"}</td>
+                      <td className="whitespace-nowrap text-xs text-brand-gray-600">
+                        {d.quantidade != null ? (
+                          <>
+                            {d.quantidade}
+                            {d.valor_unitario != null ? ` × ${formatBRL(d.valor_unitario)}` : ""}
+                          </>
+                        ) : (
+                          "-"
+                        )}
+                      </td>
                       <td className="text-right font-semibold">{formatBRL(d.valor)}</td>
                       <td>
                         <div className="flex flex-col gap-1 whitespace-nowrap text-xs font-semibold">
@@ -520,7 +531,7 @@ export default async function RelatorioDespesasPage({
 
                 {despesas.length === 0 && (
                   <tr>
-                    <td colSpan={9} className="oc-empty">
+                    <td colSpan={10} className="oc-empty">
                       Nenhuma despesa encontrada para os filtros selecionados.
                     </td>
                   </tr>
@@ -529,7 +540,7 @@ export default async function RelatorioDespesasPage({
               {despesas.length > 0 && (
                 <tfoot>
                   <tr>
-                    <td colSpan={7} className="text-right font-bold uppercase tracking-[0.08em] text-brand-gray-500">
+                    <td colSpan={8} className="text-right font-bold uppercase tracking-[0.08em] text-brand-gray-500">
                       Total
                     </td>
                     <td className="text-right font-display text-base font-black text-brand-red">
