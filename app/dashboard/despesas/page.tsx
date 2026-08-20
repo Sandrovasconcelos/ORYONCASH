@@ -28,24 +28,41 @@ function valorInputBR(valor: number) {
   });
 }
 
-/**
- * Icone da linha do lancamento, escolhido pela categoria (fallback pro
- * generico "receipt" quando nao reconhece nenhuma palavra-chave). Mesma
- * ideia do inferirTipo em Materiais, so que pra categoria em vez de nome
- * de material.
- */
-function iconePorCategoria(categoriaNome: string): ActionIconName {
-  const normalizado = categoriaNome
+function normalizarParaBusca(texto: string): string {
+  return texto
     .normalize("NFD")
     .replace(/[̀-ͯ]/g, "")
     .toLowerCase();
+}
 
-  if (normalizado.includes("material")) return "box";
-  if (normalizado.includes("mao de obra")) return "worker";
-  if (normalizado.includes("corretagem")) return "handshake";
-  if (normalizado.includes("equipamento")) return "tool";
-  if (normalizado.includes("finaliza")) return "flag";
-  if (normalizado.includes("administrativ")) return "building";
+/**
+ * Icone da linha do lancamento. Primeiro tenta reconhecer o TIPO de
+ * material (elétrica, hidráulica/drenagem) pelo nome do material ou da
+ * descrição - mais específico. Se não bater com nada, cai pra um ícone
+ * pela categoria (Material genérico, Mão de obra, Corretagem, etc), e por
+ * último pro recibo genérico.
+ */
+function iconeDoLancamento(input: {
+  categoriaNome: string;
+  materialNome: string;
+  descricao: string | null;
+}): ActionIconName {
+  const materialETexto = normalizarParaBusca(`${input.materialNome} ${input.descricao ?? ""}`);
+
+  if (/cabo|fio\b|eletric|disjuntor|tomada|interruptor|luminaria|lampada/.test(materialETexto)) {
+    return "zap";
+  }
+  if (/cano|tubo|hidraulic|dreno|drenagem|esgoto|registro|torneira|conexao|conexoes/.test(materialETexto)) {
+    return "droplet";
+  }
+
+  const categoria = normalizarParaBusca(input.categoriaNome);
+  if (categoria.includes("material")) return "box";
+  if (categoria.includes("mao de obra")) return "worker";
+  if (categoria.includes("corretagem")) return "home";
+  if (categoria.includes("equipamento")) return "tool";
+  if (categoria.includes("finaliza")) return "flag";
+  if (categoria.includes("administrativ")) return "building";
   return "receipt";
 }
 
@@ -735,7 +752,9 @@ export default async function DespesasPage({
                     <OpenDespesaModalButton despesaId={d.id}>
                       <div className="flex items-start gap-3">
                         <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-brand-sm bg-brand-red/10 text-brand-red">
-                          <ActionIcon name={iconePorCategoria(categoriaNome)} />
+                          <ActionIcon
+                            name={iconeDoLancamento({ categoriaNome, materialNome, descricao: d.descricao })}
+                          />
                         </div>
                         <div className="min-w-0">
                           <div className="flex flex-wrap items-center gap-x-2 gap-y-1">
