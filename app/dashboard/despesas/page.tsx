@@ -10,7 +10,7 @@ import {
   updateDespesaAction,
 } from "../actions";
 import { CadastroModal } from "../cadastro-modal";
-import { ActionIcon } from "../action-icon";
+import { ActionIcon, type ActionIconName } from "../action-icon";
 import { DeleteButton } from "./delete-button";
 import { OpenDespesaModalButton } from "./open-despesa-modal-button";
 import { SubmitButton } from "../submit-button";
@@ -26,6 +26,27 @@ function valorInputBR(valor: number) {
     minimumFractionDigits: 2,
     maximumFractionDigits: 2,
   });
+}
+
+/**
+ * Icone da linha do lancamento, escolhido pela categoria (fallback pro
+ * generico "receipt" quando nao reconhece nenhuma palavra-chave). Mesma
+ * ideia do inferirTipo em Materiais, so que pra categoria em vez de nome
+ * de material.
+ */
+function iconePorCategoria(categoriaNome: string): ActionIconName {
+  const normalizado = categoriaNome
+    .normalize("NFD")
+    .replace(/[̀-ͯ]/g, "")
+    .toLowerCase();
+
+  if (normalizado.includes("material")) return "box";
+  if (normalizado.includes("mao de obra")) return "worker";
+  if (normalizado.includes("corretagem")) return "handshake";
+  if (normalizado.includes("equipamento")) return "tool";
+  if (normalizado.includes("finaliza")) return "flag";
+  if (normalizado.includes("administrativ")) return "building";
+  return "receipt";
 }
 
 function formatDataBR(data: string): string {
@@ -714,7 +735,7 @@ export default async function DespesasPage({
                     <OpenDespesaModalButton despesaId={d.id}>
                       <div className="flex items-start gap-3">
                         <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-brand-sm bg-brand-red/10 text-brand-red">
-                          <ActionIcon name="receipt" />
+                          <ActionIcon name={iconePorCategoria(categoriaNome)} />
                         </div>
                         <div className="min-w-0">
                           <div className="flex flex-wrap items-center gap-x-2 gap-y-1">

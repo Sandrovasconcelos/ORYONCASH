@@ -15,7 +15,11 @@ export type ActionIconName =
   | "truck"
   | "calculator"
   | "phone"
-  | "clock";
+  | "clock"
+  | "worker"
+  | "handshake"
+  | "flag"
+  | "tool";
 
 export function ActionIcon({ name }: { name: ActionIconName }) {
   const paths = {
@@ -130,6 +134,33 @@ export function ActionIcon({ name }: { name: ActionIconName }) {
       <>
         <circle cx="12" cy="12" r="9" />
         <path d="M12 7v5l3 2" />
+      </>
+    ),
+    worker: (
+      <>
+        <path d="M4 12a8 8 0 0 1 16 0" />
+        <path d="M2 12h20" />
+        <circle cx="12" cy="17" r="4" />
+        <path d="M12 15v4" />
+      </>
+    ),
+    handshake: (
+      <>
+        <path d="m11 17 -3.5 -3.5a2 2 0 0 1 0 -2.8l.2 -.2a2 2 0 0 1 2.8 0L12 12" />
+        <path d="m13 17 3.5 -3.5a2 2 0 0 0 0 -2.8l-.2 -.2a2 2 0 0 0 -2.8 0L12 12" />
+        <path d="M2 12l4 -4 3 2" />
+        <path d="M22 12l-4 -4 -3 2" />
+      </>
+    ),
+    flag: (
+      <>
+        <path d="M5 21V4" />
+        <path d="M5 4h13l-3 4 3 4H5" />
+      </>
+    ),
+    tool: (
+      <>
+        <path d="M14.7 6.3a4 4 0 0 0-5.4 5.4L3 18l3 3 6.3-6.3a4 4 0 0 0 5.4-5.4l-2.5 2.5-2-2Z" />
       </>
     ),
   } satisfies Record<ActionIconName, React.ReactNode>;
