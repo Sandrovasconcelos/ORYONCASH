@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
+import * as Sentry from "@sentry/nextjs";
 import { verifyWebhookSignature, isAllowedNumber } from "@/lib/whatsapp/verify";
 import { parseIncomingMessage } from "@/lib/whatsapp/parse";
 import { handleIncomingMessage } from "@/lib/conversation/engine";
@@ -75,6 +76,7 @@ export async function POST(request: NextRequest) {
     await handleIncomingMessage(message);
   } catch (error) {
     console.error("Erro ao processar mensagem do WhatsApp:", error);
+    Sentry.captureException(error);
   }
 
   return NextResponse.json({ ok: true });
