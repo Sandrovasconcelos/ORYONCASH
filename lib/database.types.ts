@@ -479,7 +479,8 @@ export interface Database {
             | "cronograma_template"
             | "checklist_template"
             | "conta_bancaria"
-            | "etapa";
+            | "etapa"
+            | "extrato_bancario";
           entidade_id: string | null;
           origem: "whatsapp" | "dashboard";
           autor_telefone: string | null;
@@ -505,7 +506,8 @@ export interface Database {
             | "cronograma_template"
             | "checklist_template"
             | "conta_bancaria"
-            | "etapa";
+            | "etapa"
+            | "extrato_bancario";
           entidade_id?: string | null;
           origem: "whatsapp" | "dashboard";
           autor_telefone?: string | null;
@@ -1045,6 +1047,89 @@ export interface Database {
         };
         Update: Partial<Database["public"]["Tables"]["webhook_rate_limit"]["Insert"]>;
         Relationships: [];
+      };
+      extratos_bancarios: {
+        Row: {
+          id: string;
+          conta_bancaria_id: string | null;
+          periodo_inicio: string | null;
+          periodo_fim: string | null;
+          storage_bucket: string;
+          storage_path: string;
+          nome_arquivo: string | null;
+          status: "processando" | "concluido" | "erro";
+          erro: string | null;
+          total_transacoes: number;
+          total_conciliadas: number;
+          created_at: string;
+          created_by: string | null;
+        };
+        Insert: {
+          id?: string;
+          conta_bancaria_id?: string | null;
+          periodo_inicio?: string | null;
+          periodo_fim?: string | null;
+          storage_bucket?: string;
+          storage_path: string;
+          nome_arquivo?: string | null;
+          status?: "processando" | "concluido" | "erro";
+          erro?: string | null;
+          total_transacoes?: number;
+          total_conciliadas?: number;
+          created_at?: string;
+          created_by?: string | null;
+        };
+        Update: Partial<Database["public"]["Tables"]["extratos_bancarios"]["Insert"]>;
+        Relationships: [
+          {
+            foreignKeyName: "extratos_bancarios_conta_bancaria_id_fkey";
+            columns: ["conta_bancaria_id"];
+            isOneToOne: false;
+            referencedRelation: "contas_bancarias";
+            referencedColumns: ["id"];
+          },
+        ];
+      };
+      extrato_transacoes: {
+        Row: {
+          id: string;
+          extrato_id: string;
+          data: string;
+          descricao: string | null;
+          valor: number;
+          tipo: "debito" | "credito";
+          despesa_id: string | null;
+          status: "pendente" | "conciliado" | "ignorado";
+          created_at: string;
+        };
+        Insert: {
+          id?: string;
+          extrato_id: string;
+          data: string;
+          descricao?: string | null;
+          valor: number;
+          tipo: "debito" | "credito";
+          despesa_id?: string | null;
+          status?: "pendente" | "conciliado" | "ignorado";
+          created_at?: string;
+        };
+        Update: Partial<Database["public"]["Tables"]["extrato_transacoes"]["Insert"]>;
+        Relationships: [
+          {
+            foreignKeyName: "extrato_transacoes_extrato_id_fkey";
+            columns: ["extrato_id"];
+            isOneToOne: false;
+            referencedRelation: "extratos_bancarios";
+            referencedColumns: ["id"];
+          },
+          {
+            foreignKeyName: "extrato_transacoes_despesa_id_fkey";
+            columns: ["despesa_id"];
+            isOneToOne: false;
+            referencedRelation: "despesas";
+            referencedColumns: ["id"];
+          },
+        ];
       };
     };
     Views: Record<string, never>;

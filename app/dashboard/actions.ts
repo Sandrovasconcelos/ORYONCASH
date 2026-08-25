@@ -60,7 +60,7 @@ function isTipoDocumentoComprovante(tipo: string): tipo is TipoDocumentoComprova
   return ["documento_cobranca", "comprovante_pagamento", "outro"].includes(tipo);
 }
 
-async function getAutorNomeDashboard() {
+export async function getAutorNomeDashboard() {
   const supabase = await createClient();
   const {
     data: { user },

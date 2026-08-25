@@ -27,6 +27,7 @@ const NAV_GROUPS = [
       { href: "/dashboard/materiais", label: "Materiais", icon: "box" },
       { href: "/dashboard/fornecedores", label: "Fornecedores", icon: "truck" },
       { href: "/dashboard/contas", label: "Contas bancárias", icon: "wallet" },
+      { href: "/dashboard/conciliacao", label: "Conciliação bancária", icon: "scale" },
     ],
   },
   {
@@ -113,6 +114,13 @@ function NavIcon({ name }: { name: string }) {
       <>
         <path d="M3 7a2 2 0 0 1 2-2h12a2 2 0 0 1 2 2v10a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2Z" />
         <path d="M16 12h3M3 10h18" />
+      </>
+    ),
+    scale: (
+      <>
+        <path d="M12 3v18M7 21h10" />
+        <path d="M5 7h6M13 7h6" />
+        <path d="M5 7 2.5 12a2.5 2.5 0 0 0 5 0L5 7ZM19 7l-2.5 5a2.5 2.5 0 0 0 5 0L19 7Z" />
       </>
     ),
     phone: (
