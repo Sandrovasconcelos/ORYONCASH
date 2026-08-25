@@ -7,6 +7,16 @@ import { createAdminClient } from "@/lib/supabase/admin";
 import { excedeuLimiteDeTaxa } from "@/lib/whatsapp/rateLimit";
 
 /**
+ * Baixar a midia do WhatsApp + chamar o Gemini pra ler nota/comprovante
+ * facilmente passa dos 10s padrao da Vercel (Hobby), matando a funcao no
+ * meio do processamento - a mensagem ja tinha sido marcada como
+ * "processada" (linha abaixo) mas nunca chega a receber resposta, entao um
+ * reenvio de retry da Meta (mesmo wamid) e ignorado pra sempre. 60s e o
+ * teto permitido no plano Hobby.
+ */
+export const maxDuration = 60;
+
+/**
  * A Meta reentrega webhooks que nao respondem rapido o suficiente (ou por
  * falhas de rede) - sem essa checagem, a mesma mensagem processada duas
  * vezes cria o mesmo lancamento duas vezes. So processa se conseguir

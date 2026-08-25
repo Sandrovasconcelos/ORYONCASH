@@ -1,3 +1,4 @@
+import * as Sentry from "@sentry/nextjs";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { encontrarContaBancariaCorrespondente } from "@/lib/dashboard/queries";
 import { notificarLancamento } from "@/lib/alertas/notificar";
@@ -694,7 +695,10 @@ export async function createDespesa(input: {
     obraId: input.obraId,
     autorTelefone: input.criadoPorTelefone ?? null,
     autorNome: input.criadoPorNome ?? null,
-  }).catch((error) => console.error("Falha ao notificar lançamento por WhatsApp:", error));
+  }).catch((error) => {
+    console.error("Falha ao notificar lançamento por WhatsApp:", error);
+    Sentry.captureException(error);
+  });
 
   return result.data;
 }
