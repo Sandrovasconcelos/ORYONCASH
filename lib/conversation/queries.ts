@@ -643,6 +643,7 @@ export async function createDespesa(input: {
   fornecedorId?: string | null;
   criadoPorTelefone?: string | null;
   criadoPorNome?: string | null;
+  documentoAnexado?: "documento_cobranca" | "comprovante_pagamento" | null;
 }) {
   const supabase = createAdminClient();
   const comAutoria: DespesaInsert = {
@@ -695,6 +696,7 @@ export async function createDespesa(input: {
     obraId: input.obraId,
     autorTelefone: input.criadoPorTelefone ?? null,
     autorNome: input.criadoPorNome ?? null,
+    documentoAnexado: input.documentoAnexado ?? null,
   }).catch((error) => {
     console.error("Falha ao notificar lançamento por WhatsApp:", error);
     Sentry.captureException(error);

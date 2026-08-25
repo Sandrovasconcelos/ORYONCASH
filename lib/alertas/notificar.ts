@@ -4,6 +4,7 @@ import { buscarResumoPeriodo } from "@/lib/alertas/resumos";
 import {
   formatarMensagemAlertas,
   formatarNotificacaoLancamento,
+  formatarNotificacaoComprovantePagamento,
   formatarResumoDiario,
   formatarResumoSemanal,
 } from "@/lib/whatsapp/notificacoes";
@@ -125,6 +126,7 @@ export async function notificarLancamento(input: {
   obraId: string;
   autorTelefone: string | null;
   autorNome: string | null;
+  documentoAnexado: "documento_cobranca" | "comprovante_pagamento" | null;
 }): Promise<void> {
   const numero = await numeroNotificacao();
   if (!numero) return;
@@ -140,6 +142,38 @@ export async function notificarLancamento(input: {
     valor: input.valor,
     categoriaNome: categoria?.nome ?? "Sem categoria",
     obraNome: obra?.nome ?? null,
+    autorNome: input.autorNome,
+    documentoAnexado: input.documentoAnexado,
+  });
+  await sendText(numero, mensagem);
+}
+
+/**
+ * O comprovante de pagamento normalmente e anexado numa mensagem SEPARADA,
+ * depois do lancamento original ja ter sido notificado - essa notificacao
+ * de acompanhamento fecha o ciclo (o dono sabe que o pagamento comprovado
+ * chegou, sem precisar abrir o dashboard).
+ */
+export async function notificarComprovantePagamentoAnexado(input: {
+  valor: number;
+  obraId: string | null;
+  autorTelefone: string | null;
+  autorNome: string | null;
+}): Promise<void> {
+  const numero = await numeroNotificacao();
+  if (!numero) return;
+  if (input.autorTelefone && input.autorTelefone === numero) return;
+
+  let obraNome: string | null = null;
+  if (input.obraId) {
+    const supabase = createAdminClient();
+    const { data: obra } = await supabase.from("obras").select("nome").eq("id", input.obraId).maybeSingle();
+    obraNome = obra?.nome ?? null;
+  }
+
+  const mensagem = formatarNotificacaoComprovantePagamento({
+    valor: input.valor,
+    obraNome,
     autorNome: input.autorNome,
   });
   await sendText(numero, mensagem);

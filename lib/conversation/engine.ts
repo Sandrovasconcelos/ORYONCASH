@@ -1,3 +1,4 @@
+import * as Sentry from "@sentry/nextjs";
 import type { IncomingMessage, IncomingMedia } from "@/lib/whatsapp/parse";
 import { sendText, sendButtons } from "@/lib/whatsapp/messages";
 import { getSession, saveSession, resetSession, type Session } from "@/lib/whatsapp/session";
@@ -58,6 +59,7 @@ import {
   vincularComprovanteDespesa,
 } from "./queries";
 import { registrarAtividade, getNomePorTelefone } from "@/lib/atividades";
+import { notificarComprovantePagamentoAnexado } from "@/lib/alertas/notificar";
 
 const MIME_TYPES_PLANILHA = [
   "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
@@ -861,6 +863,11 @@ async function handleDespesaConfirmacao(
       materialId: dados.materialId ?? null,
       criadoPorTelefone: from,
       criadoPorNome: autorNome,
+      documentoAnexado:
+        dados.comprovante?.tipoDocumento === "documento_cobranca" ||
+        dados.comprovante?.tipoDocumento === "comprovante_pagamento"
+          ? dados.comprovante.tipoDocumento
+          : null,
     });
     if (dados.comprovante) {
       await vincularComprovanteDespesa({
@@ -1384,6 +1391,15 @@ async function handleAnexarPagamentoSelecionandoLancamento(
       resumo: `Comprovante de pagamento anexado ao lançamento de ${formatBRL(despesa.valor)} por ${autorNome}`,
       dadosDepois: { despesaId: despesa.id, comprovantePagamento: dados.comprovante },
     });
+    notificarComprovantePagamentoAnexado({
+      valor: despesa.valor,
+      obraId: despesa.obraId,
+      autorTelefone: from,
+      autorNome,
+    }).catch((error) => {
+      console.error("Falha ao notificar comprovante de pagamento por WhatsApp:", error);
+      Sentry.captureException(error);
+    });
     await sendText(from, "✅ Comprovante de pagamento vinculado com sucesso.");
     await resetSession(from);
     await sendMenuPrincipal(from);
@@ -1451,6 +1467,18 @@ async function handleAnexarPagamentoArquivo(
           ? `Comprovante de pagamento anexado a ${despesaIds.length} lançamentos por ${autorNome}`
           : `Comprovante de pagamento anexado por ${autorNome}`,
       dadosDepois: { despesaIds, comprovantePagamento, pagamentoExtraido },
+    });
+
+    const despesasVinculadas = await Promise.all(despesaIds.map((id) => findDespesaCompletaById(id)));
+    const valorTotalVinculado = despesasVinculadas.reduce((soma, d) => soma + (d?.valor ?? 0), 0);
+    notificarComprovantePagamentoAnexado({
+      valor: valorTotalVinculado,
+      obraId: despesasVinculadas[0]?.obraId ?? null,
+      autorTelefone: from,
+      autorNome,
+    }).catch((error) => {
+      console.error("Falha ao notificar comprovante de pagamento por WhatsApp:", error);
+      Sentry.captureException(error);
     });
 
     const valorLido = pagamentoExtraido?.valorTotalNota ?? pagamentoExtraido?.itens?.[0]?.valorTotal;
@@ -1690,6 +1718,11 @@ async function handleNotaConfirmacao(
         fornecedorId: dados.fornecedorId ?? null,
         criadoPorTelefone: from,
         criadoPorNome: autorNome,
+        documentoAnexado:
+        dados.comprovante?.tipoDocumento === "documento_cobranca" ||
+        dados.comprovante?.tipoDocumento === "comprovante_pagamento"
+          ? dados.comprovante.tipoDocumento
+          : null,
       });
       if (dados.comprovante) {
         await vincularComprovanteDespesa({

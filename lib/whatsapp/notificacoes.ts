@@ -108,8 +108,26 @@ export function formatarNotificacaoLancamento(input: {
   categoriaNome: string;
   obraNome: string | null;
   autorNome: string | null;
+  documentoAnexado: "documento_cobranca" | "comprovante_pagamento" | null;
 }): string {
   const partes = [`💸 Novo lançamento — ${formatBRL(input.valor)} em ${input.categoriaNome}`];
+  if (input.obraNome) partes.push(`Obra: ${input.obraNome}`);
+  if (input.autorNome) partes.push(`Por: ${input.autorNome}`);
+
+  const notaAnexada = input.documentoAnexado === "documento_cobranca";
+  const comprovanteAnexado = input.documentoAnexado === "comprovante_pagamento";
+  partes.push(`📄 Nota/conta: ${notaAnexada ? "anexada" : "não anexada"}`);
+  partes.push(`💳 Comprovante de pagamento: ${comprovanteAnexado ? "anexado" : "ainda não anexado"}`);
+
+  return partes.join("\n");
+}
+
+export function formatarNotificacaoComprovantePagamento(input: {
+  valor: number;
+  obraNome: string | null;
+  autorNome: string | null;
+}): string {
+  const partes = [`💳 Comprovante de pagamento anexado — ${formatBRL(input.valor)}`];
   if (input.obraNome) partes.push(`Obra: ${input.obraNome}`);
   if (input.autorNome) partes.push(`Por: ${input.autorNome}`);
   return partes.join("\n");
