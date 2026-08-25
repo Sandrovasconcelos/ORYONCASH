@@ -108,10 +108,14 @@ export function formatarNotificacaoLancamento(input: {
   categoriaNome: string;
   obraNome: string | null;
   autorNome: string | null;
+  descricao: string | null;
+  materialNome: string | null;
   documentoAnexado: "documento_cobranca" | "comprovante_pagamento" | null;
 }): string {
   const partes = [`💸 Novo lançamento — ${formatBRL(input.valor)} em ${input.categoriaNome}`];
   if (input.obraNome) partes.push(`Obra: ${input.obraNome}`);
+  const item = input.descricao || input.materialNome;
+  if (item) partes.push(`📝 Item: ${item}`);
   if (input.autorNome) partes.push(`Por: ${input.autorNome}`);
 
   const notaAnexada = input.documentoAnexado === "documento_cobranca";

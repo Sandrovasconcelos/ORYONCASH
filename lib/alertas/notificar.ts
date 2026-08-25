@@ -124,6 +124,8 @@ export async function notificarLancamento(input: {
   valor: number;
   categoriaId: string;
   obraId: string;
+  descricao: string | null;
+  materialId: string | null;
   autorTelefone: string | null;
   autorNome: string | null;
   documentoAnexado: "documento_cobranca" | "comprovante_pagamento" | null;
@@ -133,9 +135,12 @@ export async function notificarLancamento(input: {
   if (input.autorTelefone && input.autorTelefone === numero) return;
 
   const supabase = createAdminClient();
-  const [{ data: categoria }, { data: obra }] = await Promise.all([
+  const [{ data: categoria }, { data: obra }, { data: material }] = await Promise.all([
     supabase.from("categorias").select("nome").eq("id", input.categoriaId).maybeSingle(),
     supabase.from("obras").select("nome").eq("id", input.obraId).maybeSingle(),
+    input.materialId
+      ? supabase.from("materiais").select("nome").eq("id", input.materialId).maybeSingle()
+      : Promise.resolve({ data: null }),
   ]);
 
   const mensagem = formatarNotificacaoLancamento({
@@ -143,6 +148,8 @@ export async function notificarLancamento(input: {
     categoriaNome: categoria?.nome ?? "Sem categoria",
     obraNome: obra?.nome ?? null,
     autorNome: input.autorNome,
+    descricao: input.descricao,
+    materialNome: material?.nome ?? null,
     documentoAnexado: input.documentoAnexado,
   });
   await sendText(numero, mensagem);

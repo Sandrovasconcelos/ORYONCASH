@@ -694,6 +694,8 @@ export async function createDespesa(input: {
     valor: input.valor,
     categoriaId: input.categoriaId,
     obraId: input.obraId,
+    descricao: input.descricao,
+    materialId: input.materialId ?? null,
     autorTelefone: input.criadoPorTelefone ?? null,
     autorNome: input.criadoPorNome ?? null,
     documentoAnexado: input.documentoAnexado ?? null,
