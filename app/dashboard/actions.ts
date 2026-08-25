@@ -1031,10 +1031,10 @@ export async function deleteFornecedorAction(formData: FormData) {
 }
 
 export async function createDespesaAction(formData: FormData) {
-  const obraId = String(formData.get("obra_id") ?? "");
+  const obraId = String(formData.get("obra_id") ?? "") || null;
   const categoriaId = String(formData.get("categoria_id") ?? "");
   const valor = parseValorBR(String(formData.get("valor") ?? "0")) ?? 0;
-  if (!obraId || !categoriaId || valor <= 0) return;
+  if (!categoriaId || valor <= 0) return;
 
   const etapaId = String(formData.get("etapa_id") ?? "") || null;
   const materialId = String(formData.get("material_id") ?? "") || null;
@@ -1104,7 +1104,7 @@ export async function updateDespesaAction(formData: FormData) {
     .maybeSingle();
 
   const depois = {
-    obra_id: String(formData.get("obra_id") ?? ""),
+    obra_id: String(formData.get("obra_id") ?? "") || null,
     categoria_id: String(formData.get("categoria_id") ?? ""),
     etapa_id: etapaId,
     material_id: materialId,

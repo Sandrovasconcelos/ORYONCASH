@@ -123,7 +123,7 @@ export async function enviarResumoSemanal(): Promise<{ enviado: boolean; motivo?
 export async function notificarLancamento(input: {
   valor: number;
   categoriaId: string;
-  obraId: string;
+  obraId: string | null;
   descricao: string | null;
   materialId: string | null;
   autorTelefone: string | null;
@@ -137,7 +137,9 @@ export async function notificarLancamento(input: {
   const supabase = createAdminClient();
   const [{ data: categoria }, { data: obra }, { data: material }] = await Promise.all([
     supabase.from("categorias").select("nome").eq("id", input.categoriaId).maybeSingle(),
-    supabase.from("obras").select("nome").eq("id", input.obraId).maybeSingle(),
+    input.obraId
+      ? supabase.from("obras").select("nome").eq("id", input.obraId).maybeSingle()
+      : Promise.resolve({ data: null }),
     input.materialId
       ? supabase.from("materiais").select("nome").eq("id", input.materialId).maybeSingle()
       : Promise.resolve({ data: null }),

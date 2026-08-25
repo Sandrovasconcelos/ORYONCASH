@@ -126,7 +126,7 @@ type Dados = {
 
   despesaAntes?: {
     id: string;
-    obraId: string;
+    obraId: string | null;
     obraNome: string;
     categoriaId: string;
     categoriaNome: string;
@@ -1992,8 +1992,13 @@ async function handleCorrigirSelecionandoCampo(
       return;
     case CAMPO_IDS.ETAPA: {
       const despesa = await findDespesaCompletaById(dados.despesaId!);
+      if (!despesa?.obraId) {
+        await sendText(from, "📐 Essa despesa não tem obra vinculada, não há etapa pra definir.");
+        await sendListCamposParaCorrigir(from);
+        return;
+      }
       await saveSession(from, ESTADOS.CORRIGIR_ETAPA_NOVA, dados);
-      await sendListEtapas(from, despesa!.obraId);
+      await sendListEtapas(from, despesa.obraId);
       return;
     }
     case CAMPO_IDS.MATERIAL:
@@ -2095,10 +2100,16 @@ async function handleCorrigirEtapaNova(
 ) {
   const dados = session.dados_coletados as Dados;
   const despesa = await findDespesaCompletaById(dados.despesaId!);
-  const etapa = despesa ? await resolverEtapaDaMensagem(message, despesa.obraId) : null;
+  if (!despesa?.obraId) {
+    await sendText(from, "📐 Essa despesa não tem obra vinculada, não há etapa pra definir.");
+    await resetSession(from);
+    await sendMenuPrincipal(from);
+    return;
+  }
+  const etapa = await resolverEtapaDaMensagem(message, despesa.obraId);
 
   if (!etapa) {
-    await sendListEtapas(from, despesa!.obraId);
+    await sendListEtapas(from, despesa.obraId);
     return;
   }
 

@@ -106,6 +106,7 @@ export default async function ObrasPage() {
   const usoPorEtapa = new Map<string, number>();
 
   for (const d of despesas ?? []) {
+    if (!d.obra_id) continue;
     gastoPorObra.set(d.obra_id, (gastoPorObra.get(d.obra_id) ?? 0) + Number(d.valor ?? 0));
   }
   for (const etapa of etapas ?? []) {

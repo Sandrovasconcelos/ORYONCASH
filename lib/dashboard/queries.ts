@@ -182,11 +182,12 @@ function agruparFornecedores(
 }
 
 function agruparComparativoObras(
-  despesas: { valor: number; obra_id: string }[],
+  despesas: { valor: number; obra_id: string | null }[],
   obrasCatalogo: { id: string; nome: string }[]
 ): CategoriaBreakdown[] {
   const totais = new Map<string, number>();
   for (const d of despesas) {
+    if (!d.obra_id) continue;
     totais.set(d.obra_id, (totais.get(d.obra_id) ?? 0) + d.valor);
   }
 

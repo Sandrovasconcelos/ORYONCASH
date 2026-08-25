@@ -220,7 +220,7 @@ export interface Database {
       despesas: {
         Row: {
           id: string;
-          obra_id: string;
+          obra_id: string | null;
           categoria_id: string;
           etapa_id: string | null;
           material_id: string | null;
@@ -241,7 +241,7 @@ export interface Database {
         };
         Insert: {
           id?: string;
-          obra_id: string;
+          obra_id?: string | null;
           categoria_id: string;
           etapa_id?: string | null;
           material_id?: string | null;
@@ -480,7 +480,8 @@ export interface Database {
             | "checklist_template"
             | "conta_bancaria"
             | "etapa"
-            | "extrato_bancario";
+            | "extrato_bancario"
+            | "conta_a_pagar";
           entidade_id: string | null;
           origem: "whatsapp" | "dashboard";
           autor_telefone: string | null;
@@ -507,7 +508,8 @@ export interface Database {
             | "checklist_template"
             | "conta_bancaria"
             | "etapa"
-            | "extrato_bancario";
+            | "extrato_bancario"
+            | "conta_a_pagar";
           entidade_id?: string | null;
           origem: "whatsapp" | "dashboard";
           autor_telefone?: string | null;
@@ -997,6 +999,94 @@ export interface Database {
             columns: ["etapa_id"];
             isOneToOne: false;
             referencedRelation: "etapas";
+            referencedColumns: ["id"];
+          },
+        ];
+      };
+      contas_a_pagar: {
+        Row: {
+          id: string;
+          descricao: string;
+          valor: number;
+          categoria_id: string | null;
+          obra_id: string | null;
+          etapa_id: string | null;
+          fornecedor_id: string | null;
+          contrato_fornecedor_id: string | null;
+          data_vencimento: string;
+          recorrencia: "nenhuma" | "semanal" | "mensal";
+          avisar_dias_antes: number;
+          status: "pendente" | "pago" | "cancelado";
+          despesa_id: string | null;
+          storage_bucket: string | null;
+          storage_path: string | null;
+          nome_arquivo: string | null;
+          created_at: string;
+          created_by: string | null;
+          pago_em: string | null;
+          deleted_at: string | null;
+          deleted_by: string | null;
+          deleted_reason: string | null;
+        };
+        Insert: {
+          id?: string;
+          descricao: string;
+          valor: number;
+          categoria_id?: string | null;
+          obra_id?: string | null;
+          etapa_id?: string | null;
+          fornecedor_id?: string | null;
+          contrato_fornecedor_id?: string | null;
+          data_vencimento: string;
+          recorrencia?: "nenhuma" | "semanal" | "mensal";
+          avisar_dias_antes?: number;
+          status?: "pendente" | "pago" | "cancelado";
+          despesa_id?: string | null;
+          storage_bucket?: string | null;
+          storage_path?: string | null;
+          nome_arquivo?: string | null;
+          created_at?: string;
+          created_by?: string | null;
+          pago_em?: string | null;
+          deleted_at?: string | null;
+          deleted_by?: string | null;
+          deleted_reason?: string | null;
+        };
+        Update: Partial<Database["public"]["Tables"]["contas_a_pagar"]["Insert"]>;
+        Relationships: [
+          {
+            foreignKeyName: "contas_a_pagar_categoria_id_fkey";
+            columns: ["categoria_id"];
+            isOneToOne: false;
+            referencedRelation: "categorias";
+            referencedColumns: ["id"];
+          },
+          {
+            foreignKeyName: "contas_a_pagar_obra_id_fkey";
+            columns: ["obra_id"];
+            isOneToOne: false;
+            referencedRelation: "obras";
+            referencedColumns: ["id"];
+          },
+          {
+            foreignKeyName: "contas_a_pagar_fornecedor_id_fkey";
+            columns: ["fornecedor_id"];
+            isOneToOne: false;
+            referencedRelation: "fornecedores";
+            referencedColumns: ["id"];
+          },
+          {
+            foreignKeyName: "contas_a_pagar_contrato_fornecedor_id_fkey";
+            columns: ["contrato_fornecedor_id"];
+            isOneToOne: false;
+            referencedRelation: "contratos_fornecedor";
+            referencedColumns: ["id"];
+          },
+          {
+            foreignKeyName: "contas_a_pagar_despesa_id_fkey";
+            columns: ["despesa_id"];
+            isOneToOne: false;
+            referencedRelation: "despesas";
             referencedColumns: ["id"];
           },
         ];

@@ -27,6 +27,7 @@ const NAV_GROUPS = [
       { href: "/dashboard/materiais", label: "Materiais", icon: "box" },
       { href: "/dashboard/fornecedores", label: "Fornecedores", icon: "truck" },
       { href: "/dashboard/contas", label: "Contas bancárias", icon: "wallet" },
+      { href: "/dashboard/contas-a-pagar", label: "Contas a pagar", icon: "calendar" },
       { href: "/dashboard/conciliacao", label: "Conciliação bancária", icon: "scale" },
     ],
   },

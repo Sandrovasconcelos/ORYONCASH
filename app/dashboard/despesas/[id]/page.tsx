@@ -32,7 +32,9 @@ export default async function EditarDespesaPage({
     supabase.from("categorias").select("id, nome").order("nome"),
     supabase.from("materiais").select("id, nome").order("nome"),
     supabase.from("fornecedores").select("id, nome").order("nome"),
-    supabase.from("etapas").select("id, nome").eq("obra_id", despesa.obra_id).order("ordem"),
+    despesa.obra_id
+      ? supabase.from("etapas").select("id, nome").eq("obra_id", despesa.obra_id).order("ordem")
+      : Promise.resolve({ data: [] as { id: string; nome: string }[] }),
   ]);
 
   let etapas = etapasProprias ?? [];
@@ -60,7 +62,8 @@ export default async function EditarDespesaPage({
       </div>
 
       <Field label="Obra">
-        <select name="obra_id" defaultValue={despesa.obra_id} required className={inputClass}>
+        <select name="obra_id" defaultValue={despesa.obra_id ?? ""} className={inputClass}>
+          <option value="">Sem obra (Administrativo)</option>
           {(obras ?? []).map((o) => (
             <option key={o.id} value={o.id}>
               {o.nome}

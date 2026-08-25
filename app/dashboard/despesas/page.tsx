@@ -484,8 +484,8 @@ export default async function DespesasPage({
               <form action={createDespesaAction} className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
                 <label className="flex flex-col gap-1 text-sm text-brand-gray-700">
                   Obra
-                  <select name="obra_id" required className="rounded-brand-sm border border-brand-gray-300 bg-white px-3 py-2 text-sm outline-none focus:border-brand-red">
-                    <option value="">Selecione</option>
+                  <select name="obra_id" className="rounded-brand-sm border border-brand-gray-300 bg-white px-3 py-2 text-sm outline-none focus:border-brand-red">
+                    <option value="">Sem obra (Administrativo)</option>
                     {(obras ?? []).map((obra) => (
                       <option key={obra.id} value={obra.id}>
                         {obra.nome}
@@ -963,10 +963,10 @@ export default async function DespesasPage({
                             Obra
                             <select
                               name="obra_id"
-                              defaultValue={d.obra_id}
-                              required
+                              defaultValue={d.obra_id ?? ""}
                               className="rounded-brand-sm border border-brand-gray-300 bg-white px-3 py-2 text-sm outline-none focus:border-brand-red"
                             >
+                              <option value="">Sem obra (Administrativo)</option>
                               {(obras ?? []).map((obra) => (
                                 <option key={obra.id} value={obra.id}>
                                   {obra.nome}

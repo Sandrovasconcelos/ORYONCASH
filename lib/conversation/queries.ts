@@ -632,7 +632,7 @@ export async function findOrCreateFornecedorPorNota(dados: {
 }
 
 export async function createDespesa(input: {
-  obraId: string;
+  obraId: string | null;
   categoriaId: string;
   etapaId: string | null;
   valor: number;

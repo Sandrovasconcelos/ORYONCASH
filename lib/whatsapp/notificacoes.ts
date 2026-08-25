@@ -1,5 +1,6 @@
 import type { Alerta } from "@/lib/alertas/queries";
 import type { ResumoPeriodo } from "@/lib/alertas/resumos";
+import type { ContaAPagarComVencimento } from "@/lib/contasAPagar/queries";
 import { formatBRL } from "@/lib/conversation/format";
 
 const SECOES: { tipo: Alerta["tipo"]; titulo: string }[] = [
@@ -135,4 +136,40 @@ export function formatarNotificacaoComprovantePagamento(input: {
   if (input.obraNome) partes.push(`Obra: ${input.obraNome}`);
   if (input.autorNome) partes.push(`Por: ${input.autorNome}`);
   return partes.join("\n");
+}
+
+function formatarDataBRCurta(dataISO: string): string {
+  const [ano, mes, dia] = dataISO.split("-");
+  return `${dia}/${mes}/${ano}`;
+}
+
+export function formatarAvisoContasAPagar(input: {
+  vencendo: ContaAPagarComVencimento[];
+  vencidas: ContaAPagarComVencimento[];
+}): string {
+  const blocos = [`📅 *OryonCash* — Contas a pagar`];
+
+  if (input.vencendo.length > 0) {
+    blocos.push(
+      "",
+      "🔔 *A vencer*",
+      ...input.vencendo.map((c) => {
+        const obra = c.obra_nome ? ` (${c.obra_nome})` : "";
+        return `• ${c.descricao} — ${formatBRL(c.valor)} — vence ${formatarDataBRCurta(c.data_vencimento)}${obra}`;
+      })
+    );
+  }
+
+  if (input.vencidas.length > 0) {
+    blocos.push(
+      "",
+      "⚠️ *Vencidas*",
+      ...input.vencidas.map((c) => {
+        const obra = c.obra_nome ? ` (${c.obra_nome})` : "";
+        return `• ${c.descricao} — ${formatBRL(c.valor)} — venceu ${formatarDataBRCurta(c.data_vencimento)}${obra}`;
+      })
+    );
+  }
+
+  return blocos.join("\n");
 }
