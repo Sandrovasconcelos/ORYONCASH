@@ -1,6 +1,6 @@
 import { fetchComTimeout } from "@/lib/fetchComTimeout";
 
-const GEMINI_MODEL = process.env.GEMINI_MODEL || "gemini-flash-latest";
+const GEMINI_MODEL = process.env.GEMINI_MODEL || "gemini-3.6-flash";
 // Extrato pode ter varias paginas/transacoes - demora mais que um documento
 // unico, mas a action que chama isso tem maxDuration=60, entao ainda
 // precisa sobrar tempo pra gravar tudo depois.
@@ -82,7 +82,8 @@ export async function extractBankStatement(
         },
       }),
     },
-    GEMINI_TIMEOUT_MS
+    GEMINI_TIMEOUT_MS,
+    1
   );
 
   if (!res.ok) {

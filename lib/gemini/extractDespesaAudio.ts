@@ -1,6 +1,6 @@
 import { fetchComTimeout } from "@/lib/fetchComTimeout";
 
-const GEMINI_MODEL = process.env.GEMINI_MODEL || "gemini-flash-latest";
+const GEMINI_MODEL = process.env.GEMINI_MODEL || "gemini-3.6-flash";
 const GEMINI_TIMEOUT_MS = 35_000;
 
 export type DespesaDeAudio = {
@@ -67,7 +67,8 @@ export async function extractDespesaDeAudio(
         },
       }),
     },
-    GEMINI_TIMEOUT_MS
+    GEMINI_TIMEOUT_MS,
+    1
   );
 
   if (!res.ok) {
