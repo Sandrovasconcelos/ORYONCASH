@@ -1134,7 +1134,30 @@ async function handleNotaFiscalRecebida(
     });
   } catch (error) {
     console.error("Erro ao processar comprovante:", error);
+    Sentry.captureException(error, { tags: { fluxo: "nota_fiscal_recebida" } });
     invoice = null;
+  }
+
+  // O Gemini as vezes classifica certo como comprovante de pagamento mas
+  // nao segue a instrucao de devolver um item unico (ex: recibo de Pix sem
+  // "itens" discriminados) - sem isso a checagem abaixo jogava fora um
+  // valorTotalNota perfeitamente valido e forcava preenchimento manual
+  // completo. Sintetiza um item a partir do valor total antes de desistir.
+  if (invoice && invoice.itens.length === 0 && invoice.valorTotalNota) {
+    invoice = {
+      ...invoice,
+      itens: [
+        {
+          descricao:
+            invoice.fornecedorNome && invoice.fornecedorNome !== "Não identificado"
+              ? `Pagamento a ${invoice.fornecedorNome}`
+              : "Pagamento",
+          quantidade: 1,
+          valorUnitario: invoice.valorTotalNota,
+          valorTotal: invoice.valorTotalNota,
+        },
+      ],
+    };
   }
 
   if (!options.forcarNovaDespesa && invoice?.tipoDocumento === "comprovante_pagamento" && comprovante) {

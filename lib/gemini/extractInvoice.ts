@@ -187,17 +187,29 @@ export async function extractInvoiceData(
   );
 
   if (!res.ok) {
+    const corpo = await res.text().catch(() => "");
+    console.error(`Gemini respondeu ${res.status} ao ler documento (mimeType=${mimeType}):`, corpo.slice(0, 500));
     throw new Error(`Falha ao chamar a API do Gemini (${res.status})`);
   }
 
   const data = await res.json();
-  const text: string | undefined =
-    data?.candidates?.[0]?.content?.parts?.[0]?.text;
-  if (!text) return null;
+  const candidato = data?.candidates?.[0];
+  const text: string | undefined = candidato?.content?.parts?.[0]?.text;
+
+  if (!text) {
+    // Sem texto pode ser bloqueio de safety, corte por MAX_TOKENS, ou
+    // resposta vazia mesmo - loga o motivo pra dar pra diagnosticar quando
+    // acontecer de novo (extractInvoiceData falha silenciosamente sem isso).
+    console.error(
+      `Gemini nao retornou texto pro documento (mimeType=${mimeType}). finishReason=${candidato?.finishReason} promptFeedback=${JSON.stringify(data?.promptFeedback)}`
+    );
+    return null;
+  }
 
   try {
     return JSON.parse(text) as InvoiceData;
-  } catch {
+  } catch (error) {
+    console.error(`Falha ao parsear JSON do Gemini (mimeType=${mimeType}):`, text.slice(0, 800), error);
     return null;
   }
 }
