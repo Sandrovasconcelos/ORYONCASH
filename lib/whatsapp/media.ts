@@ -1,4 +1,7 @@
+import { fetchComTimeout } from "@/lib/fetchComTimeout";
+
 const GRAPH_API_VERSION = process.env.WHATSAPP_API_VERSION || "v21.0";
+const GRAPH_TIMEOUT_MS = 15_000;
 
 /**
  * Baixa uma midia recebida no WhatsApp (imagem/documento) a partir do seu
@@ -10,18 +13,21 @@ export async function downloadWhatsAppMedia(
 ): Promise<{ buffer: Buffer; mimeType: string }> {
   const token = process.env.WHATSAPP_ACCESS_TOKEN;
 
-  const metaRes = await fetch(
+  const metaRes = await fetchComTimeout(
     `https://graph.facebook.com/${GRAPH_API_VERSION}/${mediaId}`,
-    { headers: { Authorization: `Bearer ${token}` } }
+    { headers: { Authorization: `Bearer ${token}` } },
+    GRAPH_TIMEOUT_MS
   );
   if (!metaRes.ok) {
     throw new Error(`Falha ao resolver URL da midia (${metaRes.status})`);
   }
   const meta = (await metaRes.json()) as { url: string; mime_type: string };
 
-  const fileRes = await fetch(meta.url, {
-    headers: { Authorization: `Bearer ${token}` },
-  });
+  const fileRes = await fetchComTimeout(
+    meta.url,
+    { headers: { Authorization: `Bearer ${token}` } },
+    GRAPH_TIMEOUT_MS
+  );
   if (!fileRes.ok) {
     throw new Error(`Falha ao baixar midia (${fileRes.status})`);
   }

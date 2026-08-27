@@ -5,6 +5,46 @@ import { parseIncomingMessage } from "@/lib/whatsapp/parse";
 import { handleIncomingMessage } from "@/lib/conversation/engine";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { excedeuLimiteDeTaxa } from "@/lib/whatsapp/rateLimit";
+import { sendText } from "@/lib/whatsapp/messages";
+
+/**
+ * Se o processamento (download de midia + Gemini) travar por algum motivo
+ * imprevisto, a Vercel mata a funcao no teto de 60s sem chance de responder
+ * nada ao usuario - ele fica olhando pro "Recebi seu documento,
+ * analisando..." pra sempre. Esse teto avisa ANTES disso acontecer: se
+ * handleIncomingMessage nao terminar em 50s, manda uma mensagem de erro
+ * pro usuario mesmo que o processamento original ainda esteja rodando (o
+ * Promise.race nao cancela a promise perdedora - ela pode ainda terminar
+ * depois e mandar a resposta de verdade, o que é raro mas inofensivo).
+ */
+const TIMEOUT_PROCESSAMENTO_MS = 50_000;
+
+async function comTimeoutDeAviso(from: string, promise: Promise<void>): Promise<void> {
+  let avisouTimeout = false;
+
+  const timeout = new Promise<"timeout">((resolve) => {
+    setTimeout(() => resolve("timeout"), TIMEOUT_PROCESSAMENTO_MS);
+  });
+
+  const resultado = await Promise.race([promise.then(() => "ok" as const), timeout]);
+
+  if (resultado === "timeout") {
+    avisouTimeout = true;
+    console.error(`Timeout (${TIMEOUT_PROCESSAMENTO_MS}ms) ao processar mensagem de ${from}`);
+    Sentry.captureMessage(`Timeout ao processar mensagem do WhatsApp (${from})`, "warning");
+    await sendText(
+      from,
+      "⚠️ Isso demorou mais do que o esperado e não consegui terminar de processar. Pode tentar reenviar? Se for uma imagem grande, tente uma foto mais simples ou um PDF menor."
+    ).catch((error) => console.error("Falha ao avisar timeout pro usuário:", error));
+  }
+
+  // Deixa a promise original seguir em segundo plano (pode ainda terminar e
+  // mandar sua propria resposta) - so garante que erros dela nao escapem
+  // sem log depois que ja desistimos de esperar.
+  if (avisouTimeout) {
+    promise.catch((error) => console.error("Processamento atrasado falhou depois do aviso de timeout:", error));
+  }
+}
 
 /**
  * Baixar a midia do WhatsApp + chamar o Gemini pra ler nota/comprovante
@@ -83,7 +123,7 @@ export async function POST(request: NextRequest) {
   }
 
   try {
-    await handleIncomingMessage(message);
+    await comTimeoutDeAviso(message.from, handleIncomingMessage(message));
   } catch (error) {
     console.error("Erro ao processar mensagem do WhatsApp:", error);
     Sentry.captureException(error);

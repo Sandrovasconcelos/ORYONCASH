@@ -1,4 +1,7 @@
+import { fetchComTimeout } from "@/lib/fetchComTimeout";
+
 const GEMINI_MODEL = process.env.GEMINI_MODEL || "gemini-flash-latest";
+const GEMINI_TIMEOUT_MS = 35_000;
 
 export type InvoiceItem = {
   descricao: string;
@@ -148,7 +151,7 @@ export async function extractInvoiceData(
 ): Promise<InvoiceData | null> {
   const apiKey = process.env.GEMINI_API_KEY;
 
-  const res = await fetch(
+  const res = await fetchComTimeout(
     `https://generativelanguage.googleapis.com/v1beta/models/${GEMINI_MODEL}:generateContent?key=${apiKey}`,
     {
       method: "POST",
@@ -172,7 +175,8 @@ export async function extractInvoiceData(
           responseSchema: RESPONSE_SCHEMA,
         },
       }),
-    }
+    },
+    GEMINI_TIMEOUT_MS
   );
 
   if (!res.ok) {

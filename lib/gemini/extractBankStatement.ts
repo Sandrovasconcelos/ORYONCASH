@@ -1,4 +1,10 @@
+import { fetchComTimeout } from "@/lib/fetchComTimeout";
+
 const GEMINI_MODEL = process.env.GEMINI_MODEL || "gemini-flash-latest";
+// Extrato pode ter varias paginas/transacoes - demora mais que um documento
+// unico, mas a action que chama isso tem maxDuration=60, entao ainda
+// precisa sobrar tempo pra gravar tudo depois.
+const GEMINI_TIMEOUT_MS = 50_000;
 
 export type TransacaoExtrato = {
   data: string;
@@ -51,7 +57,7 @@ export async function extractBankStatement(
 ): Promise<TransacaoExtrato[]> {
   const apiKey = process.env.GEMINI_API_KEY;
 
-  const res = await fetch(
+  const res = await fetchComTimeout(
     `https://generativelanguage.googleapis.com/v1beta/models/${GEMINI_MODEL}:generateContent?key=${apiKey}`,
     {
       method: "POST",
@@ -75,7 +81,8 @@ export async function extractBankStatement(
           responseSchema: RESPONSE_SCHEMA,
         },
       }),
-    }
+    },
+    GEMINI_TIMEOUT_MS
   );
 
   if (!res.ok) {
