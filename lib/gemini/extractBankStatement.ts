@@ -1,6 +1,11 @@
 import { fetchComTimeout } from "@/lib/fetchComTimeout";
 
-const GEMINI_MODEL = process.env.GEMINI_MODEL || "gemini-3.6-flash";
+// Fixo no codigo, sem ler de env var - uma env var GEMINI_MODEL obsoleta
+// configurada na Vercel (apontando pro alias "flash-latest", que ficou
+// com erro 503 de alta demanda persistente) fez o troca de default no
+// codigo nao ter efeito nenhum. Atualizar o modelo agora exige mexer
+// aqui de proposito, sem essa brecha.
+const GEMINI_MODEL = "gemini-3.6-flash";
 // Extrato pode ter varias paginas/transacoes - demora mais que um documento
 // unico, mas a action que chama isso tem maxDuration=60, entao ainda
 // precisa sobrar tempo pra gravar tudo depois.

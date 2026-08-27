@@ -12,12 +12,12 @@ import { sendText } from "@/lib/whatsapp/messages";
  * imprevisto, a Vercel mata a funcao no teto de 60s sem chance de responder
  * nada ao usuario - ele fica olhando pro "Recebi seu documento,
  * analisando..." pra sempre. Esse teto avisa ANTES disso acontecer: se
- * handleIncomingMessage nao terminar em 50s, manda uma mensagem de erro
+ * handleIncomingMessage nao terminar em 55s, manda uma mensagem de erro
  * pro usuario mesmo que o processamento original ainda esteja rodando (o
  * Promise.race nao cancela a promise perdedora - ela pode ainda terminar
  * depois e mandar a resposta de verdade, o que é raro mas inofensivo).
  */
-const TIMEOUT_PROCESSAMENTO_MS = 50_000;
+const TIMEOUT_PROCESSAMENTO_MS = 55_000;
 
 async function comTimeoutDeAviso(from: string, promise: Promise<void>): Promise<void> {
   let avisouTimeout = false;

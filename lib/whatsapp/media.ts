@@ -4,7 +4,7 @@ const GRAPH_API_VERSION = process.env.WHATSAPP_API_VERSION || "v21.0";
 // Duas chamadas sequenciais (resolver URL + baixar bytes) dividem o
 // orcamento de 60s da function com o Gemini depois - 10s cada deixa
 // margem suficiente pras duas sem comer o tempo que o Gemini precisa.
-const GRAPH_TIMEOUT_MS = 10_000;
+const GRAPH_TIMEOUT_MS = 8_000;
 
 /**
  * Baixa uma midia recebida no WhatsApp (imagem/documento) a partir do seu

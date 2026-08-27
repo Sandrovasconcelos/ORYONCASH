@@ -1,9 +1,15 @@
 import { fetchComTimeout } from "@/lib/fetchComTimeout";
 
-const GEMINI_MODEL = process.env.GEMINI_MODEL || "gemini-3.6-flash";
-// Concorre com 2 chamadas do Graph API (10s cada) dentro do teto de 60s
-// do webhook - 25s deixa margem pro watchdog de 50s do route.ts nao disparar.
-const GEMINI_TIMEOUT_MS = 25_000;
+// Fixo no codigo, sem ler de env var - uma env var GEMINI_MODEL obsoleta
+// configurada na Vercel (apontando pro alias "flash-latest", que ficou
+// com erro 503 de alta demanda persistente) fez o troca de default no
+// codigo nao ter efeito nenhum. Atualizar o modelo agora exige mexer
+// aqui de proposito, sem essa brecha.
+const GEMINI_MODEL = "gemini-3.6-flash";
+// O Gemini as vezes demora dezenas de segundos em picos de demanda (ja
+// observado ate ~50s em teste real) - 40s cobre a maioria dos casos sem
+// estourar o teto de 60s do webhook (Graph API fica com ~8s cada chamada).
+const GEMINI_TIMEOUT_MS = 40_000;
 
 export type InvoiceItem = {
   descricao: string;
