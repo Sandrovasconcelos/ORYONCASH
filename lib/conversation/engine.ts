@@ -8,7 +8,7 @@ import { extractOrcamentoData, type OrcamentoEtapa } from "@/lib/gemini/extractO
 import { extractDespesaDeAudio } from "@/lib/gemini/extractDespesaAudio";
 import { extractSpreadsheetAsText } from "@/lib/orcamento/parseSpreadsheet";
 import { formatBRL, parseValorBR } from "./format";
-import { ESTADOS, MENU_IDS, CAMPO_IDS, TIPO_REMOVER_IDS, COMANDOS_CANCELAR } from "./states";
+import { ESTADOS, MENU_IDS, CAMPO_IDS, TIPO_REMOVER_IDS, COMANDOS_CANCELAR, RECORRENCIA_IDS } from "./states";
 import { sendMenuPrincipal } from "./menu";
 import { sendListPeriodoRelatorio, gerarEEnviarRelatorio } from "./relatorio";
 import {
@@ -22,6 +22,9 @@ import {
   sendListMateriais,
   sendListMateriaisParaDespesa,
   sendListObrasParaRelatorio,
+  sendListObrasParaContaAPagar,
+  sendButtonsRecorrencia,
+  sendListDiasAviso,
 } from "./lists";
 import {
   findObraById,
@@ -60,6 +63,7 @@ import {
 } from "./queries";
 import { registrarAtividade, getNomePorTelefone } from "@/lib/atividades";
 import { notificarComprovantePagamentoAnexado } from "@/lib/alertas/notificar";
+import { criarContaAPagar } from "@/lib/contasAPagar/queries";
 
 const MIME_TYPES_PLANILHA = [
   "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
@@ -123,6 +127,19 @@ type Dados = {
   tipoRemover?: "obra" | "material" | "fornecedor";
   itemRemoverId?: string;
   itemRemoverNome?: string;
+
+  contaAPagarDescricao?: string;
+  contaAPagarValor?: number;
+  contaAPagarVencimento?: string;
+  contaAPagarArquivo?: {
+    bucket: string;
+    path: string;
+    mimeType: string;
+    nomeArquivo: string | null;
+  } | null;
+  contaAPagarObraId?: string | null;
+  contaAPagarObraNome?: string | null;
+  contaAPagarRecorrencia?: "nenhuma" | "semanal" | "mensal";
 
   despesaAntes?: {
     id: string;
@@ -225,6 +242,9 @@ export async function handleIncomingMessage(message: IncomingMessage) {
   if (message.media) {
     if (session.estado_atual === ESTADOS.ANEXAR_PAGAMENTO_ARQUIVO) {
       return handleAnexarPagamentoArquivo(from, message.media, session);
+    }
+    if (session.estado_atual === ESTADOS.CONTA_A_PAGAR_ARQUIVO) {
+      return handleContaAPagarArquivoRecebido(from, message.media);
     }
     if (MIME_TYPES_PLANILHA.includes(message.media.mimeType)) {
       return handleOrcamentoRecebido(from, message.media);
@@ -352,6 +372,23 @@ export async function handleIncomingMessage(message: IncomingMessage) {
     case ESTADOS.RELATORIO_PERIODO:
       return handleRelatorioPeriodo(from, message, session);
 
+    case ESTADOS.CONTA_A_PAGAR_ARQUIVO:
+      return handleContaAPagarArquivoTexto(from, message);
+    case ESTADOS.CONTA_A_PAGAR_DESCRICAO:
+      return handleContaAPagarDescricao(from, message, session);
+    case ESTADOS.CONTA_A_PAGAR_VALOR:
+      return handleContaAPagarValorManual(from, message, session);
+    case ESTADOS.CONTA_A_PAGAR_VENCIMENTO:
+      return handleContaAPagarVencimento(from, message, session);
+    case ESTADOS.CONTA_A_PAGAR_CONFIRMACAO:
+      return handleContaAPagarConfirmacao(from, message, session);
+    case ESTADOS.CONTA_A_PAGAR_OBRA:
+      return handleContaAPagarObra(from, message, session);
+    case ESTADOS.CONTA_A_PAGAR_RECORRENCIA:
+      return handleContaAPagarRecorrencia(from, message, session);
+    case ESTADOS.CONTA_A_PAGAR_DIAS_AVISO:
+      return handleContaAPagarDiasAviso(from, message, session);
+
     default:
       await resetSession(from);
       await sendMenuPrincipal(from);
@@ -377,6 +414,9 @@ async function handleMenu(from: string, message: IncomingMessage) {
     case MENU_IDS.CADASTRAR_FORNECEDOR:
       await saveSession(from, ESTADOS.CADASTRO_FORNECEDOR_NOME, {});
       await sendText(from, "🏢 Qual o nome do fornecedor?");
+      return;
+    case MENU_IDS.CONTA_A_PAGAR:
+      await iniciarContaAPagar(from);
       return;
     case MENU_IDS.VER_RESUMO:
       await iniciarVerResumo(from);
@@ -1923,6 +1963,274 @@ async function registrarEdicaoDespesa(
     dadosAntes: dados.despesaAntes,
     dadosDepois,
   });
+}
+
+// ---------- Conta a Pagar ----------
+
+async function iniciarContaAPagar(from: string) {
+  await saveSession(from, ESTADOS.CONTA_A_PAGAR_ARQUIVO, {});
+  await sendText(
+    from,
+    "📅 Manda a foto/PDF da conta (boleto, luz, aluguel...), ou digite *manual* pra digitar os dados na mão."
+  );
+}
+
+async function handleContaAPagarArquivoTexto(from: string, message: IncomingMessage) {
+  const texto = message.text?.trim().toLowerCase();
+  if (texto === "manual") {
+    await saveSession(from, ESTADOS.CONTA_A_PAGAR_DESCRICAO, {});
+    await sendText(from, "📝 Descreva a conta (ex: Aluguel da sala, Conta de luz):");
+    return;
+  }
+  await sendText(
+    from,
+    "📅 Manda a foto/PDF da conta, ou digite *manual* pra digitar os dados na mão."
+  );
+}
+
+async function handleContaAPagarArquivoRecebido(from: string, media: IncomingMedia) {
+  await sendText(from, "📅 Recebi a conta, analisando...");
+
+  try {
+    const { buffer, mimeType } = await downloadWhatsAppMedia(media.id);
+    const extraido = await extractInvoiceData(buffer, mimeType);
+    const arquivo = await uploadComprovanteWhatsApp({
+      telefone: from,
+      mediaId: media.id,
+      buffer,
+      mimeType,
+      tipoDocumento: "documento_cobranca",
+    });
+
+    const dados: Dados = {
+      contaAPagarDescricao: extraido?.fornecedorNome && extraido.fornecedorNome !== "Não identificado"
+        ? extraido.fornecedorNome
+        : extraido?.itens?.[0]?.descricao ?? "Conta",
+      contaAPagarValor: extraido?.valorTotalNota ?? extraido?.itens?.[0]?.valorTotal ?? undefined,
+      contaAPagarVencimento: extraido?.dataVencimento ?? undefined,
+      contaAPagarArquivo: { bucket: arquivo.bucket, path: arquivo.path, mimeType: arquivo.mimeType, nomeArquivo: arquivo.nomeArquivo },
+    };
+
+    if (!dados.contaAPagarValor) {
+      await saveSession(from, ESTADOS.CONTA_A_PAGAR_DESCRICAO, dados);
+      await sendText(
+        from,
+        "📅 Não consegui identificar o valor nessa imagem. Digite a descrição da conta pra continuarmos manualmente:"
+      );
+      return;
+    }
+
+    if (!dados.contaAPagarVencimento) {
+      await saveSession(from, ESTADOS.CONTA_A_PAGAR_VENCIMENTO, dados);
+      await sendText(
+        from,
+        `💰 Valor identificado: ${formatBRL(dados.contaAPagarValor)}\n📆 Não achei a data de vencimento. Digite ela (ex: 05/09/2026):`
+      );
+      return;
+    }
+
+    await saveSession(from, ESTADOS.CONTA_A_PAGAR_CONFIRMACAO, dados);
+    await sendButtons(
+      from,
+      `📅 *Identifiquei uma conta a pagar*\n💰 Valor: ${formatBRL(dados.contaAPagarValor)}\n📝 Descrição: ${dados.contaAPagarDescricao}\n📆 Vencimento: ${formatDataBR(dados.contaAPagarVencimento)}\n\nEstá correto?`,
+      [
+        { id: "confirm:sim", title: "Confirmar" },
+        { id: "confirm:nao", title: "Cancelar" },
+      ]
+    );
+  } catch (error) {
+    console.error("Erro ao processar conta a pagar:", error);
+    Sentry.captureException(error);
+    await sendText(
+      from,
+      "📅 Não consegui ler essa imagem. Digite *manual* pra cadastrar a conta digitando os dados."
+    );
+  }
+}
+
+async function handleContaAPagarDescricao(from: string, message: IncomingMessage, session: Session) {
+  if (!message.text) {
+    await sendText(from, "📝 Digite a descrição da conta.");
+    return;
+  }
+  const dados: Dados = { ...session.dados_coletados, contaAPagarDescricao: message.text.trim() };
+  await saveSession(from, ESTADOS.CONTA_A_PAGAR_VALOR, dados);
+  await sendText(from, "💰 Qual o valor? (ex: 1500,00)");
+}
+
+async function handleContaAPagarValorManual(from: string, message: IncomingMessage, session: Session) {
+  const valor = message.text ? parseValorBR(message.text) : null;
+  if (valor === null) {
+    await sendText(from, "💰 Não entendi o valor. Digite apenas o número, ex: 1500,00");
+    return;
+  }
+  const dados: Dados = { ...session.dados_coletados, contaAPagarValor: valor };
+  await saveSession(from, ESTADOS.CONTA_A_PAGAR_VENCIMENTO, dados);
+  await sendText(from, "📆 Qual a data de vencimento? (ex: 05/09/2026)");
+}
+
+function parseDataBR(texto: string): string | null {
+  const match = texto.trim().match(/^(\d{1,2})\/(\d{1,2})(?:\/(\d{2,4}))?$/);
+  if (!match) return null;
+  const dia = Number(match[1]);
+  const mes = Number(match[2]);
+  let ano = match[3] ? Number(match[3]) : new Date().getFullYear();
+  if (ano < 100) ano += 2000;
+  if (dia < 1 || dia > 31 || mes < 1 || mes > 12) return null;
+  return `${ano}-${String(mes).padStart(2, "0")}-${String(dia).padStart(2, "0")}`;
+}
+
+async function handleContaAPagarVencimento(from: string, message: IncomingMessage, session: Session) {
+  const vencimento = message.text ? parseDataBR(message.text) : null;
+  if (!vencimento) {
+    await sendText(from, "📆 Não entendi a data. Digite no formato dd/mm/aaaa, ex: 05/09/2026");
+    return;
+  }
+  const dados: Dados = { ...session.dados_coletados, contaAPagarVencimento: vencimento };
+
+  if (!dados.contaAPagarValor || !dados.contaAPagarDescricao) {
+    await saveSession(from, ESTADOS.CONTA_A_PAGAR_OBRA, dados);
+    await sendListObrasParaContaAPagar(from);
+    return;
+  }
+
+  await saveSession(from, ESTADOS.CONTA_A_PAGAR_CONFIRMACAO, dados);
+  await sendButtons(
+    from,
+    `📅 *Confirma a conta a pagar?*\n💰 Valor: ${formatBRL(dados.contaAPagarValor)}\n📝 Descrição: ${dados.contaAPagarDescricao}\n📆 Vencimento: ${formatDataBR(vencimento)}`,
+    [
+      { id: "confirm:sim", title: "Confirmar" },
+      { id: "confirm:nao", title: "Cancelar" },
+    ]
+  );
+}
+
+async function handleContaAPagarConfirmacao(from: string, message: IncomingMessage, session: Session) {
+  const dados = session.dados_coletados as Dados;
+  if (message.replyId === "confirm:nao") {
+    await sendText(from, "🚫 Cadastro cancelado.");
+    await resetSession(from);
+    await sendMenuPrincipal(from);
+    return;
+  }
+  if (message.replyId !== "confirm:sim") {
+    await sendButtons(from, "Está correto?", [
+      { id: "confirm:sim", title: "Confirmar" },
+      { id: "confirm:nao", title: "Cancelar" },
+    ]);
+    return;
+  }
+  await saveSession(from, ESTADOS.CONTA_A_PAGAR_OBRA, dados);
+  await sendListObrasParaContaAPagar(from);
+}
+
+async function handleContaAPagarObra(from: string, message: IncomingMessage, session: Session) {
+  const dados = session.dados_coletados as Dados;
+  const texto = message.text?.trim();
+
+  if (texto === "0") {
+    await saveSession(from, ESTADOS.CONTA_A_PAGAR_RECORRENCIA, {
+      ...dados,
+      contaAPagarObraId: null,
+      contaAPagarObraNome: null,
+    });
+    await sendButtonsRecorrencia(from);
+    return;
+  }
+
+  const obra = message.text ? await findObraPorTexto(message.text) : null;
+  if (!obra) {
+    await sendListObrasParaContaAPagar(from);
+    return;
+  }
+
+  await saveSession(from, ESTADOS.CONTA_A_PAGAR_RECORRENCIA, {
+    ...dados,
+    contaAPagarObraId: obra.id,
+    contaAPagarObraNome: obra.nome,
+  });
+  await sendButtonsRecorrencia(from);
+}
+
+async function handleContaAPagarRecorrencia(from: string, message: IncomingMessage, session: Session) {
+  const dados = session.dados_coletados as Dados;
+  const mapa: Record<string, "nenhuma" | "semanal" | "mensal"> = {
+    [RECORRENCIA_IDS.NENHUMA]: "nenhuma",
+    [RECORRENCIA_IDS.SEMANAL]: "semanal",
+    [RECORRENCIA_IDS.MENSAL]: "mensal",
+  };
+  const recorrencia = message.replyId ? mapa[message.replyId] : undefined;
+  if (!recorrencia) {
+    await sendButtonsRecorrencia(from);
+    return;
+  }
+
+  await saveSession(from, ESTADOS.CONTA_A_PAGAR_DIAS_AVISO, { ...dados, contaAPagarRecorrencia: recorrencia });
+  await sendListDiasAviso(from);
+}
+
+async function handleContaAPagarDiasAviso(from: string, message: IncomingMessage, session: Session) {
+  const dados = session.dados_coletados as Dados;
+  const texto = message.text?.trim();
+
+  let dias: number | null = null;
+  if (texto === "1") dias = 1;
+  else if (texto === "2") dias = 3;
+  else if (texto === "3") dias = 7;
+  else if (texto === "4") dias = -1;
+  else if (texto && /^\d+$/.test(texto)) dias = Number(texto);
+
+  if (dias === null) {
+    await sendListDiasAviso(from);
+    return;
+  }
+
+  await finalizarContaAPagar(from, dados, dias);
+}
+
+async function finalizarContaAPagar(from: string, dados: Dados, avisarDiasAntes: number) {
+  const autorNome = await getNomePorTelefone(from);
+
+  const id = await criarContaAPagar({
+    descricao: dados.contaAPagarDescricao!,
+    valor: dados.contaAPagarValor!,
+    dataVencimento: dados.contaAPagarVencimento!,
+    obraId: dados.contaAPagarObraId ?? null,
+    recorrencia: dados.contaAPagarRecorrencia ?? "nenhuma",
+    avisarDiasAntes,
+    arquivo: dados.contaAPagarArquivo ?? null,
+    criadoPor: autorNome,
+  });
+
+  if (!id) {
+    await sendText(from, "⚠️ Não consegui salvar essa conta a pagar. Tente de novo.");
+    await resetSession(from);
+    await sendMenuPrincipal(from);
+    return;
+  }
+
+  await registrarAtividade({
+    tipo: "criacao",
+    entidade: "conta_a_pagar",
+    entidadeId: id,
+    origem: "whatsapp",
+    autorTelefone: from,
+    autorNome,
+    resumo: `Conta a pagar "${dados.contaAPagarDescricao}" (${formatBRL(dados.contaAPagarValor ?? 0)}) cadastrada por ${autorNome}`,
+    dadosDepois: dados,
+  });
+
+  const partes = [
+    "✅ Conta a pagar cadastrada!",
+    `📝 ${dados.contaAPagarDescricao}`,
+    `💰 ${formatBRL(dados.contaAPagarValor ?? 0)}`,
+    `📆 Vence ${formatDataBR(dados.contaAPagarVencimento!)}`,
+    dados.contaAPagarObraNome ? `🏗️ ${dados.contaAPagarObraNome}` : "🏢 Sem obra (Administrativo)",
+    avisarDiasAntes >= 0 ? `🔔 Aviso ${avisarDiasAntes} dia(s) antes` : "🔕 Sem aviso antecipado",
+  ];
+  await sendText(from, partes.join("\n"));
+  await resetSession(from);
+  await sendMenuPrincipal(from);
 }
 
 // ---------- Corrigir Lançamento ----------

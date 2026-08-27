@@ -30,6 +30,11 @@ export async function sendMenuPrincipal(to: string) {
             description: "Adicionar loja, prestador ou empresa",
           },
           {
+            id: MENU_IDS.CONTA_A_PAGAR,
+            title: "📅 Conta a pagar",
+            description: "Cadastrar boleto/conta com vencimento futuro",
+          },
+          {
             id: MENU_IDS.VER_RESUMO,
             title: "📊 Ver resumo",
             description: "Orçamento x gasto de uma obra",

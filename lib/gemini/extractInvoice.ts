@@ -31,6 +31,7 @@ export type InvoiceData = {
   contaOrigemNumero: string | null;
   metodoPagamento: string | null;
   numeroDocumento: string | null;
+  dataVencimento: string | null;
   itens: InvoiceItem[];
   valorTotalNota: number | null;
 };
@@ -88,6 +89,10 @@ Regras:
   discriminação de item).
 - "valorTotalNota": valor total do documento. Use null se não conseguir
   identificar.
+- "dataVencimento": data de vencimento no formato AAAA-MM-DD, quando o
+  documento for um boleto/conta/fatura ainda não paga (ex: conta de luz,
+  boleto de aluguel). Use null se não houver data de vencimento visível ou
+  se o documento já for um comprovante de pagamento concluído.
 - Responda APENAS com o JSON, sem texto adicional.`;
 
 const RESPONSE_SCHEMA = {
@@ -125,6 +130,7 @@ const RESPONSE_SCHEMA = {
       },
     },
     valorTotalNota: { type: "number", nullable: true },
+    dataVencimento: { type: "string", nullable: true },
   },
   required: [
     "tipoDocumento",
@@ -142,6 +148,7 @@ const RESPONSE_SCHEMA = {
     "metodoPagamento",
     "numeroDocumento",
     "itens",
+    "dataVencimento",
   ],
 };
 

@@ -1,4 +1,4 @@
-import { sendList, sendText } from "@/lib/whatsapp/messages";
+import { sendList, sendText, sendButtons } from "@/lib/whatsapp/messages";
 import {
   listObrasAtivas,
   listCategorias,
@@ -9,7 +9,7 @@ import {
   buscarDespesasPorTexto,
 } from "./queries";
 import { formatBRL } from "./format";
-import { CAMPO_IDS } from "./states";
+import { CAMPO_IDS, RECORRENCIA_IDS } from "./states";
 
 /**
  * Lista numerada em texto simples - sem limite de 10 itens como as
@@ -116,6 +116,29 @@ export async function sendListDespesasBusca(to: string, termo: string) {
       },
     ],
   });
+}
+
+export async function sendListObrasParaContaAPagar(to: string) {
+  const obras = await listObrasAtivas();
+  await sendText(
+    to,
+    `🏗️ *Qual obra?*\n\n0. 🏢 Sem obra (Administrativo)\n${formatarListaNumerada(obras)}\n\nResponda com o número ou digite o nome.`
+  );
+}
+
+export async function sendButtonsRecorrencia(to: string) {
+  await sendButtons(to, "🔁 Essa conta se repete?", [
+    { id: RECORRENCIA_IDS.NENHUMA, title: "Não repete" },
+    { id: RECORRENCIA_IDS.SEMANAL, title: "Toda semana" },
+    { id: RECORRENCIA_IDS.MENSAL, title: "Todo mês" },
+  ]);
+}
+
+export async function sendListDiasAviso(to: string) {
+  await sendText(
+    to,
+    "🔔 *Quantos dias antes do vencimento quer ser avisado?*\n\n1. 1 dia antes\n2. 3 dias antes\n3. 7 dias antes\n4. Não avisar\n\nResponda com o número da opção, ou digite outro número de dias."
+  );
 }
 
 export async function sendListCamposParaCorrigir(to: string) {

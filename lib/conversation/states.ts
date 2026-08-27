@@ -49,6 +49,15 @@ export const ESTADOS = {
 
   RELATORIO_OBRA: "relatorio_obra",
   RELATORIO_PERIODO: "relatorio_periodo",
+
+  CONTA_A_PAGAR_ARQUIVO: "conta_a_pagar_arquivo",
+  CONTA_A_PAGAR_DESCRICAO: "conta_a_pagar_descricao",
+  CONTA_A_PAGAR_VALOR: "conta_a_pagar_valor",
+  CONTA_A_PAGAR_VENCIMENTO: "conta_a_pagar_vencimento",
+  CONTA_A_PAGAR_CONFIRMACAO: "conta_a_pagar_confirmacao",
+  CONTA_A_PAGAR_OBRA: "conta_a_pagar_obra",
+  CONTA_A_PAGAR_RECORRENCIA: "conta_a_pagar_recorrencia",
+  CONTA_A_PAGAR_DIAS_AVISO: "conta_a_pagar_dias_aviso",
 } as const;
 
 export const MENU_IDS = {
@@ -60,6 +69,13 @@ export const MENU_IDS = {
   CORRIGIR_LANCAMENTO: "menu:corrigir_lancamento",
   REMOVER_CADASTRO: "menu:remover_cadastro",
   RELATORIO: "menu:relatorio",
+  CONTA_A_PAGAR: "menu:conta_a_pagar",
+} as const;
+
+export const RECORRENCIA_IDS = {
+  NENHUMA: "recorrencia:nenhuma",
+  SEMANAL: "recorrencia:semanal",
+  MENSAL: "recorrencia:mensal",
 } as const;
 
 export const PERIODO_RELATORIO_IDS = {

@@ -24,6 +24,41 @@ export function proximaData(dataVencimento: string, recorrencia: Recorrencia): s
   return data.toISOString().slice(0, 10);
 }
 
+export async function criarContaAPagar(input: {
+  descricao: string;
+  valor: number;
+  dataVencimento: string;
+  obraId: string | null;
+  recorrencia: Recorrencia;
+  avisarDiasAntes: number;
+  arquivo?: { bucket: string; path: string; mimeType: string; nomeArquivo: string | null } | null;
+  criadoPor?: string | null;
+}): Promise<string | null> {
+  const supabase = createAdminClient();
+  const { data, error } = await supabase
+    .from("contas_a_pagar")
+    .insert({
+      descricao: input.descricao,
+      valor: input.valor,
+      data_vencimento: input.dataVencimento,
+      obra_id: input.obraId,
+      recorrencia: input.recorrencia,
+      avisar_dias_antes: input.avisarDiasAntes,
+      storage_bucket: input.arquivo?.bucket ?? null,
+      storage_path: input.arquivo?.path ?? null,
+      nome_arquivo: input.arquivo?.nomeArquivo ?? null,
+      created_by: input.criadoPor ?? null,
+    })
+    .select("id")
+    .single();
+
+  if (error) {
+    console.error("Falha ao criar conta a pagar pelo WhatsApp:", error);
+    return null;
+  }
+  return data.id;
+}
+
 export async function marcarContaAPagarComoPaga(input: {
   contaId: string;
   comprovante?: {
