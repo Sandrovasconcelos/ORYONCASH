@@ -1,7 +1,9 @@
 import { fetchComTimeout } from "@/lib/fetchComTimeout";
 
 const GEMINI_MODEL = process.env.GEMINI_MODEL || "gemini-3.6-flash";
-const GEMINI_TIMEOUT_MS = 35_000;
+// Concorre com 2 chamadas do Graph API (10s cada) dentro do teto de 60s
+// do webhook - 25s deixa margem pro watchdog de 50s do route.ts nao disparar.
+const GEMINI_TIMEOUT_MS = 25_000;
 
 export type OrcamentoEtapa = {
   nome: string;
