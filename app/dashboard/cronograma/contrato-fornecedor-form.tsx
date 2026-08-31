@@ -107,8 +107,8 @@ export function ContratoFornecedorForm({
           ))}
         </select>
         <span className="text-xs font-normal text-brand-gray-500">
-          Etapa e categoria se somam: se as duas estiverem definidas, só conta lançamento que bate
-          com as duas.
+          Com categoria definida, o fornecedor do lançamento não importa — só categoria (+ etapa,
+          se definida) contam. Sem categoria, o cálculo volta a somar por fornecedor.
         </span>
       </label>
 
