@@ -233,15 +233,6 @@ export default async function CronogramaPage({
 
   const nomesEtapa = new Map(todasEtapas.map((e) => [e.id, e.nome]));
 
-  const pagoPorFornecedorEEtapa = new Map<string, number>();
-  for (const d of despesasObra) {
-    if (!d.fornecedor_id) continue;
-    if (d.etapa_id) {
-      const chave = `${d.fornecedor_id}::${d.etapa_id}`;
-      pagoPorFornecedorEEtapa.set(chave, (pagoPorFornecedorEEtapa.get(chave) ?? 0) + d.valor);
-    }
-  }
-
   const etapasEscopadasPorFornecedor = new Map<string, Set<string>>();
   for (const c of contratosObra) {
     if (!c.etapa_id) continue;
@@ -250,22 +241,21 @@ export default async function CronogramaPage({
     etapasEscopadasPorFornecedor.set(c.fornecedor_id, etapasDoFornecedor);
   }
 
-  // Sem etapa, a categoria vira o segundo criterio de escopo - resolve o
-  // caso de um mesmo fornecedor ter mais de um contrato geral na obra (ex:
-  // um de material, outro de mao de obra) sem precisar de etapa.
+  // Etapa e categoria funcionam como filtros que se somam (E, nao OU): se as
+  // duas estiverem definidas, so conta despesa que bate com as duas. Sem
+  // etapa, exclui despesas cuja etapa ja esteja "reivindicada" por outro
+  // contrato etapa-scoped do mesmo fornecedor, pra nao contar duas vezes.
   function pagoDoContrato(contrato: {
     fornecedor_id: string;
     etapa_id: string | null;
     categoria_id: string | null;
   }): number {
-    if (contrato.etapa_id) {
-      return pagoPorFornecedorEEtapa.get(`${contrato.fornecedor_id}::${contrato.etapa_id}`) ?? 0;
-    }
     const etapasEscopadas = etapasEscopadasPorFornecedor.get(contrato.fornecedor_id);
     return despesasObra.reduce((soma, d) => {
       if (d.fornecedor_id !== contrato.fornecedor_id) return soma;
+      if (contrato.etapa_id && d.etapa_id !== contrato.etapa_id) return soma;
       if (contrato.categoria_id && d.categoria_id !== contrato.categoria_id) return soma;
-      if (etapasEscopadas && d.etapa_id && etapasEscopadas.has(d.etapa_id)) return soma;
+      if (!contrato.etapa_id && etapasEscopadas && d.etapa_id && etapasEscopadas.has(d.etapa_id)) return soma;
       return soma + d.valor;
     }, 0);
   }
