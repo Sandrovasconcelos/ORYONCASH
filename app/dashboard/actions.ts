@@ -2869,22 +2869,32 @@ export async function createContratoFornecedorAction(formData: FormData) {
   const obraId = String(formData.get("obra_id") ?? "");
   const fornecedorId = String(formData.get("fornecedor_id") ?? "");
   const etapaId = String(formData.get("etapa_id") ?? "").trim() || null;
+  const categoriaId = String(formData.get("categoria_id") ?? "").trim() || null;
   const descricao = String(formData.get("descricao") ?? "").trim() || null;
   const valorContrato = parseValorBR(String(formData.get("valor_contrato") ?? "0")) ?? 0;
   if (!obraId || !fornecedorId) return;
 
   const supabase = await createClient();
-  const { data: contrato } = await supabase
+  const comCategoria = await supabase
     .from("contratos_fornecedor")
     .insert({
       obra_id: obraId,
       fornecedor_id: fornecedorId,
       etapa_id: etapaId,
+      categoria_id: categoriaId,
       descricao,
       valor_contrato: valorContrato,
     })
     .select("id")
     .single();
+  // categoria_id pode ainda nao existir se a migration nao rodou.
+  const { data: contrato } = comCategoria.error
+    ? await supabase
+        .from("contratos_fornecedor")
+        .insert({ obra_id: obraId, fornecedor_id: fornecedorId, etapa_id: etapaId, descricao, valor_contrato: valorContrato })
+        .select("id")
+        .single()
+    : comCategoria;
 
   const arquivo = formData.get("arquivo");
   if (contrato && arquivo instanceof File && arquivo.size > 0) {
@@ -2899,7 +2909,7 @@ export async function createContratoFornecedorAction(formData: FormData) {
     origem: "dashboard",
     autorNome,
     resumo: `Contrato de fornecedor cadastrado (${formatBRL(valorContrato)}) por ${autorNome}`,
-    dadosDepois: { id: contrato?.id, fornecedorId, etapaId, descricao, valorContrato },
+    dadosDepois: { id: contrato?.id, fornecedorId, etapaId, categoriaId, descricao, valorContrato },
   });
 
   revalidatePath("/dashboard/cronograma");
@@ -2909,6 +2919,7 @@ export async function updateContratoFornecedorAction(formData: FormData) {
   const id = String(formData.get("id") ?? "");
   const fornecedorId = String(formData.get("fornecedor_id") ?? "");
   const etapaId = String(formData.get("etapa_id") ?? "").trim() || null;
+  const categoriaId = String(formData.get("categoria_id") ?? "").trim() || null;
   const descricao = String(formData.get("descricao") ?? "").trim() || null;
   const valorContrato = parseValorBR(String(formData.get("valor_contrato") ?? "0")) ?? 0;
   if (!id || !fornecedorId) return;
@@ -2920,8 +2931,13 @@ export async function updateContratoFornecedorAction(formData: FormData) {
     .eq("id", id)
     .maybeSingle();
 
-  const depois = { fornecedor_id: fornecedorId, etapa_id: etapaId, descricao, valor_contrato: valorContrato };
-  await supabase.from("contratos_fornecedor").update(depois).eq("id", id);
+  const depois = { fornecedor_id: fornecedorId, etapa_id: etapaId, categoria_id: categoriaId, descricao, valor_contrato: valorContrato };
+  const { error: updateError } = await supabase.from("contratos_fornecedor").update(depois).eq("id", id);
+  if (updateError?.message.toLowerCase().includes("categoria_id")) {
+    const { categoria_id: _categoriaIdIgnorada, ...semCategoria } = depois;
+    void _categoriaIdIgnorada;
+    await supabase.from("contratos_fornecedor").update(semCategoria).eq("id", id);
+  }
 
   const arquivo = formData.get("arquivo");
   if (arquivo instanceof File && arquivo.size > 0) {

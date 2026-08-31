@@ -951,6 +951,7 @@ export interface Database {
           obra_id: string;
           fornecedor_id: string;
           etapa_id: string | null;
+          categoria_id: string | null;
           descricao: string | null;
           valor_contrato: number;
           arquivo_storage_path: string | null;
@@ -966,6 +967,7 @@ export interface Database {
           obra_id: string;
           fornecedor_id: string;
           etapa_id?: string | null;
+          categoria_id?: string | null;
           descricao?: string | null;
           valor_contrato?: number;
           arquivo_storage_path?: string | null;
@@ -999,6 +1001,13 @@ export interface Database {
             columns: ["etapa_id"];
             isOneToOne: false;
             referencedRelation: "etapas";
+            referencedColumns: ["id"];
+          },
+          {
+            foreignKeyName: "contratos_fornecedor_categoria_id_fkey";
+            columns: ["categoria_id"];
+            isOneToOne: false;
+            referencedRelation: "categorias";
             referencedColumns: ["id"];
           },
         ];

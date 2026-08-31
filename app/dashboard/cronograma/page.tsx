@@ -46,13 +46,14 @@ export default async function CronogramaPage({
   const params = await searchParams;
   const supabase = createAdminClient();
 
-  const [{ data: obras }, { data: fornecedores }, etapasQuery] = await Promise.all([
+  const [{ data: obras }, { data: fornecedores }, { data: categorias }, etapasQuery] = await Promise.all([
     supabase
       .from("obras")
       .select("id, nome, status, orcamento_total")
       .is("deleted_at", null)
       .order("created_at", { ascending: false }),
     supabase.from("fornecedores").select("id, nome").is("deleted_at", null).order("nome"),
+    supabase.from("categorias").select("id, nome").is("deleted_at", null).order("nome"),
     supabase
       .from("etapas")
       .select("id, nome, obra_id, valor_orcado, data_inicio_prevista, data_fim_prevista, percentual_executado")
@@ -66,6 +67,8 @@ export default async function CronogramaPage({
   const moduloIndisponivel = Boolean(etapasQuery.error);
   const listaFornecedores = fornecedores ?? [];
   const nomesFornecedor = new Map(listaFornecedores.map((f) => [f.id, f.nome]));
+  const listaCategoriasContrato = categorias ?? [];
+  const nomesCategoria = new Map(listaCategoriasContrato.map((c) => [c.id, c.nome]));
 
   if (moduloIndisponivel) {
     return (
@@ -87,12 +90,14 @@ export default async function CronogramaPage({
     data: string;
     fornecedor_id: string | null;
     etapa_id: string | null;
+    categoria_id: string | null;
   }[] = [];
   let contratosObra: {
     id: string;
     obra_id: string;
     fornecedor_id: string;
     etapa_id: string | null;
+    categoria_id: string | null;
     descricao: string | null;
     valor_contrato: number;
     arquivo_storage_path: string | null;
@@ -103,10 +108,20 @@ export default async function CronogramaPage({
     const [{ data: despesasData }, contratosQuery] = await Promise.all([
       supabase
         .from("despesas")
-        .select("valor, data, fornecedor_id, etapa_id")
+        .select("valor, data, fornecedor_id, etapa_id, categoria_id")
         .eq("obra_id", obraAtual.id)
         .is("deleted_at", null),
       (async () => {
+        const comCategoria = await supabase
+          .from("contratos_fornecedor")
+          .select(
+            "id, obra_id, fornecedor_id, etapa_id, categoria_id, descricao, valor_contrato, arquivo_storage_path, arquivo_nome"
+          )
+          .eq("obra_id", obraAtual.id)
+          .is("deleted_at", null)
+          .order("created_at", { ascending: false });
+        if (!comCategoria.error) return comCategoria;
+        // categoria_id pode ainda nao existir se a migration nao rodou.
         const completa = await supabase
           .from("contratos_fornecedor")
           .select(
@@ -133,7 +148,10 @@ export default async function CronogramaPage({
           .order("created_at", { ascending: false });
       })(),
     ]);
-    despesasObra = despesasData ?? [];
+    despesasObra = (despesasData ?? []).map((d) => ({
+      ...d,
+      categoria_id: (d as { categoria_id?: string | null }).categoria_id ?? null,
+    }));
     contratosObra = await Promise.all(
       (contratosQuery.data ?? []).map(async (c) => {
         const contratoInfo = c as unknown as {
@@ -141,6 +159,7 @@ export default async function CronogramaPage({
           obra_id: string;
           fornecedor_id: string;
           etapa_id?: string | null;
+          categoria_id?: string | null;
           descricao: string | null;
           valor_contrato: number;
           arquivo_storage_path?: string | null;
@@ -156,6 +175,7 @@ export default async function CronogramaPage({
         return {
           ...contratoInfo,
           etapa_id: contratoInfo.etapa_id ?? null,
+          categoria_id: contratoInfo.categoria_id ?? null,
           arquivo_storage_path: contratoInfo.arquivo_storage_path ?? null,
           arquivo_nome: contratoInfo.arquivo_nome ?? null,
           arquivo_url: arquivoUrl,
@@ -213,11 +233,9 @@ export default async function CronogramaPage({
 
   const nomesEtapa = new Map(todasEtapas.map((e) => [e.id, e.nome]));
 
-  const pagoPorFornecedor = new Map<string, number>();
   const pagoPorFornecedorEEtapa = new Map<string, number>();
   for (const d of despesasObra) {
     if (!d.fornecedor_id) continue;
-    pagoPorFornecedor.set(d.fornecedor_id, (pagoPorFornecedor.get(d.fornecedor_id) ?? 0) + d.valor);
     if (d.etapa_id) {
       const chave = `${d.fornecedor_id}::${d.etapa_id}`;
       pagoPorFornecedorEEtapa.set(chave, (pagoPorFornecedorEEtapa.get(chave) ?? 0) + d.valor);
@@ -232,17 +250,22 @@ export default async function CronogramaPage({
     etapasEscopadasPorFornecedor.set(c.fornecedor_id, etapasDoFornecedor);
   }
 
-  function pagoDoContrato(contrato: { fornecedor_id: string; etapa_id: string | null }): number {
+  // Sem etapa, a categoria vira o segundo criterio de escopo - resolve o
+  // caso de um mesmo fornecedor ter mais de um contrato geral na obra (ex:
+  // um de material, outro de mao de obra) sem precisar de etapa.
+  function pagoDoContrato(contrato: {
+    fornecedor_id: string;
+    etapa_id: string | null;
+    categoria_id: string | null;
+  }): number {
     if (contrato.etapa_id) {
       return pagoPorFornecedorEEtapa.get(`${contrato.fornecedor_id}::${contrato.etapa_id}`) ?? 0;
     }
     const etapasEscopadas = etapasEscopadasPorFornecedor.get(contrato.fornecedor_id);
-    if (!etapasEscopadas || etapasEscopadas.size === 0) {
-      return pagoPorFornecedor.get(contrato.fornecedor_id) ?? 0;
-    }
     return despesasObra.reduce((soma, d) => {
       if (d.fornecedor_id !== contrato.fornecedor_id) return soma;
-      if (d.etapa_id && etapasEscopadas.has(d.etapa_id)) return soma;
+      if (contrato.categoria_id && d.categoria_id !== contrato.categoria_id) return soma;
+      if (etapasEscopadas && d.etapa_id && etapasEscopadas.has(d.etapa_id)) return soma;
       return soma + d.valor;
     }, 0);
   }
@@ -303,7 +326,8 @@ export default async function CronogramaPage({
             <p className="text-sm font-semibold text-brand-black">Contratos de fornecedores</p>
             <p className="mt-1 text-xs text-brand-gray-500">
               Valor contratado x já pago. Escopado a uma etapa, soma só as despesas daquela etapa;
-              sem etapa, soma todas as despesas do fornecedor nesta obra.
+              sem etapa, soma as despesas do fornecedor nesta obra (filtrando por categoria também,
+              se você definir uma — útil quando o mesmo fornecedor tem mais de um contrato geral).
             </p>
           </div>
           <CadastroModal
@@ -337,6 +361,20 @@ export default async function CronogramaPage({
                 </select>
               </label>
               <label className="flex flex-col gap-1 text-sm text-brand-gray-700">
+                Categoria (opcional)
+                <select name="categoria_id" className="oc-input" defaultValue="">
+                  <option value="">Qualquer categoria</option>
+                  {listaCategoriasContrato.map((c) => (
+                    <option key={c.id} value={c.id}>
+                      {c.nome}
+                    </option>
+                  ))}
+                </select>
+                <span className="text-xs font-normal text-brand-gray-500">
+                  Sem etapa definida, só lançamentos dessa categoria contam pro contrato.
+                </span>
+              </label>
+              <label className="flex flex-col gap-1 text-sm text-brand-gray-700">
                 Descrição
                 <input name="descricao" placeholder="Ex: Mão de obra" className="oc-input" />
               </label>
@@ -366,6 +404,7 @@ export default async function CronogramaPage({
               <tr>
                 <th>Fornecedor</th>
                 <th>Etapa</th>
+                <th>Categoria</th>
                 <th>Descrição</th>
                 <th>Arquivo</th>
                 <th className="text-right">Contrato</th>
@@ -397,6 +436,9 @@ export default async function CronogramaPage({
                           Geral
                         </span>
                       )}
+                    </td>
+                    <td className="text-brand-gray-700">
+                      {contrato.categoria_id ? nomesCategoria.get(contrato.categoria_id) ?? "—" : "—"}
                     </td>
                     <td className="text-brand-gray-700">{contrato.descricao || "—"}</td>
                     <td>
@@ -473,6 +515,24 @@ export default async function CronogramaPage({
                                   </option>
                                 ))}
                               </select>
+                            </label>
+                            <label className="flex flex-col gap-1 text-sm text-brand-gray-700">
+                              Categoria (opcional)
+                              <select
+                                name="categoria_id"
+                                defaultValue={contrato.categoria_id ?? ""}
+                                className="oc-input"
+                              >
+                                <option value="">Qualquer categoria</option>
+                                {listaCategoriasContrato.map((c) => (
+                                  <option key={c.id} value={c.id}>
+                                    {c.nome}
+                                  </option>
+                                ))}
+                              </select>
+                              <span className="text-xs font-normal text-brand-gray-500">
+                                Sem etapa definida, só lançamentos dessa categoria contam pro contrato.
+                              </span>
                             </label>
                             <label className="flex flex-col gap-1 text-sm text-brand-gray-700">
                               Descrição
