@@ -15,7 +15,7 @@ import { ObraSelector } from "../obra-selector";
 import { CronogramaTabs } from "./cronograma-tabs";
 import { DistribuicaoMensalTable } from "./distribuicao-mensal-table";
 import { CurvaSChart } from "../charts/curva-s-chart";
-import { SubmitButton } from "../submit-button";
+import { ContratoFornecedorForm } from "./contrato-fornecedor-form";
 
 export const dynamic = "force-dynamic";
 
@@ -326,65 +326,14 @@ export default async function CronogramaPage({
             botao="+ Novo contrato"
             variante="primario"
           >
-            <form action={createContratoFornecedorAction} className="flex flex-col gap-4">
-              <input type="hidden" name="obra_id" value={obraAtual.id} />
-              <label className="flex flex-col gap-1 text-sm text-brand-gray-700">
-                Fornecedor
-                <select name="fornecedor_id" required className="oc-input">
-                  <option value="">Selecione</option>
-                  {listaFornecedores.map((f) => (
-                    <option key={f.id} value={f.id}>
-                      {f.nome}
-                    </option>
-                  ))}
-                </select>
-              </label>
-              <label className="flex flex-col gap-1 text-sm text-brand-gray-700">
-                Etapa (opcional)
-                <select name="etapa_id" className="oc-input" defaultValue="">
-                  <option value="">Nenhuma etapa específica (contrato geral)</option>
-                  {etapas.map((e) => (
-                    <option key={e.id} value={e.id}>
-                      {e.nome}
-                    </option>
-                  ))}
-                </select>
-              </label>
-              <label className="flex flex-col gap-1 text-sm text-brand-gray-700">
-                Categoria (opcional)
-                <select name="categoria_id" className="oc-input" defaultValue="">
-                  <option value="">Qualquer categoria</option>
-                  {listaCategoriasContrato.map((c) => (
-                    <option key={c.id} value={c.id}>
-                      {c.nome}
-                    </option>
-                  ))}
-                </select>
-                <span className="text-xs font-normal text-brand-gray-500">
-                  Sem etapa definida, só lançamentos dessa categoria contam pro contrato.
-                </span>
-              </label>
-              <label className="flex flex-col gap-1 text-sm text-brand-gray-700">
-                Descrição
-                <input name="descricao" placeholder="Ex: Mão de obra" className="oc-input" />
-              </label>
-              <label className="flex flex-col gap-1 text-sm text-brand-gray-700">
-                Valor do contrato
-                <input name="valor_contrato" placeholder="0,00" required className="oc-input" />
-              </label>
-              <label className="flex flex-col gap-1 text-sm text-brand-gray-700">
-                Contrato assinado (PDF ou Word)
-                <input
-                  type="file"
-                  name="arquivo"
-                  accept=".pdf,.doc,.docx,application/pdf,application/msword,application/vnd.openxmlformats-officedocument.wordprocessingml.document"
-                  className="oc-input"
-                />
-              </label>
-              <SubmitButton className="oc-button oc-button-primary">
-                Salvar contrato
-              </SubmitButton>
-            </form>
+            <ContratoFornecedorForm
+              action={createContratoFornecedorAction}
+              obras={listaObras}
+              obraIdPadrao={obraAtual.id}
+              todasEtapas={todasEtapas}
+              categorias={listaCategoriasContrato}
+              fornecedores={listaFornecedores}
+            />
           </CadastroModal>
         </div>
 
@@ -469,111 +418,20 @@ export default async function CronogramaPage({
                       <div className="flex items-center justify-end gap-2">
                         <CadastroModal
                           titulo="Editar contrato"
-                          descricao="Atualize fornecedor, descrição e valor."
+                          descricao="Atualize obra, fornecedor, etapa/categoria e valor."
                           botao="Editar"
                           icone={<ActionIcon name="edit" />}
                           variante="icone"
                         >
-                          <form action={updateContratoFornecedorAction} className="flex flex-col gap-4">
-                            <input type="hidden" name="id" value={contrato.id} />
-                            <label className="flex flex-col gap-1 text-sm text-brand-gray-700">
-                              Fornecedor
-                              <select
-                                name="fornecedor_id"
-                                required
-                                defaultValue={contrato.fornecedor_id}
-                                className="oc-input"
-                              >
-                                {listaFornecedores.map((f) => (
-                                  <option key={f.id} value={f.id}>
-                                    {f.nome}
-                                  </option>
-                                ))}
-                              </select>
-                            </label>
-                            <label className="flex flex-col gap-1 text-sm text-brand-gray-700">
-                              Etapa (opcional)
-                              <select
-                                name="etapa_id"
-                                defaultValue={contrato.etapa_id ?? ""}
-                                className="oc-input"
-                              >
-                                <option value="">Nenhuma etapa específica (contrato geral)</option>
-                                {etapas.map((e) => (
-                                  <option key={e.id} value={e.id}>
-                                    {e.nome}
-                                  </option>
-                                ))}
-                              </select>
-                            </label>
-                            <label className="flex flex-col gap-1 text-sm text-brand-gray-700">
-                              Categoria (opcional)
-                              <select
-                                name="categoria_id"
-                                defaultValue={contrato.categoria_id ?? ""}
-                                className="oc-input"
-                              >
-                                <option value="">Qualquer categoria</option>
-                                {listaCategoriasContrato.map((c) => (
-                                  <option key={c.id} value={c.id}>
-                                    {c.nome}
-                                  </option>
-                                ))}
-                              </select>
-                              <span className="text-xs font-normal text-brand-gray-500">
-                                Sem etapa definida, só lançamentos dessa categoria contam pro contrato.
-                              </span>
-                            </label>
-                            <label className="flex flex-col gap-1 text-sm text-brand-gray-700">
-                              Descrição
-                              <input
-                                name="descricao"
-                                defaultValue={contrato.descricao ?? ""}
-                                placeholder="Ex: Mão de obra"
-                                className="oc-input"
-                              />
-                            </label>
-                            <label className="flex flex-col gap-1 text-sm text-brand-gray-700">
-                              Valor do contrato
-                              <input
-                                name="valor_contrato"
-                                defaultValue={contrato.valor_contrato.toFixed(2).replace(".", ",")}
-                                required
-                                className="oc-input"
-                              />
-                            </label>
-                            <div className="flex flex-col gap-1 text-sm text-brand-gray-700">
-                              Contrato assinado (PDF ou Word)
-                              {contrato.arquivo_url && (
-                                <div className="flex items-center justify-between gap-2 rounded-brand-sm bg-brand-gray-100 px-3 py-2 text-xs">
-                                  <Link
-                                    href={contrato.arquivo_url}
-                                    target="_blank"
-                                    rel="noreferrer"
-                                    className="truncate font-bold text-status-info hover:underline"
-                                  >
-                                    {contrato.arquivo_nome ?? "Ver arquivo atual"}
-                                  </Link>
-                                  <button
-                                    type="submit"
-                                    formAction={excluirArquivoContratoAction}
-                                    className="shrink-0 text-status-danger hover:underline"
-                                  >
-                                    Remover
-                                  </button>
-                                </div>
-                              )}
-                              <input
-                                type="file"
-                                name="arquivo"
-                                accept=".pdf,.doc,.docx,application/pdf,application/msword,application/vnd.openxmlformats-officedocument.wordprocessingml.document"
-                                className="oc-input"
-                              />
-                            </div>
-                            <SubmitButton className="oc-button oc-button-primary">
-                              Salvar edição
-                            </SubmitButton>
-                          </form>
+                          <ContratoFornecedorForm
+                            action={updateContratoFornecedorAction}
+                            obras={listaObras}
+                            todasEtapas={todasEtapas}
+                            categorias={listaCategoriasContrato}
+                            fornecedores={listaFornecedores}
+                            contrato={contrato}
+                            onExcluirArquivoAction={excluirArquivoContratoAction}
+                          />
                         </CadastroModal>
 
                         <DeleteCadastroButton
