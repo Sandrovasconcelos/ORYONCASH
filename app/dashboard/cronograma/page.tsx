@@ -320,7 +320,7 @@ export default async function CronogramaPage({
       </div>
 
       <div className="rounded-brand-sm border border-status-info/25 bg-status-info/5 p-4 text-xs text-brand-gray-700">
-        Qualidade, progresso e liberação de pagamento por etapa agora ficam em{" "}
+        Progresso e materiais por etapa agora ficam em{" "}
         <Link href="/dashboard/execucao" className="font-bold text-status-info hover:underline">
           Execução →
         </Link>
