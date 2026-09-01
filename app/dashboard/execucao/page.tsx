@@ -5,7 +5,6 @@ import { calcularItensElegiveisParaMedicao } from "@/lib/dashboard/queries";
 import {
   apagarMedicaoAction,
   aprovarEPagarMedicaoAction,
-  atualizarProgressoEtapaAction,
   createChecklistItemAction,
   createChecklistTemplateAction,
   deleteChecklistItemAction,
@@ -13,10 +12,10 @@ import {
   deleteOrcamentoMaterialEtapaAction,
   iniciarInspecaoAction,
   prepararMedicaoAction,
+  salvarConfiguracaoEtapaAction,
   updateChecklistTemplateAction,
   updateMedicaoAction,
   upsertOrcamentoMaterialEtapaAction,
-  vincularChecklistEtapaAction,
 } from "../actions";
 import { CadastroModal } from "../cadastro-modal";
 import { DeleteCadastroButton } from "../delete-cadastro-button";
@@ -405,6 +404,10 @@ export default async function ExecucaoPage({
     string,
     { id: string; resultado: string; observacao: string | null; inspecionado_por: string | null; created_at: string }[]
   >();
+  const evidenciasPorInspecao = new Map<
+    string,
+    { url: string; mimeType: string; nomeArquivo: string | null }[]
+  >();
   const liberacoesPorEtapa = new Map<
     string,
     { id: string; percentual: number; valor: number; origem: string; data: string }[]
@@ -467,6 +470,38 @@ export default async function ExecucaoPage({
       const lista = inspecoesPorEtapa.get(inspecao.etapa_id) ?? [];
       lista.push(inspecao);
       inspecoesPorEtapa.set(inspecao.etapa_id, lista);
+    }
+
+    // As evidencias (fotos) ja eram salvas na inspecao, mas a tela nunca
+    // mostrava nenhum link/miniatura pra elas - o usuario via o campo de
+    // upload, mandava a foto, e ela "sumia" sem confirmacao visual nenhuma.
+    const idsInspecoes = (inspecoesData ?? []).map((i) => i.id);
+    if (idsInspecoes.length > 0) {
+      const { data: evidenciasData } = await supabase
+        .from("inspecao_evidencias")
+        .select("inspecao_id, storage_bucket, storage_path, mime_type, nome_arquivo")
+        .in("inspecao_id", idsInspecoes);
+
+      const porBucket = new Map<string, { inspecao_id: string; storage_path: string; mime_type: string; nome_arquivo: string | null }[]>();
+      for (const ev of evidenciasData ?? []) {
+        const lista = porBucket.get(ev.storage_bucket) ?? [];
+        lista.push(ev);
+        porBucket.set(ev.storage_bucket, lista);
+      }
+
+      for (const [bucket, evidencias] of porBucket) {
+        const { data: assinadas } = await supabase.storage
+          .from(bucket)
+          .createSignedUrls(evidencias.map((e) => e.storage_path), 60 * 60);
+
+        evidencias.forEach((ev, indice) => {
+          const url = assinadas?.[indice]?.signedUrl;
+          if (!url) return;
+          const lista = evidenciasPorInspecao.get(ev.inspecao_id) ?? [];
+          lista.push({ url, mimeType: ev.mime_type, nomeArquivo: ev.nome_arquivo });
+          evidenciasPorInspecao.set(ev.inspecao_id, lista);
+        });
+      }
     }
   }
 
@@ -823,7 +858,7 @@ export default async function ExecucaoPage({
                             <section className="flex flex-col gap-4">
                               <h3 className="text-sm font-extrabold text-brand-black">Configuração</h3>
 
-                              <form action={vincularChecklistEtapaAction} className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+                              <form action={salvarConfiguracaoEtapaAction} className="grid grid-cols-1 gap-3 sm:grid-cols-3">
                                 <input type="hidden" name="etapa_id" value={etapa.id} />
                                 <label className="flex flex-col gap-1 text-sm text-brand-gray-700">
                                   Fornecedor responsável
@@ -851,13 +886,18 @@ export default async function ExecucaoPage({
                                     ))}
                                   </select>
                                 </label>
-                                <div className="sm:col-span-2">
-                                  <SubmitButton className="oc-button oc-button-primary">Salvar configuração</SubmitButton>
-                                </div>
-                              </form>
-
-                              <form action={atualizarProgressoEtapaAction} className="grid grid-cols-1 gap-3 sm:grid-cols-3">
-                                <input type="hidden" name="etapa_id" value={etapa.id} />
+                                <label className="flex flex-col gap-1 text-sm text-brand-gray-700">
+                                  % executado
+                                  <input
+                                    type="number"
+                                    name="percentual_executado"
+                                    min="0"
+                                    max="100"
+                                    step="1"
+                                    defaultValue={etapa.percentual_executado}
+                                    className="oc-input"
+                                  />
+                                </label>
                                 <label className="flex flex-col gap-1 text-sm text-brand-gray-700">
                                   Início previsto
                                   <input
@@ -876,22 +916,8 @@ export default async function ExecucaoPage({
                                     className="oc-input"
                                   />
                                 </label>
-                                <label className="flex flex-col gap-1 text-sm text-brand-gray-700">
-                                  % executado
-                                  <input
-                                    type="number"
-                                    name="percentual_executado"
-                                    min="0"
-                                    max="100"
-                                    step="1"
-                                    defaultValue={etapa.percentual_executado}
-                                    className="oc-input"
-                                  />
-                                </label>
-                                <div className="sm:col-span-3">
-                                  <SubmitButton className="oc-button oc-button-primary">
-                                    Salvar datas e progresso
-                                  </SubmitButton>
+                                <div className="flex items-end">
+                                  <SubmitButton className="oc-button oc-button-primary w-full">Salvar</SubmitButton>
                                 </div>
                               </form>
 
@@ -913,14 +939,14 @@ export default async function ExecucaoPage({
                               </div>
 
                               {template && template.checklist_itens.length > 0 ? (
-                                <CadastroModal
-                                  titulo={`Inspecionar — ${etapa.nome}`}
-                                  descricao={`Checklist: ${template.nome}`}
-                                  botao="Nova inspeção"
-                                  variante="primario"
-                                  modalSize="wide"
-                                >
-                                  <form action={iniciarInspecaoAction} className="flex flex-col gap-5">
+                                <details className="rounded-brand-sm border border-brand-gray-300/70">
+                                  <summary className="cursor-pointer select-none px-4 py-3 text-sm font-bold text-brand-black">
+                                    Nova inspeção — checklist: {template.nome}
+                                  </summary>
+                                  <form
+                                    action={iniciarInspecaoAction}
+                                    className="flex flex-col gap-5 border-t border-brand-gray-300/60 p-4"
+                                  >
                                     <input type="hidden" name="etapa_id" value={etapa.id} />
                                     <input type="hidden" name="template_id" value={template.id} />
                                     <div className="flex flex-col gap-3">
@@ -963,7 +989,7 @@ export default async function ExecucaoPage({
                                     </label>
                                     <SubmitButton className="oc-button oc-button-primary">Concluir inspeção</SubmitButton>
                                   </form>
-                                </CadastroModal>
+                                </details>
                               ) : (
                                 <span
                                   className="w-fit rounded-brand-sm border border-brand-gray-300 bg-brand-gray-100 px-3 py-2 text-xs font-bold text-brand-gray-500"
@@ -982,6 +1008,7 @@ export default async function ExecucaoPage({
                                 )}
                                 {inspecoes.map((i) => {
                                   const label = SITUACAO_LABEL[i.resultado] ?? SITUACAO_LABEL.nao_inspecionado;
+                                  const evidencias = evidenciasPorInspecao.get(i.id) ?? [];
                                   return (
                                     <div key={i.id} className="rounded-brand-sm border border-brand-gray-300/60 p-3 text-xs">
                                       <div className="flex items-center justify-between gap-2">
@@ -994,6 +1021,38 @@ export default async function ExecucaoPage({
                                         <p className="mt-1 text-brand-gray-700">Por {i.inspecionado_por}</p>
                                       )}
                                       {i.observacao && <p className="mt-1 text-brand-gray-500">{i.observacao}</p>}
+                                      {evidencias.length > 0 && (
+                                        <div className="mt-2 flex flex-wrap gap-2">
+                                          {evidencias.map((ev, indice) =>
+                                            ev.mimeType.startsWith("image/") ? (
+                                              <a
+                                                key={indice}
+                                                href={ev.url}
+                                                target="_blank"
+                                                rel="noreferrer"
+                                                title={ev.nomeArquivo ?? "Evidência"}
+                                              >
+                                                {/* eslint-disable-next-line @next/next/no-img-element -- URL assinada e temporaria (expira em 1h), nao vale a pena configurar remotePatterns pra isso */}
+                                                <img
+                                                  src={ev.url}
+                                                  alt={ev.nomeArquivo ?? "Evidência"}
+                                                  className="h-16 w-16 rounded-brand-sm border border-brand-gray-300 object-cover"
+                                                />
+                                              </a>
+                                            ) : (
+                                              <a
+                                                key={indice}
+                                                href={ev.url}
+                                                target="_blank"
+                                                rel="noreferrer"
+                                                className="flex h-16 w-16 items-center justify-center rounded-brand-sm border border-brand-gray-300 bg-brand-gray-100 text-[10px] font-bold text-brand-gray-600"
+                                              >
+                                                PDF
+                                              </a>
+                                            )
+                                          )}
+                                        </div>
+                                      )}
                                     </div>
                                   );
                                 })}

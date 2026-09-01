@@ -1774,23 +1774,40 @@ export async function deleteChecklistItemAction(formData: FormData) {
   revalidatePath("/dashboard/execucao");
 }
 
-export async function vincularChecklistEtapaAction(formData: FormData) {
+/**
+ * Une num so clique o que antes eram dois formularios separados
+ * (fornecedor/checklist + datas/progresso) dentro do modal "Abrir etapa" -
+ * simplificacao pedida pelo usuario, que achava o fluxo de configuracao
+ * fragmentado demais.
+ */
+export async function salvarConfiguracaoEtapaAction(formData: FormData) {
   const etapaId = String(formData.get("etapa_id") ?? "");
+  if (!etapaId) return;
+
   const templateId = String(formData.get("checklist_template_id") ?? "") || null;
   const fornecedorId = String(formData.get("fornecedor_id") ?? "") || null;
-  if (!etapaId) return;
+  const dataInicioPrevista = String(formData.get("data_inicio_prevista") ?? "") || null;
+  const dataFimPrevista = String(formData.get("data_fim_prevista") ?? "") || null;
+  const percentualExecutado = Math.min(
+    100,
+    Math.max(0, Number(formData.get("percentual_executado") ?? 0))
+  );
 
   const supabase = await createClient();
   const { data: antes } = await supabase
     .from("etapas")
-    .select("nome, obra_id, checklist_template_id, fornecedor_id")
+    .select("nome, obra_id, checklist_template_id, fornecedor_id, data_inicio_prevista, data_fim_prevista, percentual_executado")
     .eq("id", etapaId)
     .maybeSingle();
 
-  await supabase
-    .from("etapas")
-    .update({ checklist_template_id: templateId, fornecedor_id: fornecedorId })
-    .eq("id", etapaId);
+  const depois = {
+    checklist_template_id: templateId,
+    fornecedor_id: fornecedorId,
+    data_inicio_prevista: dataInicioPrevista,
+    data_fim_prevista: dataFimPrevista,
+    percentual_executado: percentualExecutado,
+  };
+  await supabase.from("etapas").update(depois).eq("id", etapaId);
 
   const autorNome = await getAutorNomeDashboard();
   await registrarAtividade({
@@ -1799,11 +1816,12 @@ export async function vincularChecklistEtapaAction(formData: FormData) {
     entidadeId: antes?.obra_id,
     origem: "dashboard",
     autorNome,
-    resumo: `Checklist/fornecedor vinculado à etapa "${antes?.nome ?? etapaId}" por ${autorNome}`,
+    resumo: `Configuração da etapa "${antes?.nome ?? etapaId}" atualizada por ${autorNome}`,
     dadosAntes: antes,
-    dadosDepois: { checklist_template_id: templateId, fornecedor_id: fornecedorId },
+    dadosDepois: depois,
   });
 
+  revalidatePath("/dashboard/cronograma");
   revalidatePath("/dashboard/execucao");
 }
 
@@ -1933,46 +1951,6 @@ export async function iniciarInspecaoAction(formData: FormData) {
 }
 
 // ---------- Cronograma e Medições ----------
-
-export async function atualizarProgressoEtapaAction(formData: FormData) {
-  const etapaId = String(formData.get("etapa_id") ?? "");
-  const dataInicioPrevista = String(formData.get("data_inicio_prevista") ?? "") || null;
-  const dataFimPrevista = String(formData.get("data_fim_prevista") ?? "") || null;
-  const percentualExecutado = Math.min(
-    100,
-    Math.max(0, Number(formData.get("percentual_executado") ?? 0))
-  );
-  if (!etapaId) return;
-
-  const supabase = await createClient();
-  const { data: antes } = await supabase
-    .from("etapas")
-    .select("nome, obra_id, data_inicio_prevista, data_fim_prevista, percentual_executado")
-    .eq("id", etapaId)
-    .maybeSingle();
-
-  const depois = {
-    data_inicio_prevista: dataInicioPrevista,
-    data_fim_prevista: dataFimPrevista,
-    percentual_executado: percentualExecutado,
-  };
-  await supabase.from("etapas").update(depois).eq("id", etapaId);
-
-  const autorNome = await getAutorNomeDashboard();
-  await registrarAtividade({
-    tipo: "edicao",
-    entidade: "obra",
-    entidadeId: antes?.obra_id,
-    origem: "dashboard",
-    autorNome,
-    resumo: `Progresso da etapa "${antes?.nome ?? etapaId}" atualizado (${percentualExecutado}%) por ${autorNome}`,
-    dadosAntes: antes,
-    dadosDepois: depois,
-  });
-
-  revalidatePath("/dashboard/cronograma");
-  revalidatePath("/dashboard/execucao");
-}
 
 export async function prepararMedicaoAction(formData: FormData) {
   const obraId = String(formData.get("obra_id") ?? "");
