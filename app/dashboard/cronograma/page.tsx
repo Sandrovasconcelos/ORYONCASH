@@ -241,26 +241,29 @@ export default async function CronogramaPage({
     etapasEscopadasPorFornecedor.set(c.fornecedor_id, etapasDoFornecedor);
   }
 
-  // Quando o contrato tem categoria definida, o fornecedor NAO entra na
-  // conta - o usuario lanca pagamento de mao de obra por categoria+etapa
-  // (ex: "Mao de Obra Alex"), sem preencher o fornecedor em todo
-  // lancamento (material comprado em loja fica com o fornecedor da loja,
-  // nao do trabalhador, entao exigir fornecedor batendo so excluiria
-  // lancamentos legitimos). Etapa e categoria se somam (E, nao OU) quando
-  // as duas estiverem definidas.
+  // Quando etapa E categoria estao definidas, uma despesa conta se bater
+  // com QUALQUER uma das duas (OU, nao E) - ex: uma compra de equipamento
+  // pro Alex pode estar na etapa "Mao de Obra Alex" mas na categoria
+  // "Compra de Equipamentos", e ainda assim deve contar pro contrato dele.
+  // Com so uma das duas definida, so ela decide. O fornecedor NUNCA entra
+  // na conta quando etapa ou categoria estao definidos - o usuario lanca
+  // pagamento de mao de obra por etapa/categoria, sem preencher o
+  // fornecedor em todo lancamento (material comprado em loja fica com o
+  // fornecedor da loja, nao do trabalhador).
   //
-  // Sem categoria, mantem o comportamento antigo: soma por fornecedor (+
-  // etapa opcional), excluindo despesas cuja etapa ja esteja "reivindicada"
-  // por outro contrato etapa-scoped do mesmo fornecedor.
+  // Sem etapa nem categoria, cai no comportamento por fornecedor: soma
+  // tudo do fornecedor nesta obra, excluindo despesas cuja etapa ja esteja
+  // "reivindicada" por outro contrato etapa-scoped do mesmo fornecedor.
   function pagoDoContrato(contrato: {
     fornecedor_id: string;
     etapa_id: string | null;
     categoria_id: string | null;
   }): number {
-    if (contrato.categoria_id) {
+    if (contrato.etapa_id || contrato.categoria_id) {
       return despesasObra.reduce((soma, d) => {
-        if (d.categoria_id !== contrato.categoria_id) return soma;
-        if (contrato.etapa_id && d.etapa_id !== contrato.etapa_id) return soma;
+        const bateEtapa = Boolean(contrato.etapa_id) && d.etapa_id === contrato.etapa_id;
+        const bateCategoria = Boolean(contrato.categoria_id) && d.categoria_id === contrato.categoria_id;
+        if (!bateEtapa && !bateCategoria) return soma;
         return soma + d.valor;
       }, 0);
     }
@@ -268,8 +271,7 @@ export default async function CronogramaPage({
     const etapasEscopadas = etapasEscopadasPorFornecedor.get(contrato.fornecedor_id);
     return despesasObra.reduce((soma, d) => {
       if (d.fornecedor_id !== contrato.fornecedor_id) return soma;
-      if (contrato.etapa_id && d.etapa_id !== contrato.etapa_id) return soma;
-      if (!contrato.etapa_id && etapasEscopadas && d.etapa_id && etapasEscopadas.has(d.etapa_id)) return soma;
+      if (etapasEscopadas && d.etapa_id && etapasEscopadas.has(d.etapa_id)) return soma;
       return soma + d.valor;
     }, 0);
   }
@@ -329,10 +331,9 @@ export default async function CronogramaPage({
           <div>
             <p className="text-sm font-semibold text-brand-black">Contratos de fornecedores</p>
             <p className="mt-1 text-xs text-brand-gray-500">
-              Valor contratado x já pago. Se você definir uma categoria (ex: &quot;Mão de Obra Alex&quot;), o
-              cálculo soma por categoria + etapa e ignora o fornecedor do lançamento — útil quando
-              nem todo pagamento vem com o fornecedor certo preenchido. Sem categoria, soma por
-              fornecedor (e etapa, se definida).
+              Valor contratado x já pago. Definindo etapa e/ou categoria (ex: &quot;Mão de Obra
+              Alex&quot;), conta todo lançamento que bater com qualquer uma das duas — ignora o
+              fornecedor do lançamento. Sem etapa nem categoria, soma por fornecedor.
             </p>
           </div>
           <CadastroModal
