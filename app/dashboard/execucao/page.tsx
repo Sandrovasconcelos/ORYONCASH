@@ -7,13 +7,14 @@ import {
   deleteOrcamentoMaterialEtapaAction,
   deleteTarefaEtapaAction,
   salvarConfiguracaoEtapaAction,
+  updateTarefaEtapaAction,
   upsertOrcamentoMaterialEtapaAction,
 } from "../actions";
 import { CadastroModal } from "../cadastro-modal";
 import { ActionIcon } from "../action-icon";
 import { ObraSelector } from "../obra-selector";
 import { SubmitButton } from "../submit-button";
-import { TarefaStatusSelect } from "./tarefa-status-select";
+import { TarefaLinha } from "./tarefa-linha";
 
 export const dynamic = "force-dynamic";
 
@@ -321,35 +322,16 @@ export default async function ExecucaoPage({
                                   <p className="text-xs text-brand-gray-500">Nenhuma tarefa cadastrada nesta etapa ainda.</p>
                                 )}
                                 {tarefas.map((tarefa) => (
-                                  <div
+                                  <TarefaLinha
                                     key={tarefa.id}
-                                    className="flex items-center justify-between gap-2 rounded-brand-sm border border-brand-gray-300/60 p-2 text-xs"
-                                  >
-                                    <span
-                                      className={`flex-1 ${tarefa.status === "concluida" ? "text-brand-gray-400 line-through" : "text-brand-black"}`}
-                                    >
-                                      {tarefa.descricao}
-                                    </span>
-                                    <div className="flex shrink-0 items-center gap-2">
-                                      <TarefaStatusSelect
-                                        tarefaId={tarefa.id}
-                                        etapaId={etapa.id}
-                                        statusAtual={tarefa.status}
-                                        action={atualizarStatusTarefaAction}
-                                      />
-                                      <form action={deleteTarefaEtapaAction}>
-                                        <input type="hidden" name="tarefa_id" value={tarefa.id} />
-                                        <input type="hidden" name="etapa_id" value={etapa.id} />
-                                        <button
-                                          type="submit"
-                                          className="text-brand-gray-400 hover:text-status-danger"
-                                          title="Remover tarefa"
-                                        >
-                                          <ActionIcon name="trash" />
-                                        </button>
-                                      </form>
-                                    </div>
-                                  </div>
+                                    tarefaId={tarefa.id}
+                                    etapaId={etapa.id}
+                                    descricao={tarefa.descricao}
+                                    status={tarefa.status}
+                                    onAtualizarStatus={atualizarStatusTarefaAction}
+                                    onAtualizarDescricao={updateTarefaEtapaAction}
+                                    onExcluir={deleteTarefaEtapaAction}
+                                  />
                                 ))}
                               </div>
 

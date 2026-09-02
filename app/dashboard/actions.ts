@@ -1888,6 +1888,18 @@ export async function deleteTarefaEtapaAction(formData: FormData) {
   revalidatePath("/dashboard/execucao");
 }
 
+export async function updateTarefaEtapaAction(formData: FormData) {
+  const tarefaId = String(formData.get("tarefa_id") ?? "");
+  const descricao = String(formData.get("descricao") ?? "").trim();
+  if (!tarefaId || !descricao) return;
+
+  const supabase = await createClient();
+  await supabase.from("etapa_tarefas").update({ descricao }).eq("id", tarefaId);
+
+  revalidatePath("/dashboard/cronograma");
+  revalidatePath("/dashboard/execucao");
+}
+
 async function anexarEvidenciaInspecao(input: {
   supabase: Awaited<ReturnType<typeof createClient>>;
   inspecaoId: string;
