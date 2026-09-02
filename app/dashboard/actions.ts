@@ -1825,6 +1825,69 @@ export async function salvarConfiguracaoEtapaAction(formData: FormData) {
   revalidatePath("/dashboard/execucao");
 }
 
+/**
+ * Checklist de tarefas dentro de uma etapa - diferente da Qualidade
+ * removida (essa nao tem aprovacao/reprovacao, so pendente/concluida/
+ * atrasada). Serve pra etapas "grandes" que juntam varias frentes de
+ * trabalho (ex: um mes inteiro de cronograma), onde uma tarefa pode
+ * atrasar sem travar as outras.
+ */
+async function recalcularPercentualPorTarefas(supabase: Awaited<ReturnType<typeof createClient>>, etapaId: string) {
+  const { data: tarefas } = await supabase.from("etapa_tarefas").select("status").eq("etapa_id", etapaId);
+  if (!tarefas || tarefas.length === 0) return;
+
+  const concluidas = tarefas.filter((t) => t.status === "concluida").length;
+  const percentual = Math.round((concluidas / tarefas.length) * 100);
+  await supabase.from("etapas").update({ percentual_executado: percentual }).eq("id", etapaId);
+}
+
+export async function criarTarefaEtapaAction(formData: FormData) {
+  const etapaId = String(formData.get("etapa_id") ?? "");
+  const descricao = String(formData.get("descricao") ?? "").trim();
+  if (!etapaId || !descricao) return;
+
+  const supabase = await createClient();
+  const { count } = await supabase
+    .from("etapa_tarefas")
+    .select("id", { count: "exact", head: true })
+    .eq("etapa_id", etapaId);
+
+  await supabase.from("etapa_tarefas").insert({ etapa_id: etapaId, descricao, ordem: (count ?? 0) + 1 });
+  await recalcularPercentualPorTarefas(supabase, etapaId);
+
+  revalidatePath("/dashboard/cronograma");
+  revalidatePath("/dashboard/execucao");
+}
+
+export async function atualizarStatusTarefaAction(formData: FormData) {
+  const tarefaId = String(formData.get("tarefa_id") ?? "");
+  const etapaId = String(formData.get("etapa_id") ?? "");
+  const statusBruto = String(formData.get("status") ?? "");
+  const STATUS_VALIDOS = ["pendente", "concluida", "atrasada"] as const;
+  if (!tarefaId || !etapaId || !STATUS_VALIDOS.includes(statusBruto as (typeof STATUS_VALIDOS)[number])) return;
+  const status = statusBruto as (typeof STATUS_VALIDOS)[number];
+
+  const supabase = await createClient();
+  await supabase.from("etapa_tarefas").update({ status }).eq("id", tarefaId);
+  await recalcularPercentualPorTarefas(supabase, etapaId);
+
+  revalidatePath("/dashboard/cronograma");
+  revalidatePath("/dashboard/execucao");
+}
+
+export async function deleteTarefaEtapaAction(formData: FormData) {
+  const tarefaId = String(formData.get("tarefa_id") ?? "");
+  const etapaId = String(formData.get("etapa_id") ?? "");
+  if (!tarefaId || !etapaId) return;
+
+  const supabase = await createClient();
+  await supabase.from("etapa_tarefas").delete().eq("id", tarefaId);
+  await recalcularPercentualPorTarefas(supabase, etapaId);
+
+  revalidatePath("/dashboard/cronograma");
+  revalidatePath("/dashboard/execucao");
+}
+
 async function anexarEvidenciaInspecao(input: {
   supabase: Awaited<ReturnType<typeof createClient>>;
   inspecaoId: string;

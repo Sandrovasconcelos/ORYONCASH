@@ -1012,6 +1012,34 @@ export interface Database {
           },
         ];
       };
+      etapa_tarefas: {
+        Row: {
+          id: string;
+          etapa_id: string;
+          descricao: string;
+          status: "pendente" | "concluida" | "atrasada";
+          ordem: number;
+          created_at: string;
+        };
+        Insert: {
+          id?: string;
+          etapa_id: string;
+          descricao: string;
+          status?: "pendente" | "concluida" | "atrasada";
+          ordem?: number;
+          created_at?: string;
+        };
+        Update: Partial<Database["public"]["Tables"]["etapa_tarefas"]["Insert"]>;
+        Relationships: [
+          {
+            foreignKeyName: "etapa_tarefas_etapa_id_fkey";
+            columns: ["etapa_id"];
+            isOneToOne: false;
+            referencedRelation: "etapas";
+            referencedColumns: ["id"];
+          },
+        ];
+      };
       contas_a_pagar: {
         Row: {
           id: string;

@@ -2,7 +2,10 @@ import Link from "next/link";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { formatBRL } from "@/lib/conversation/format";
 import {
+  atualizarStatusTarefaAction,
+  criarTarefaEtapaAction,
   deleteOrcamentoMaterialEtapaAction,
+  deleteTarefaEtapaAction,
   salvarConfiguracaoEtapaAction,
   upsertOrcamentoMaterialEtapaAction,
 } from "../actions";
@@ -10,6 +13,7 @@ import { CadastroModal } from "../cadastro-modal";
 import { ActionIcon } from "../action-icon";
 import { ObraSelector } from "../obra-selector";
 import { SubmitButton } from "../submit-button";
+import { TarefaStatusSelect } from "./tarefa-status-select";
 
 export const dynamic = "force-dynamic";
 
@@ -80,32 +84,45 @@ export default async function ExecucaoPage({
   >();
   const contratoPorEtapa = new Map<string, { descricao: string | null; valorContrato: number }>();
   const pagoPorEtapa = new Map<string, number>();
+  const tarefasPorEtapa = new Map<string, { id: string; descricao: string; status: string; ordem: number }[]>();
 
   if (idsEtapas.length > 0) {
-    const [{ data: orcamentosData }, { data: despesasComQuantidade }, { data: contratosEtapa }, { data: despesasEtapa }] =
-      await Promise.all([
-        supabase
-          .from("orcamento_material_etapa")
-          .select("id, etapa_id, material_id, quantidade_orcada, materiais(nome)")
-          .in("etapa_id", idsEtapas),
-        supabase
-          .from("despesas")
-          .select("etapa_id, material_id, quantidade")
-          .in("etapa_id", idsEtapas)
-          .not("material_id", "is", null)
-          .not("quantidade", "is", null)
-          .is("deleted_at", null),
-        supabase
-          .from("contratos_fornecedor")
-          .select("etapa_id, descricao, valor_contrato")
-          .eq("obra_id", obraAtual.id)
-          .is("deleted_at", null)
-          .not("etapa_id", "is", null),
-        // "Ja pago" por etapa e simplesmente a soma dos lancamentos (despesas)
-        // marcados com aquela etapa - o pagamento se vincula pelo proprio
-        // lancamento, sem sistema separado de medicao/liberacao.
-        supabase.from("despesas").select("etapa_id, valor").in("etapa_id", idsEtapas).is("deleted_at", null),
-      ]);
+    const [
+      { data: orcamentosData },
+      { data: despesasComQuantidade },
+      { data: contratosEtapa },
+      { data: despesasEtapa },
+      { data: tarefasData },
+    ] = await Promise.all([
+      supabase
+        .from("orcamento_material_etapa")
+        .select("id, etapa_id, material_id, quantidade_orcada, materiais(nome)")
+        .in("etapa_id", idsEtapas),
+      supabase
+        .from("despesas")
+        .select("etapa_id, material_id, quantidade")
+        .in("etapa_id", idsEtapas)
+        .not("material_id", "is", null)
+        .not("quantidade", "is", null)
+        .is("deleted_at", null),
+      supabase
+        .from("contratos_fornecedor")
+        .select("etapa_id, descricao, valor_contrato")
+        .eq("obra_id", obraAtual.id)
+        .is("deleted_at", null)
+        .not("etapa_id", "is", null),
+      // "Ja pago" por etapa e simplesmente a soma dos lancamentos (despesas)
+      // marcados com aquela etapa - o pagamento se vincula pelo proprio
+      // lancamento, sem sistema separado de medicao/liberacao.
+      supabase.from("despesas").select("etapa_id, valor").in("etapa_id", idsEtapas).is("deleted_at", null),
+      supabase.from("etapa_tarefas").select("id, etapa_id, descricao, status, ordem").in("etapa_id", idsEtapas).order("ordem"),
+    ]);
+
+    for (const t of tarefasData ?? []) {
+      const lista = tarefasPorEtapa.get(t.etapa_id) ?? [];
+      lista.push({ id: t.id, descricao: t.descricao, status: t.status, ordem: t.ordem });
+      tarefasPorEtapa.set(t.etapa_id, lista);
+    }
 
     const realizadoPorChave = new Map<string, number>();
     for (const d of despesasComQuantidade ?? []) {
@@ -186,6 +203,8 @@ export default async function ExecucaoPage({
               {etapas.map((etapa) => {
                 const pago = pagoPorEtapa.get(etapa.id) ?? 0;
                 const contrato = contratoPorEtapa.get(etapa.id);
+                const tarefas = tarefasPorEtapa.get(etapa.id) ?? [];
+                const temTarefas = tarefas.length > 0;
 
                 return (
                   <tr key={etapa.id}>
@@ -239,15 +258,21 @@ export default async function ExecucaoPage({
                                 </label>
                                 <label className="flex flex-col gap-1 text-sm text-brand-gray-700">
                                   % executado
-                                  <input
-                                    type="number"
-                                    name="percentual_executado"
-                                    min="0"
-                                    max="100"
-                                    step="1"
-                                    defaultValue={etapa.percentual_executado}
-                                    className="oc-input"
-                                  />
+                                  {temTarefas ? (
+                                    <span className="oc-input flex items-center bg-brand-gray-100 text-brand-gray-500">
+                                      {etapa.percentual_executado}% (calculado pelas tarefas)
+                                    </span>
+                                  ) : (
+                                    <input
+                                      type="number"
+                                      name="percentual_executado"
+                                      min="0"
+                                      max="100"
+                                      step="1"
+                                      defaultValue={etapa.percentual_executado}
+                                      className="oc-input"
+                                    />
+                                  )}
                                 </label>
                                 <label className="flex flex-col gap-1 text-sm text-brand-gray-700">
                                   Início previsto
@@ -278,6 +303,66 @@ export default async function ExecucaoPage({
                                   {contrato.descricao ? ` — ${contrato.descricao}` : ""}
                                 </p>
                               )}
+                            </section>
+
+                            {/* Seção A.1 — Tarefas */}
+                            <section className="flex flex-col gap-3 border-t border-brand-gray-300/60 pt-6">
+                              <div className="flex items-center justify-between">
+                                <h3 className="text-sm font-extrabold text-brand-black">Tarefas</h3>
+                                {temTarefas && (
+                                  <span className="text-xs font-bold text-brand-gray-500">
+                                    {tarefas.filter((t) => t.status === "concluida").length}/{tarefas.length} concluídas
+                                  </span>
+                                )}
+                              </div>
+
+                              <div className="flex flex-col gap-2">
+                                {tarefas.length === 0 && (
+                                  <p className="text-xs text-brand-gray-500">Nenhuma tarefa cadastrada nesta etapa ainda.</p>
+                                )}
+                                {tarefas.map((tarefa) => (
+                                  <div
+                                    key={tarefa.id}
+                                    className="flex items-center justify-between gap-2 rounded-brand-sm border border-brand-gray-300/60 p-2 text-xs"
+                                  >
+                                    <span
+                                      className={`flex-1 ${tarefa.status === "concluida" ? "text-brand-gray-400 line-through" : "text-brand-black"}`}
+                                    >
+                                      {tarefa.descricao}
+                                    </span>
+                                    <div className="flex shrink-0 items-center gap-2">
+                                      <TarefaStatusSelect
+                                        tarefaId={tarefa.id}
+                                        etapaId={etapa.id}
+                                        statusAtual={tarefa.status}
+                                        action={atualizarStatusTarefaAction}
+                                      />
+                                      <form action={deleteTarefaEtapaAction}>
+                                        <input type="hidden" name="tarefa_id" value={tarefa.id} />
+                                        <input type="hidden" name="etapa_id" value={etapa.id} />
+                                        <button
+                                          type="submit"
+                                          className="text-brand-gray-400 hover:text-status-danger"
+                                          title="Remover tarefa"
+                                        >
+                                          <ActionIcon name="trash" />
+                                        </button>
+                                      </form>
+                                    </div>
+                                  </div>
+                                ))}
+                              </div>
+
+                              <form action={criarTarefaEtapaAction} className="flex gap-2">
+                                <input type="hidden" name="etapa_id" value={etapa.id} />
+                                <input
+                                  name="descricao"
+                                  required
+                                  placeholder="Nova tarefa"
+                                  className="oc-input flex-1"
+                                />
+                                <SubmitButton className="oc-button oc-button-primary shrink-0">Adicionar</SubmitButton>
+                              </form>
                             </section>
 
                             {/* Seção B — Pagamento */}
