@@ -17,7 +17,6 @@ export function TarefaCronogramaLinha({
   etapaId,
   descricao,
   status,
-  mesPlanejado,
   dataConclusaoReal,
   dataFimPrevista,
   onAtualizarStatus,
@@ -29,7 +28,6 @@ export function TarefaCronogramaLinha({
   etapaId: string;
   descricao: string;
   status: string;
-  mesPlanejado: string;
   dataConclusaoReal: string | null;
   dataFimPrevista: string | null;
   onAtualizarStatus: Acao;
@@ -54,7 +52,7 @@ export function TarefaCronogramaLinha({
   if (editando) {
     return (
       <tr className="border-t border-brand-red/40 bg-brand-red/5">
-        <td colSpan={5} className="py-2">
+        <td colSpan={4} className="py-2">
           <form
             action={onAtualizarDescricao}
             className="flex items-center gap-2 px-1 text-xs"
@@ -82,7 +80,6 @@ export function TarefaCronogramaLinha({
       <td className="py-2 pr-3 text-brand-black">
         <span className={status === "concluida" ? "text-brand-gray-400 line-through" : ""}>{descricao}</span>
       </td>
-      <td className="py-2 pr-3 text-brand-gray-600">{mesPlanejado}</td>
       <td className="py-2 pr-3">
         <form ref={statusFormRef} action={onAtualizarStatus}>
           <input type="hidden" name="tarefa_id" value={tarefaId} />

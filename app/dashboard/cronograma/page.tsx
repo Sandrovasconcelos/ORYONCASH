@@ -591,7 +591,6 @@ export default async function CronogramaPage({
                     <thead>
                       <tr className="text-[10px] font-bold uppercase tracking-[0.06em] text-brand-gray-500">
                         <th className="pb-2 pr-3">Tarefa</th>
-                        <th className="pb-2 pr-3">Mês planejado</th>
                         <th className="pb-2 pr-3">Status</th>
                         <th className="pb-2 pr-3">Concluída em</th>
                         <th className="pb-2">Situação</th>
@@ -605,7 +604,6 @@ export default async function CronogramaPage({
                           etapaId={etapa.id}
                           descricao={tarefa.descricao}
                           status={tarefa.status}
-                          mesPlanejado={etapa.nome}
                           dataConclusaoReal={tarefa.dataConclusaoReal}
                           dataFimPrevista={etapa.data_fim_prevista}
                           onAtualizarStatus={atualizarStatusTarefaAction}
