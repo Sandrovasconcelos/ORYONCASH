@@ -1796,9 +1796,12 @@ export async function salvarConfiguracaoEtapaAction(formData: FormData) {
   const supabase = await createClient();
   const { data: antes } = await supabase
     .from("etapas")
-    .select("nome, obra_id, checklist_template_id, fornecedor_id, data_inicio_prevista, data_fim_prevista, percentual_executado")
+    .select("nome, obra_id, checklist_template_id, fornecedor_id, data_inicio_prevista, data_fim_prevista, percentual_executado, data_conclusao_real")
     .eq("id", etapaId)
     .maybeSingle();
+
+  const dataConclusaoReal =
+    percentualExecutado >= 100 ? antes?.data_conclusao_real ?? hojeNoBrasil() : null;
 
   const depois = {
     checklist_template_id: templateId,
@@ -1806,6 +1809,7 @@ export async function salvarConfiguracaoEtapaAction(formData: FormData) {
     data_inicio_prevista: dataInicioPrevista,
     data_fim_prevista: dataFimPrevista,
     percentual_executado: percentualExecutado,
+    data_conclusao_real: dataConclusaoReal,
   };
   await supabase.from("etapas").update(depois).eq("id", etapaId);
 
@@ -1838,7 +1842,33 @@ async function recalcularPercentualPorTarefas(supabase: Awaited<ReturnType<typeo
 
   const concluidas = tarefas.filter((t) => t.status === "concluida").length;
   const percentual = Math.round((concluidas / tarefas.length) * 100);
-  await supabase.from("etapas").update({ percentual_executado: percentual }).eq("id", etapaId);
+  await atualizarPercentualEDataConclusao(supabase, etapaId, percentual);
+}
+
+/**
+ * Grava a data real de conclusao (nao a prevista) automaticamente quando a
+ * etapa chega a 100% - se ela deixar de estar 100% depois (ex: reabriu uma
+ * tarefa), a data e limpa, pra nunca ficar uma data de conclusao "mentindo"
+ * sobre uma etapa que na verdade nao terminou.
+ */
+async function atualizarPercentualEDataConclusao(
+  supabase: Awaited<ReturnType<typeof createClient>>,
+  etapaId: string,
+  percentual: number
+) {
+  const { data: atual } = await supabase
+    .from("etapas")
+    .select("data_conclusao_real")
+    .eq("id", etapaId)
+    .maybeSingle();
+
+  const dataConclusaoReal =
+    percentual >= 100 ? atual?.data_conclusao_real ?? hojeNoBrasil() : null;
+
+  await supabase
+    .from("etapas")
+    .update({ percentual_executado: percentual, data_conclusao_real: dataConclusaoReal })
+    .eq("id", etapaId);
 }
 
 export async function criarTarefaEtapaAction(formData: FormData) {

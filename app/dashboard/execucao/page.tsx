@@ -26,8 +26,15 @@ type EtapaExecucao = {
   fornecedor_id: string | null;
   data_inicio_prevista: string | null;
   data_fim_prevista: string | null;
+  data_conclusao_real: string | null;
   percentual_executado: number;
 };
+
+function formatDataBR(data: string | null): string {
+  if (!data) return "—";
+  const [ano, mes, dia] = data.split("-");
+  return `${dia}/${mes}/${ano}`;
+}
 
 function KpiTile({ label, valor }: { label: string; valor: string }) {
   return (
@@ -72,7 +79,9 @@ export default async function ExecucaoPage({
 
   const { data: etapasData } = await supabase
     .from("etapas")
-    .select("id, nome, obra_id, valor_orcado, fornecedor_id, data_inicio_prevista, data_fim_prevista, percentual_executado")
+    .select(
+      "id, nome, obra_id, valor_orcado, fornecedor_id, data_inicio_prevista, data_fim_prevista, data_conclusao_real, percentual_executado"
+    )
     .eq("obra_id", obraAtual.id)
     .is("deleted_at", null)
     .order("ordem");
@@ -228,6 +237,11 @@ export default async function ExecucaoPage({
                         </div>
                         <span className="text-xs font-bold">{Number(etapa.percentual_executado)}%</span>
                       </div>
+                      {etapa.data_conclusao_real && (
+                        <p className="mt-1 text-[11px] font-bold text-status-success">
+                          ✅ Concluída em {formatDataBR(etapa.data_conclusao_real)}
+                        </p>
+                      )}
                     </td>
                     <td className="text-right font-extrabold text-brand-black">{formatBRL(pago)}</td>
                     <td>
@@ -297,6 +311,12 @@ export default async function ExecucaoPage({
                                   <SubmitButton className="oc-button oc-button-primary">Salvar</SubmitButton>
                                 </div>
                               </form>
+
+                              {etapa.data_conclusao_real && (
+                                <p className="text-xs font-bold text-status-success">
+                                  ✅ Concluída em {formatDataBR(etapa.data_conclusao_real)}
+                                </p>
+                              )}
 
                               {contrato && (
                                 <p className="text-xs font-bold text-brand-red">

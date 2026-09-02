@@ -71,6 +71,7 @@ export interface Database {
           checklist_template_id: string | null;
           data_inicio_prevista: string | null;
           data_fim_prevista: string | null;
+          data_conclusao_real: string | null;
           percentual_executado: number;
           created_at: string;
           deleted_at: string | null;
@@ -88,6 +89,7 @@ export interface Database {
           checklist_template_id?: string | null;
           data_inicio_prevista?: string | null;
           data_fim_prevista?: string | null;
+          data_conclusao_real?: string | null;
           percentual_executado?: number;
           created_at?: string;
           deleted_at?: string | null;
