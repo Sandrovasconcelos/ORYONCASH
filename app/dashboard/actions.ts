@@ -1788,10 +1788,6 @@ export async function salvarConfiguracaoEtapaAction(formData: FormData) {
   const fornecedorId = String(formData.get("fornecedor_id") ?? "") || null;
   const dataInicioPrevista = String(formData.get("data_inicio_prevista") ?? "") || null;
   const dataFimPrevista = String(formData.get("data_fim_prevista") ?? "") || null;
-  const percentualExecutado = Math.min(
-    100,
-    Math.max(0, Number(formData.get("percentual_executado") ?? 0))
-  );
 
   const supabase = await createClient();
   const { data: antes } = await supabase
@@ -1799,6 +1795,17 @@ export async function salvarConfiguracaoEtapaAction(formData: FormData) {
     .select("nome, obra_id, checklist_template_id, fornecedor_id, data_inicio_prevista, data_fim_prevista, percentual_executado, data_conclusao_real")
     .eq("id", etapaId)
     .maybeSingle();
+
+  // Quando a etapa tem tarefas, o campo "% executado" vira texto (sem
+  // input) na tela - o formData nao traz esse campo nesse caso. Sem essa
+  // checagem, formData.get(...) retornava null, virava 0 aqui, e essa
+  // action reescrevia por cima o percentual calculado pelas tarefas toda
+  // vez que so fornecedor/datas eram salvos.
+  const percentualEnviado = formData.get("percentual_executado");
+  const percentualExecutado =
+    percentualEnviado === null
+      ? (antes?.percentual_executado ?? 0)
+      : Math.min(100, Math.max(0, Number(percentualEnviado)));
 
   const dataConclusaoReal =
     percentualExecutado >= 100 ? antes?.data_conclusao_real ?? hojeNoBrasil() : null;
