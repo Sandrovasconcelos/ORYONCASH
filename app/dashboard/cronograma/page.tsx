@@ -3,19 +3,26 @@ import { createAdminClient } from "@/lib/supabase/admin";
 import { formatBRL } from "@/lib/conversation/format";
 import { calcularCurvaS } from "@/lib/dashboard/queries";
 import {
+  atualizarDataConclusaoTarefaAction,
+  atualizarStatusTarefaAction,
+  criarTarefaEtapaAction,
   createContratoFornecedorAction,
   deleteContratoFornecedorAction,
+  deleteTarefaEtapaAction,
   excluirArquivoContratoAction,
   updateContratoFornecedorAction,
+  updateTarefaEtapaAction,
 } from "../actions";
 import { CadastroModal } from "../cadastro-modal";
 import { DeleteCadastroButton } from "../delete-cadastro-button";
 import { ActionIcon } from "../action-icon";
 import { ObraSelector } from "../obra-selector";
+import { SubmitButton } from "../submit-button";
 import { CronogramaTabs } from "./cronograma-tabs";
 import { DistribuicaoMensalTable } from "./distribuicao-mensal-table";
 import { CurvaSChart } from "../charts/curva-s-chart";
 import { ContratoFornecedorForm } from "./contrato-fornecedor-form";
+import { TarefaCronogramaLinha } from "./tarefa-cronograma-linha";
 
 export const dynamic = "force-dynamic";
 
@@ -542,12 +549,6 @@ export default async function CronogramaPage({
     return `${dia}/${mes}/${ano}`;
   }
 
-  const STATUS_LABEL: Record<string, string> = {
-    pendente: "Pendente",
-    concluida: "Concluída",
-    atrasada: "Atrasada",
-  };
-
   const cronogramaFisicoPanel = !obraAtual ? (
     <div className="rounded-card border border-brand-gray-300/60 bg-white p-10 text-center text-sm text-brand-gray-500 shadow-card">
       Cadastre uma obra primeiro.
@@ -597,40 +598,33 @@ export default async function CronogramaPage({
                       </tr>
                     </thead>
                     <tbody>
-                      {tarefasDaEtapa.map((tarefa) => {
-                        const atrasada = Boolean(
-                          tarefa.dataConclusaoReal &&
-                            etapa.data_fim_prevista &&
-                            tarefa.dataConclusaoReal > etapa.data_fim_prevista
-                        );
-                        const situacao =
-                          tarefa.status !== "concluida" ? (
-                            <span className="text-brand-gray-500">⚪ Em aberto</span>
-                          ) : atrasada ? (
-                            <span className="font-bold text-status-danger">
-                              🔴 Atrasada (foi pro mês seguinte)
-                            </span>
-                          ) : (
-                            <span className="font-bold text-status-success">🟢 No prazo</span>
-                          );
-                        return (
-                          <tr key={tarefa.id} className="border-t border-brand-gray-300/40">
-                            <td className="py-2 pr-3 text-brand-black">{tarefa.descricao}</td>
-                            <td className="py-2 pr-3 text-brand-gray-600">{etapa.nome}</td>
-                            <td className="py-2 pr-3 text-brand-gray-600">
-                              {STATUS_LABEL[tarefa.status] ?? tarefa.status}
-                            </td>
-                            <td className="py-2 pr-3 text-brand-gray-600">
-                              {tarefa.dataConclusaoReal ? formatDataBR(tarefa.dataConclusaoReal) : "—"}
-                            </td>
-                            <td className="py-2">{situacao}</td>
-                          </tr>
-                        );
-                      })}
+                      {tarefasDaEtapa.map((tarefa) => (
+                        <TarefaCronogramaLinha
+                          key={tarefa.id}
+                          tarefaId={tarefa.id}
+                          etapaId={etapa.id}
+                          descricao={tarefa.descricao}
+                          status={tarefa.status}
+                          mesPlanejado={etapa.nome}
+                          dataConclusaoReal={tarefa.dataConclusaoReal}
+                          dataFimPrevista={etapa.data_fim_prevista}
+                          onAtualizarStatus={atualizarStatusTarefaAction}
+                          onAtualizarData={atualizarDataConclusaoTarefaAction}
+                          onAtualizarDescricao={updateTarefaEtapaAction}
+                          onExcluir={deleteTarefaEtapaAction}
+                        />
+                      ))}
                     </tbody>
                   </table>
                 </div>
               )}
+              <form action={criarTarefaEtapaAction} className="mt-3 flex gap-2">
+                <input type="hidden" name="etapa_id" value={etapa.id} />
+                <input name="descricao" required placeholder="Nova tarefa" className="oc-input flex-1 text-xs" />
+                <SubmitButton className="oc-button oc-button-primary shrink-0 py-1.5 text-xs">
+                  Adicionar
+                </SubmitButton>
+              </form>
             </div>
           );
         })}

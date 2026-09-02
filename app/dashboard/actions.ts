@@ -1907,9 +1907,33 @@ export async function atualizarStatusTarefaAction(formData: FormData) {
   const supabase = await createClient();
   // Data de conclusao da TAREFA (nao da etapa inteira) - grava sozinha
   // quando marca concluida, limpa se voltar pra pendente/atrasada, pra
-  // dar pra comparar depois com o mes planejado e ver o que "vazou".
-  const dataConclusaoReal = status === "concluida" ? hojeNoBrasil() : null;
+  // dar pra comparar depois com o mes planejado e ver o que "vazou". Se o
+  // formulario mandar uma data manual (ex: tarefa concluida em dia
+  // passado), usa ela em vez de hoje.
+  const dataInformada = String(formData.get("data_conclusao_real") ?? "").trim();
+  const dataConclusaoReal = status === "concluida" ? dataInformada || hojeNoBrasil() : null;
   await supabase.from("etapa_tarefas").update({ status, data_conclusao_real: dataConclusaoReal }).eq("id", tarefaId);
+  await recalcularPercentualPorTarefas(supabase, etapaId);
+
+  revalidatePath("/dashboard/cronograma");
+  revalidatePath("/dashboard/execucao");
+}
+
+/**
+ * Edita so a data de conclusao real de uma tarefa (sem passar pelo select
+ * de status) - usado no cronograma fisico pra corrigir/informar quando uma
+ * tarefa realmente terminou. Informar uma data marca a tarefa como
+ * concluida automaticamente; apagar a data volta pra pendente.
+ */
+export async function atualizarDataConclusaoTarefaAction(formData: FormData) {
+  const tarefaId = String(formData.get("tarefa_id") ?? "");
+  const etapaId = String(formData.get("etapa_id") ?? "");
+  if (!tarefaId || !etapaId) return;
+  const data = String(formData.get("data_conclusao_real") ?? "").trim();
+
+  const supabase = await createClient();
+  const status = data ? "concluida" : "pendente";
+  await supabase.from("etapa_tarefas").update({ status, data_conclusao_real: data || null }).eq("id", tarefaId);
   await recalcularPercentualPorTarefas(supabase, etapaId);
 
   revalidatePath("/dashboard/cronograma");
