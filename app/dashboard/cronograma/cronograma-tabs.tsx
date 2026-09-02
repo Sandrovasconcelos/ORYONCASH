@@ -5,6 +5,7 @@ import { useState } from "react";
 const ABAS = [
   { id: "visaoGeral", label: "Visão geral", descricao: "Curva S, indicadores e contratos" },
   { id: "fisicoFinanceiro", label: "Físico-financeiro", descricao: "Distribuição mensal por etapa" },
+  { id: "cronogramaFisico", label: "Cronograma físico", descricao: "Planejado x realizado por tarefa" },
 ] as const;
 
 type AbaId = (typeof ABAS)[number]["id"];
@@ -12,14 +13,17 @@ type AbaId = (typeof ABAS)[number]["id"];
 export function CronogramaTabs({
   visaoGeralPanel,
   fisicoFinanceiroPanel,
+  cronogramaFisicoPanel,
 }: {
   visaoGeralPanel: React.ReactNode;
   fisicoFinanceiroPanel: React.ReactNode;
+  cronogramaFisicoPanel: React.ReactNode;
 }) {
   const [aba, setAba] = useState<AbaId>("visaoGeral");
   const paineis: Record<AbaId, React.ReactNode> = {
     visaoGeral: visaoGeralPanel,
     fisicoFinanceiro: fisicoFinanceiroPanel,
+    cronogramaFisico: cronogramaFisicoPanel,
   };
 
   return (
@@ -27,7 +31,7 @@ export function CronogramaTabs({
       <div
         role="tablist"
         aria-label="Seções de cronograma"
-        className="grid grid-cols-1 gap-2 rounded-card border border-brand-gray-300/60 bg-white p-2 shadow-card sm:grid-cols-2"
+        className="grid grid-cols-1 gap-2 rounded-card border border-brand-gray-300/60 bg-white p-2 shadow-card sm:grid-cols-3"
       >
         {ABAS.map((item) => {
           const ativo = aba === item.id;

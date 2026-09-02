@@ -208,6 +208,33 @@ export default async function CronogramaPage({
     }));
   }
 
+  let tarefasObra: {
+    id: string;
+    etapaId: string;
+    descricao: string;
+    status: string;
+    ordem: number;
+    dataConclusaoReal: string | null;
+  }[] = [];
+  if (etapas.length > 0) {
+    const { data: tarefasData } = await supabase
+      .from("etapa_tarefas")
+      .select("id, etapa_id, descricao, status, ordem, data_conclusao_real")
+      .in(
+        "etapa_id",
+        etapas.map((e) => e.id)
+      )
+      .order("ordem");
+    tarefasObra = (tarefasData ?? []).map((t) => ({
+      id: t.id,
+      etapaId: t.etapa_id,
+      descricao: t.descricao,
+      status: t.status,
+      ordem: t.ordem,
+      dataConclusaoReal: t.data_conclusao_real,
+    }));
+  }
+
   const mesesCronograma: string[] = (() => {
     const datas = etapas
       .flatMap((e) => [e.data_inicio_prevista, e.data_fim_prevista])
@@ -510,5 +537,112 @@ export default async function CronogramaPage({
     </div>
   );
 
-  return <CronogramaTabs visaoGeralPanel={visaoGeralPanel} fisicoFinanceiroPanel={fisicoFinanceiroPanel} />;
+  function formatDataBR(data: string): string {
+    const [ano, mes, dia] = data.split("-");
+    return `${dia}/${mes}/${ano}`;
+  }
+
+  const STATUS_LABEL: Record<string, string> = {
+    pendente: "Pendente",
+    concluida: "Concluída",
+    atrasada: "Atrasada",
+  };
+
+  const cronogramaFisicoPanel = !obraAtual ? (
+    <div className="rounded-card border border-brand-gray-300/60 bg-white p-10 text-center text-sm text-brand-gray-500 shadow-card">
+      Cadastre uma obra primeiro.
+    </div>
+  ) : etapas.length === 0 ? (
+    <div className="flex flex-col gap-6">
+      <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+        <ObraSelector obras={listaObras} obraAtualId={obraAtual.id} basePath="/dashboard/cronograma" />
+      </div>
+      <div className="rounded-card border border-brand-gray-300/60 bg-white p-8 text-center shadow-card">
+        <p className="text-sm font-semibold text-brand-black">
+          Nenhuma etapa foi adicionada ao cronograma.
+        </p>
+        <p className="mt-1 text-xs text-brand-gray-500">
+          Cadastre etapas com valor orçado pra {obraAtual.nome} na aba Visão geral.
+        </p>
+      </div>
+    </div>
+  ) : (
+    <div className="flex flex-col gap-6">
+      <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+        <ObraSelector obras={listaObras} obraAtualId={obraAtual.id} basePath="/dashboard/cronograma" />
+      </div>
+      <div className="flex flex-col gap-5">
+        {etapas.map((etapa) => {
+          const tarefasDaEtapa = tarefasObra.filter((t) => t.etapaId === etapa.id);
+          return (
+            <div key={etapa.id} className="rounded-card border border-brand-gray-300/60 bg-white p-5 shadow-card">
+              <div className="flex flex-col gap-1 sm:flex-row sm:items-center sm:justify-between">
+                <h3 className="text-sm font-extrabold text-brand-black">{etapa.nome}</h3>
+                <p className="text-xs text-brand-gray-500">
+                  Previsto até {etapa.data_fim_prevista ? formatDataBR(etapa.data_fim_prevista) : "—"}
+                </p>
+              </div>
+              {tarefasDaEtapa.length === 0 ? (
+                <p className="mt-3 text-xs text-brand-gray-500">Nenhuma tarefa cadastrada pra esta etapa.</p>
+              ) : (
+                <div className="mt-3 overflow-x-auto">
+                  <table className="w-full text-left text-xs">
+                    <thead>
+                      <tr className="text-[10px] font-bold uppercase tracking-[0.06em] text-brand-gray-500">
+                        <th className="pb-2 pr-3">Tarefa</th>
+                        <th className="pb-2 pr-3">Mês planejado</th>
+                        <th className="pb-2 pr-3">Status</th>
+                        <th className="pb-2 pr-3">Concluída em</th>
+                        <th className="pb-2">Situação</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {tarefasDaEtapa.map((tarefa) => {
+                        const atrasada = Boolean(
+                          tarefa.dataConclusaoReal &&
+                            etapa.data_fim_prevista &&
+                            tarefa.dataConclusaoReal > etapa.data_fim_prevista
+                        );
+                        const situacao =
+                          tarefa.status !== "concluida" ? (
+                            <span className="text-brand-gray-500">⚪ Em aberto</span>
+                          ) : atrasada ? (
+                            <span className="font-bold text-status-danger">
+                              🔴 Atrasada (foi pro mês seguinte)
+                            </span>
+                          ) : (
+                            <span className="font-bold text-status-success">🟢 No prazo</span>
+                          );
+                        return (
+                          <tr key={tarefa.id} className="border-t border-brand-gray-300/40">
+                            <td className="py-2 pr-3 text-brand-black">{tarefa.descricao}</td>
+                            <td className="py-2 pr-3 text-brand-gray-600">{etapa.nome}</td>
+                            <td className="py-2 pr-3 text-brand-gray-600">
+                              {STATUS_LABEL[tarefa.status] ?? tarefa.status}
+                            </td>
+                            <td className="py-2 pr-3 text-brand-gray-600">
+                              {tarefa.dataConclusaoReal ? formatDataBR(tarefa.dataConclusaoReal) : "—"}
+                            </td>
+                            <td className="py-2">{situacao}</td>
+                          </tr>
+                        );
+                      })}
+                    </tbody>
+                  </table>
+                </div>
+              )}
+            </div>
+          );
+        })}
+      </div>
+    </div>
+  );
+
+  return (
+    <CronogramaTabs
+      visaoGeralPanel={visaoGeralPanel}
+      fisicoFinanceiroPanel={fisicoFinanceiroPanel}
+      cronogramaFisicoPanel={cronogramaFisicoPanel}
+    />
+  );
 }
