@@ -1021,6 +1021,7 @@ export interface Database {
           descricao: string;
           status: "pendente" | "concluida" | "atrasada";
           ordem: number;
+          data_conclusao_real: string | null;
           created_at: string;
         };
         Insert: {
@@ -1029,6 +1030,7 @@ export interface Database {
           descricao: string;
           status?: "pendente" | "concluida" | "atrasada";
           ordem?: number;
+          data_conclusao_real?: string | null;
           created_at?: string;
         };
         Update: Partial<Database["public"]["Tables"]["etapa_tarefas"]["Insert"]>;

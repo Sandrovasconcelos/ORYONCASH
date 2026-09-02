@@ -1905,7 +1905,11 @@ export async function atualizarStatusTarefaAction(formData: FormData) {
   const status = statusBruto as (typeof STATUS_VALIDOS)[number];
 
   const supabase = await createClient();
-  await supabase.from("etapa_tarefas").update({ status }).eq("id", tarefaId);
+  // Data de conclusao da TAREFA (nao da etapa inteira) - grava sozinha
+  // quando marca concluida, limpa se voltar pra pendente/atrasada, pra
+  // dar pra comparar depois com o mes planejado e ver o que "vazou".
+  const dataConclusaoReal = status === "concluida" ? hojeNoBrasil() : null;
+  await supabase.from("etapa_tarefas").update({ status, data_conclusao_real: dataConclusaoReal }).eq("id", tarefaId);
   await recalcularPercentualPorTarefas(supabase, etapaId);
 
   revalidatePath("/dashboard/cronograma");

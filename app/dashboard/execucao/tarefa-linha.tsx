@@ -12,11 +12,18 @@ const STATUS_CLASSE: Record<string, string> = {
 
 type Acao = (formData: FormData) => void | Promise<void>;
 
+function formatDataBR(data: string): string {
+  const [ano, mes, dia] = data.split("-");
+  return `${dia}/${mes}/${ano}`;
+}
+
 export function TarefaLinha({
   tarefaId,
   etapaId,
   descricao,
   status,
+  dataConclusaoReal,
+  atrasada,
   onAtualizarStatus,
   onAtualizarDescricao,
   onExcluir,
@@ -25,6 +32,8 @@ export function TarefaLinha({
   etapaId: string;
   descricao: string;
   status: string;
+  dataConclusaoReal: string | null;
+  atrasada: boolean;
   onAtualizarStatus: Acao;
   onAtualizarDescricao: Acao;
   onExcluir: Acao;
@@ -56,9 +65,17 @@ export function TarefaLinha({
 
   return (
     <div className="flex items-center justify-between gap-2 rounded-brand-sm border border-brand-gray-300/60 p-2 text-xs">
-      <span className={`flex-1 ${status === "concluida" ? "text-brand-gray-400 line-through" : "text-brand-black"}`}>
-        {descricao}
-      </span>
+      <div className="flex-1">
+        <span className={status === "concluida" ? "text-brand-gray-400 line-through" : "text-brand-black"}>
+          {descricao}
+        </span>
+        {dataConclusaoReal && (
+          <p className={`mt-0.5 text-[11px] font-bold ${atrasada ? "text-status-danger" : "text-status-success"}`}>
+            ✅ Concluída em {formatDataBR(dataConclusaoReal)}
+            {atrasada && " — atrasada em relação ao mês"}
+          </p>
+        )}
+      </div>
       <div className="flex shrink-0 items-center gap-2">
         <form ref={statusFormRef} action={onAtualizarStatus}>
           <input type="hidden" name="tarefa_id" value={tarefaId} />

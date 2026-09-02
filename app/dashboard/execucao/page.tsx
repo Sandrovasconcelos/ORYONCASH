@@ -94,7 +94,10 @@ export default async function ExecucaoPage({
   >();
   const contratoPorEtapa = new Map<string, { descricao: string | null; valorContrato: number }>();
   const pagoPorEtapa = new Map<string, number>();
-  const tarefasPorEtapa = new Map<string, { id: string; descricao: string; status: string; ordem: number }[]>();
+  const tarefasPorEtapa = new Map<
+    string,
+    { id: string; descricao: string; status: string; ordem: number; dataConclusaoReal: string | null }[]
+  >();
 
   if (idsEtapas.length > 0) {
     const [
@@ -125,12 +128,22 @@ export default async function ExecucaoPage({
       // marcados com aquela etapa - o pagamento se vincula pelo proprio
       // lancamento, sem sistema separado de medicao/liberacao.
       supabase.from("despesas").select("etapa_id, valor").in("etapa_id", idsEtapas).is("deleted_at", null),
-      supabase.from("etapa_tarefas").select("id, etapa_id, descricao, status, ordem").in("etapa_id", idsEtapas).order("ordem"),
+      supabase
+        .from("etapa_tarefas")
+        .select("id, etapa_id, descricao, status, ordem, data_conclusao_real")
+        .in("etapa_id", idsEtapas)
+        .order("ordem"),
     ]);
 
     for (const t of tarefasData ?? []) {
       const lista = tarefasPorEtapa.get(t.etapa_id) ?? [];
-      lista.push({ id: t.id, descricao: t.descricao, status: t.status, ordem: t.ordem });
+      lista.push({
+        id: t.id,
+        descricao: t.descricao,
+        status: t.status,
+        ordem: t.ordem,
+        dataConclusaoReal: t.data_conclusao_real,
+      });
       tarefasPorEtapa.set(t.etapa_id, lista);
     }
 
@@ -348,6 +361,12 @@ export default async function ExecucaoPage({
                                     etapaId={etapa.id}
                                     descricao={tarefa.descricao}
                                     status={tarefa.status}
+                                    dataConclusaoReal={tarefa.dataConclusaoReal}
+                                    atrasada={Boolean(
+                                      tarefa.dataConclusaoReal &&
+                                        etapa.data_fim_prevista &&
+                                        tarefa.dataConclusaoReal > etapa.data_fim_prevista
+                                    )}
                                     onAtualizarStatus={atualizarStatusTarefaAction}
                                     onAtualizarDescricao={updateTarefaEtapaAction}
                                     onExcluir={deleteTarefaEtapaAction}
