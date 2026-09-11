@@ -385,3 +385,41 @@ textarea:focus-visible {
   size: A4 landscape;
   margin: 12mm;
 }
+
+/* Icone do menu lateral: "pop" fluido toda vez que o item vira a pagina
+   ativa (a troca de classe reinicia a animacao), e leve balanco no hover -
+   cubic-bezier com overshoot (o 1.4 no meio) da a sensacao de mola/fluido
+   em vez de um movimento linear/mecanico. */
+@keyframes nav-icon-pop {
+  0% {
+    transform: scale(0.55) rotate(-10deg);
+  }
+  55% {
+    transform: scale(1.22) rotate(5deg);
+  }
+  80% {
+    transform: scale(0.96) rotate(-2deg);
+  }
+  100% {
+    transform: scale(1) rotate(0deg);
+  }
+}
+
+.nav-icon {
+  display: inline-flex;
+  transition: transform 0.45s cubic-bezier(0.34, 1.56, 0.64, 1);
+  transform-origin: center;
+  will-change: transform;
+}
+
+.nav-icon-ativo {
+  animation: nav-icon-pop 0.55s cubic-bezier(0.34, 1.56, 0.64, 1);
+}
+
+.nav-link:hover .nav-icon {
+  transform: scale(1.12) rotate(-4deg);
+}
+
+.nav-link:active .nav-icon {
+  transform: scale(0.92) rotate(2deg);
+}

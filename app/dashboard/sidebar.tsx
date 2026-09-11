@@ -238,11 +238,13 @@ function NavLinks({ onNavigate }: { onNavigate?: () => void }) {
                 aria-busy={carregando || isPending || undefined}
                 className={
                   ativo
-                    ? "flex min-h-11 items-center gap-3 rounded-brand-sm bg-[linear-gradient(90deg,rgba(225,27,34,.24),rgba(225,27,34,.07))] px-3 py-2 text-xs font-extrabold text-white shadow-[inset_3px_0_0_var(--brand-red)]"
-                    : "flex min-h-11 items-center gap-3 rounded-brand-sm px-3 py-2 text-xs font-bold text-[#aab0b9] hover:bg-white/[.055] hover:text-white"
+                    ? "nav-link flex min-h-11 items-center gap-3 rounded-brand-sm bg-[linear-gradient(90deg,rgba(225,27,34,.24),rgba(225,27,34,.07))] px-3 py-2 text-xs font-extrabold text-white shadow-[inset_3px_0_0_var(--brand-red)] transition-colors duration-300"
+                    : "nav-link flex min-h-11 items-center gap-3 rounded-brand-sm px-3 py-2 text-xs font-bold text-[#aab0b9] transition-colors duration-300 hover:bg-white/[.055] hover:text-white"
                 }
               >
-                <NavIcon name={item.icon} />
+                <span className={`nav-icon${ativo ? " nav-icon-ativo" : ""}`}>
+                  <NavIcon name={item.icon} />
+                </span>
                 <span className="flex-1">{item.label}</span>
                 {carregando && (
                   <span
