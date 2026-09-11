@@ -134,6 +134,7 @@ export default async function DespesasPage({
     etapa?: string;
     material?: string;
     fornecedor?: string;
+    data?: string;
     busca?: string;
     pagina?: string;
     porPagina?: string;
@@ -177,6 +178,7 @@ export default async function DespesasPage({
       if (params.etapa) queryCompleta = queryCompleta.eq("etapa_id", params.etapa);
       if (params.material) queryCompleta = queryCompleta.eq("material_id", params.material);
       if (params.fornecedor) queryCompleta = queryCompleta.eq("fornecedor_id", params.fornecedor);
+      if (params.data) queryCompleta = queryCompleta.eq("data", params.data);
 
       const resultadoCompleto = await queryCompleta;
       if (!resultadoCompleto.error) return resultadoCompleto;
@@ -197,6 +199,7 @@ export default async function DespesasPage({
       if (params.etapa) querySemQuantidade = querySemQuantidade.eq("etapa_id", params.etapa);
       if (params.material) querySemQuantidade = querySemQuantidade.eq("material_id", params.material);
       if (params.fornecedor) querySemQuantidade = querySemQuantidade.eq("fornecedor_id", params.fornecedor);
+      if (params.data) querySemQuantidade = querySemQuantidade.eq("data", params.data);
 
       const resultadoSemQuantidade = await querySemQuantidade;
       if (!resultadoSemQuantidade.error) {
@@ -227,6 +230,7 @@ export default async function DespesasPage({
       if (params.etapa) querySemContaBancaria = querySemContaBancaria.eq("etapa_id", params.etapa);
       if (params.material) querySemContaBancaria = querySemContaBancaria.eq("material_id", params.material);
       if (params.fornecedor) querySemContaBancaria = querySemContaBancaria.eq("fornecedor_id", params.fornecedor);
+      if (params.data) querySemContaBancaria = querySemContaBancaria.eq("data", params.data);
 
       const resultadoSemContaBancaria = await querySemContaBancaria;
       if (!resultadoSemContaBancaria.error) {
@@ -256,6 +260,7 @@ export default async function DespesasPage({
       if (params.etapa) queryReduzida = queryReduzida.eq("etapa_id", params.etapa);
       if (params.material) queryReduzida = queryReduzida.eq("material_id", params.material);
       if (params.fornecedor) queryReduzida = queryReduzida.eq("fornecedor_id", params.fornecedor);
+      if (params.data) queryReduzida = queryReduzida.eq("data", params.data);
       const resultadoReduzido = await queryReduzida;
       return {
         ...resultadoReduzido,
@@ -474,6 +479,12 @@ export default async function DespesasPage({
                 {formatBRL(totalFiltrado)}
               </p>
             </div>
+            <Link
+              href="/dashboard/despesas/calendario"
+              className="rounded-brand-sm border border-brand-gray-300 bg-white px-4 py-2 text-sm font-semibold text-brand-gray-700 hover:border-brand-red/40 hover:text-brand-red"
+            >
+              📅 Calendário
+            </Link>
             <CadastroModal
               titulo="Novo lançamento"
               descricao="Registre uma despesa direto pelo dashboard."

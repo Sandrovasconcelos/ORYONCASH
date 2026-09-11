@@ -23,6 +23,7 @@ const NAV_GROUPS = [
     titulo: "Financeiro",
     itens: [
       { href: "/dashboard/despesas", label: "Lançamentos", icon: "receipt" },
+      { href: "/dashboard/despesas/calendario", label: "Calendário de gastos", icon: "calendar" },
       { href: "/dashboard/categorias", label: "Categorias", icon: "tag" },
       { href: "/dashboard/materiais", label: "Materiais", icon: "box" },
       { href: "/dashboard/fornecedores", label: "Fornecedores", icon: "truck" },
@@ -216,7 +217,7 @@ function NavLinks({ onNavigate }: { onNavigate?: () => void }) {
               (destinoPendente === null &&
                 (item.href === "/dashboard"
                   ? pathname === "/dashboard"
-                  : pathname.startsWith(item.href)));
+                  : pathname === item.href || pathname.startsWith(`${item.href}/`)));
             const carregando = destinoPendente === item.href && pathname !== item.href;
 
             return (

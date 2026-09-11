@@ -109,10 +109,14 @@ async function conciliarAutomaticamente(input: {
 }): Promise<number> {
   const supabase = createAdminClient();
 
+  // Inclui despesas sem conta bancaria definida - a maioria dos
+  // lancamentos (WhatsApp, e boa parte do dashboard) nunca preenche esse
+  // campo, entao exigir a mesma conta do extrato deixava o casamento
+  // automatico praticamente sempre vazio.
   const { data: despesasCandidatas } = await supabase
     .from("despesas")
     .select("id, data, valor")
-    .eq("conta_bancaria_id", input.contaBancariaId)
+    .or(`conta_bancaria_id.eq.${input.contaBancariaId},conta_bancaria_id.is.null`)
     .is("deleted_at", null)
     .gte("data", subtrairDias(input.periodoInicio, JANELA_BUSCA_DESPESA_DIAS))
     .lte("data", somarDias(input.periodoFim, JANELA_BUSCA_DESPESA_DIAS));

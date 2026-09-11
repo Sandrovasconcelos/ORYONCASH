@@ -42,15 +42,26 @@ export default async function ConciliacaoDetalhePage({
 
   const conta = (extrato as { contas_bancarias?: { id: string; nome: string } | null }).contas_bancarias;
 
+  // Inclui despesas SEM conta bancária definida como candidatas tambem -
+  // a maioria dos lancamentos (WhatsApp, e muitos do dashboard) nunca
+  // preenche esse campo, entao restringir so a mesma conta do extrato
+  // deixava a lista vazia quase sempre ("nenhum lancamento pra vincular")
+  // mesmo com o lancamento certo existindo no sistema.
   const { data: despesasCandidatas } = extrato.conta_bancaria_id
     ? await supabase
         .from("despesas")
-        .select("id, descricao, valor, data, obras(nome), categorias(nome)")
-        .eq("conta_bancaria_id", extrato.conta_bancaria_id)
+        .select("id, descricao, valor, data, conta_bancaria_id, obras(nome), categorias(nome)")
+        .or(`conta_bancaria_id.eq.${extrato.conta_bancaria_id},conta_bancaria_id.is.null`)
         .is("deleted_at", null)
         .order("data", { ascending: false })
         .limit(200)
-    : { data: [] };
+    : await supabase
+        .from("despesas")
+        .select("id, descricao, valor, data, conta_bancaria_id, obras(nome), categorias(nome)")
+        .is("conta_bancaria_id", null)
+        .is("deleted_at", null)
+        .order("data", { ascending: false })
+        .limit(200);
 
   const idsJaVinculados = new Set((transacoes ?? []).map((t) => t.despesa_id).filter(Boolean));
   const candidatasDisponiveis = (despesasCandidatas ?? []).filter((d) => !idsJaVinculados.has(d.id));
