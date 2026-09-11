@@ -2,10 +2,10 @@ import Link from "next/link";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { formatBRL } from "@/lib/conversation/format";
 import { hojeNoBrasil } from "@/lib/conversation/queries";
+import { CalendarioGrid, type DespesaDoDia } from "./calendario-grid";
 
 export const dynamic = "force-dynamic";
 
-const DIAS_SEMANA = ["Dom", "Seg", "Ter", "Qua", "Qui", "Sex", "Sáb"];
 const NOMES_MES = [
   "Janeiro",
   "Fevereiro",
@@ -23,16 +23,6 @@ const NOMES_MES = [
 
 function ultimoDiaDoMes(ano: number, mesIndex0: number): number {
   return new Date(Date.UTC(ano, mesIndex0 + 1, 0)).getUTCDate();
-}
-
-/** Interpola de laranja (gasto baixo) pra vermelho (gasto alto), t em [0,1]. */
-function corIntensidade(t: number): string {
-  const clamped = Math.max(0, Math.min(1, t));
-  // Laranja #f59e0b (245,158,11) -> Vermelho #dc2626 (220,38,38)
-  const r = Math.round(245 + (220 - 245) * clamped);
-  const g = Math.round(158 + (38 - 158) * clamped);
-  const b = Math.round(11 + (38 - 11) * clamped);
-  return `rgb(${r} ${g} ${b})`;
 }
 
 export default async function CalendarioGastosPage({
@@ -62,7 +52,7 @@ export default async function CalendarioGastosPage({
     (async () => {
       let query = supabase
         .from("despesas")
-        .select("data, valor")
+        .select("id, data, valor, descricao, obras(nome), categorias(nome)")
         .is("deleted_at", null)
         .gte("data", primeiroDia)
         .lte("data", ultimoDia);
@@ -73,14 +63,23 @@ export default async function CalendarioGastosPage({
 
   const despesas = despesasQuery.data ?? [];
 
-  const totalPorDia = new Map<string, number>();
+  const totalPorDia: Record<string, number> = {};
+  const despesasPorDia: Record<string, DespesaDoDia[]> = {};
   for (const d of despesas) {
-    totalPorDia.set(d.data, (totalPorDia.get(d.data) ?? 0) + Number(d.valor));
+    totalPorDia[d.data] = (totalPorDia[d.data] ?? 0) + Number(d.valor);
+    const lista = despesasPorDia[d.data] ?? [];
+    lista.push({
+      id: d.id,
+      descricao: d.descricao,
+      valor: Number(d.valor),
+      obraNome: (d as { obras?: { nome: string } | null }).obras?.nome ?? null,
+      categoriaNome: (d as { categorias?: { nome: string } | null }).categorias?.nome ?? null,
+    });
+    despesasPorDia[d.data] = lista;
   }
 
-  const totalMes = [...totalPorDia.values()].reduce((soma, v) => soma + v, 0);
-  const maiorDia = Math.max(0, ...totalPorDia.values());
-  const diaComMaisGasto = [...totalPorDia.entries()].sort((a, b) => b[1] - a[1])[0];
+  const totalMes = Object.values(totalPorDia).reduce((soma, v) => soma + v, 0);
+  const diaComMaisGasto = Object.entries(totalPorDia).sort((a, b) => b[1] - a[1])[0];
 
   const totalDias = ultimoDiaDoMes(ano, mesIndex0);
   const primeiroDiaSemana = new Date(Date.UTC(ano, mesIndex0, 1)).getUTCDay();
@@ -173,63 +172,13 @@ export default async function CalendarioGastosPage({
         </div>
         <div className="rounded-card border border-brand-gray-300/60 bg-white p-4 shadow-card">
           <p className="text-[10px] font-bold uppercase tracking-[0.08em] text-brand-gray-500">Dias com gasto</p>
-          <p className="mt-1 text-xl font-extrabold text-brand-black">{totalPorDia.size} de {totalDias}</p>
+          <p className="mt-1 text-xl font-extrabold text-brand-black">
+            {Object.keys(totalPorDia).length} de {totalDias}
+          </p>
         </div>
       </div>
 
-      <div className="rounded-card border border-brand-gray-300/60 bg-white p-5 shadow-card">
-        <div className="grid grid-cols-7 gap-1.5 text-center text-[10px] font-bold uppercase tracking-[0.06em] text-brand-gray-500">
-          {DIAS_SEMANA.map((d) => (
-            <div key={d} className="py-1">
-              {d}
-            </div>
-          ))}
-        </div>
-        <div className="mt-1.5 grid grid-cols-7 gap-1.5">
-          {celulas.map((celula, index) => {
-            if (!celula) return <div key={`vazio-${index}`} />;
-            const totalDia = totalPorDia.get(celula.dataISO) ?? 0;
-            const temGasto = totalDia > 0;
-            const intensidade = maiorDia > 0 ? totalDia / maiorDia : 0;
-            const isHoje = celula.dataISO === hoje;
-
-            return (
-              <Link
-                key={celula.dataISO}
-                href={`/dashboard/despesas?data=${celula.dataISO}`}
-                className={`flex aspect-square flex-col justify-between rounded-brand-sm border p-2 transition hover:brightness-95 ${
-                  isHoje ? "border-brand-black" : "border-black/5"
-                }`}
-                style={temGasto ? { backgroundColor: corIntensidade(intensidade) } : undefined}
-                title={temGasto ? `${formatBRL(totalDia)} em ${celula.dia}/${mesStr}` : `Sem gastos em ${celula.dia}/${mesStr}`}
-              >
-                <span
-                  className={`text-xs font-bold ${
-                    temGasto ? "text-white drop-shadow-sm" : "text-brand-gray-600"
-                  }`}
-                >
-                  {celula.dia}
-                </span>
-                {temGasto && (
-                  <span className="text-right text-[10px] font-extrabold leading-tight text-white drop-shadow-sm">
-                    {formatBRL(totalDia)}
-                  </span>
-                )}
-              </Link>
-            );
-          })}
-        </div>
-
-        <div className="mt-4 flex items-center justify-end gap-2 text-[10px] font-bold text-brand-gray-500">
-          <span>Menos gasto</span>
-          <span className="flex h-3 w-24 overflow-hidden rounded-full">
-            {Array.from({ length: 12 }).map((_, i) => (
-              <span key={i} className="flex-1" style={{ backgroundColor: corIntensidade(i / 11) }} />
-            ))}
-          </span>
-          <span>Mais gasto</span>
-        </div>
-      </div>
+      <CalendarioGrid celulas={celulas} totalPorDia={totalPorDia} despesasPorDia={despesasPorDia} hoje={hoje} />
     </div>
   );
 }
