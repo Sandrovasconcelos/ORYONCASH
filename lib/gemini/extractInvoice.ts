@@ -5,11 +5,16 @@ import { fetchComTimeout } from "@/lib/fetchComTimeout";
 // com erro 503 de alta demanda persistente) fez o troca de default no
 // codigo nao ter efeito nenhum. Atualizar o modelo agora exige mexer
 // aqui de proposito, sem essa brecha.
-const GEMINI_MODEL = "gemini-3.6-flash";
-// O Gemini as vezes demora dezenas de segundos em picos de demanda (ja
-// observado ate ~50s em teste real) - 40s cobre a maioria dos casos sem
-// estourar o teto de 60s do webhook (Graph API fica com ~8s cada chamada).
-const GEMINI_TIMEOUT_MS = 40_000;
+//
+// Cadeia de modelos: se o principal responder 503/429/404/5xx ou estourar o
+// tempo (pico de demanda - os modelos "flash" ja chegaram a levar 20-40s so
+// pra devolver 503), tenta o proximo. O tempo de cada tentativa e curto de
+// proposito, pra somar menos que o teto de 60s do webhook (Graph API fica
+// com ~8s cada chamada).
+const GEMINI_MODELOS: { modelo: string; timeoutMs: number }[] = [
+  { modelo: "gemini-3.6-flash", timeoutMs: 18_000 },
+  { modelo: "gemini-3.1-flash-lite", timeoutMs: 25_000 },
+];
 
 export type InvoiceItem = {
   descricao: string;
@@ -166,39 +171,55 @@ export async function extractInvoiceData(
 ): Promise<InvoiceData | null> {
   const apiKey = process.env.GEMINI_API_KEY;
 
-  const res = await fetchComTimeout(
-    `https://generativelanguage.googleapis.com/v1beta/models/${GEMINI_MODEL}:generateContent?key=${apiKey}`,
-    {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        contents: [
+  const body = JSON.stringify({
+    contents: [
+      {
+        parts: [
+          { text: PROMPT },
           {
-            parts: [
-              { text: PROMPT },
-              {
-                inline_data: {
-                  mime_type: mimeType,
-                  data: fileBuffer.toString("base64"),
-                },
-              },
-            ],
+            inline_data: {
+              mime_type: mimeType,
+              data: fileBuffer.toString("base64"),
+            },
           },
         ],
-        generationConfig: {
-          responseMimeType: "application/json",
-          responseSchema: RESPONSE_SCHEMA,
-        },
-      }),
+      },
+    ],
+    generationConfig: {
+      responseMimeType: "application/json",
+      responseSchema: RESPONSE_SCHEMA,
     },
-    GEMINI_TIMEOUT_MS,
-    1
-  );
+  });
 
-  if (!res.ok) {
-    const corpo = await res.text().catch(() => "");
-    console.error(`Gemini respondeu ${res.status} ao ler documento (mimeType=${mimeType}):`, corpo.slice(0, 500));
-    throw new Error(`Falha ao chamar a API do Gemini (${res.status})`);
+  let res: Response | null = null;
+  let ultimoErro: unknown = null;
+  for (const { modelo, timeoutMs } of GEMINI_MODELOS) {
+    try {
+      const tentativa = await fetchComTimeout(
+        `https://generativelanguage.googleapis.com/v1beta/models/${modelo}:generateContent?key=${apiKey}`,
+        { method: "POST", headers: { "Content-Type": "application/json" }, body },
+        timeoutMs
+      );
+      if (tentativa.ok) {
+        res = tentativa;
+        break;
+      }
+      const corpo = await tentativa.text().catch(() => "");
+      console.error(`Gemini (${modelo}) respondeu ${tentativa.status} ao ler documento (mimeType=${mimeType}):`, corpo.slice(0, 300));
+      ultimoErro = new Error(`Falha ao chamar a API do Gemini (${tentativa.status})`);
+      // 4xx que nao seja 404/429 (ex: 400 arquivo invalido, 403 chave) nao
+      // melhora trocando de modelo.
+      if (tentativa.status >= 400 && tentativa.status < 500 && tentativa.status !== 404 && tentativa.status !== 429) {
+        break;
+      }
+    } catch (error) {
+      console.error(`Gemini (${modelo}) falhou ao ler documento (mimeType=${mimeType}):`, error);
+      ultimoErro = error;
+    }
+  }
+
+  if (!res) {
+    throw ultimoErro instanceof Error ? ultimoErro : new Error("Falha ao chamar a API do Gemini");
   }
 
   const data = await res.json();
