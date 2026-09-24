@@ -1,15 +1,8 @@
-import { fetchComTimeout } from "@/lib/fetchComTimeout";
+import { chamarGemini } from "@/lib/gemini/chamarGemini";
 
-// Fixo no codigo, sem ler de env var - uma env var GEMINI_MODEL obsoleta
-// configurada na Vercel (apontando pro alias "flash-latest", que ficou
-// com erro 503 de alta demanda persistente) fez o troca de default no
-// codigo nao ter efeito nenhum. Atualizar o modelo agora exige mexer
-// aqui de proposito, sem essa brecha.
-const GEMINI_MODEL = "gemini-3.6-flash";
-// O Gemini as vezes demora dezenas de segundos em picos de demanda (ja
-// observado ate ~50s em teste real) - 40s cobre a maioria dos casos sem
-// estourar o teto de 60s do webhook (Graph API fica com ~8s cada chamada).
-const GEMINI_TIMEOUT_MS = 40_000;
+// Orcamento total de tempo (cadeia de modelos em chamarGemini), abaixo do
+// teto de 60s do webhook.
+const GEMINI_ORCAMENTO_MS = 40_000;
 
 export type DespesaDeAudio = {
   valor: number | null;
@@ -45,43 +38,24 @@ export async function extractDespesaDeAudio(
   audioBuffer: Buffer,
   mimeTypeBruto: string
 ): Promise<DespesaDeAudio | null> {
-  const apiKey = process.env.GEMINI_API_KEY;
   // O WhatsApp manda algo como "audio/ogg; codecs=opus" - o Gemini so aceita
   // o tipo base, sem os parametros de codec.
   const mimeType = mimeTypeBruto.split(";")[0].trim();
 
-  const res = await fetchComTimeout(
-    `https://generativelanguage.googleapis.com/v1beta/models/${GEMINI_MODEL}:generateContent?key=${apiKey}`,
+  const res = await chamarGemini(
     {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        contents: [
-          {
-            parts: [
-              { text: PROMPT },
-              {
-                inline_data: {
-                  mime_type: mimeType,
-                  data: audioBuffer.toString("base64"),
-                },
-              },
-            ],
-          },
-        ],
-        generationConfig: {
-          responseMimeType: "application/json",
-          responseSchema: RESPONSE_SCHEMA,
+      contents: [
+        {
+          parts: [
+            { text: PROMPT },
+            { inline_data: { mime_type: mimeType, data: audioBuffer.toString("base64") } },
+          ],
         },
-      }),
+      ],
+      generationConfig: { responseMimeType: "application/json", responseSchema: RESPONSE_SCHEMA },
     },
-    GEMINI_TIMEOUT_MS,
-    1
+    { orcamentoMs: GEMINI_ORCAMENTO_MS, contexto: "ler audio de despesa" }
   );
-
-  if (!res.ok) {
-    throw new Error(`Falha ao chamar a API do Gemini (${res.status})`);
-  }
 
   const data = await res.json();
   const text: string | undefined =

@@ -1,15 +1,10 @@
-import { fetchComTimeout } from "@/lib/fetchComTimeout";
+import { chamarGemini } from "@/lib/gemini/chamarGemini";
 
-// Fixo no codigo, sem ler de env var - uma env var GEMINI_MODEL obsoleta
-// configurada na Vercel (apontando pro alias "flash-latest", que ficou
-// com erro 503 de alta demanda persistente) fez o troca de default no
-// codigo nao ter efeito nenhum. Atualizar o modelo agora exige mexer
-// aqui de proposito, sem essa brecha.
-const GEMINI_MODEL = "gemini-3.6-flash";
 // Extrato pode ter varias paginas/transacoes - demora mais que um documento
 // unico, mas a action que chama isso tem maxDuration=60, entao ainda
-// precisa sobrar tempo pra gravar tudo depois.
-const GEMINI_TIMEOUT_MS = 50_000;
+// precisa sobrar tempo pra gravar tudo depois. A cadeia de modelos fica em
+// chamarGemini.
+const GEMINI_ORCAMENTO_MS = 50_000;
 
 export type TransacaoExtrato = {
   data: string;
@@ -60,40 +55,20 @@ export async function extractBankStatement(
   fileBuffer: Buffer,
   mimeType: string
 ): Promise<TransacaoExtrato[]> {
-  const apiKey = process.env.GEMINI_API_KEY;
-
-  const res = await fetchComTimeout(
-    `https://generativelanguage.googleapis.com/v1beta/models/${GEMINI_MODEL}:generateContent?key=${apiKey}`,
+  const res = await chamarGemini(
     {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        contents: [
-          {
-            parts: [
-              { text: PROMPT },
-              {
-                inline_data: {
-                  mime_type: mimeType,
-                  data: fileBuffer.toString("base64"),
-                },
-              },
-            ],
-          },
-        ],
-        generationConfig: {
-          responseMimeType: "application/json",
-          responseSchema: RESPONSE_SCHEMA,
+      contents: [
+        {
+          parts: [
+            { text: PROMPT },
+            { inline_data: { mime_type: mimeType, data: fileBuffer.toString("base64") } },
+          ],
         },
-      }),
+      ],
+      generationConfig: { responseMimeType: "application/json", responseSchema: RESPONSE_SCHEMA },
     },
-    GEMINI_TIMEOUT_MS,
-    1
+    { orcamentoMs: GEMINI_ORCAMENTO_MS, contexto: "ler extrato bancario" }
   );
-
-  if (!res.ok) {
-    throw new Error(`Falha ao chamar a API do Gemini (${res.status})`);
-  }
 
   const data = await res.json();
   const text: string | undefined =
