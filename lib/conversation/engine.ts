@@ -1108,34 +1108,50 @@ async function handleNotaFiscalRecebida(
 ) {
   await sendText(from, "📄 Recebi seu documento, analisando...");
 
-  let invoice;
+  let invoice: InvoiceData | null = null;
   let comprovante: Dados["comprovante"] | undefined;
-  try {
-    const { buffer, mimeType } = await downloadWhatsAppMedia(media.id);
-    invoice = await extractInvoiceData(buffer, mimeType);
-    const tipoDocumento =
-      invoice?.tipoDocumento === "comprovante_pagamento"
-        ? "comprovante_pagamento"
-        : "documento_cobranca";
+  let arquivo: { buffer: Buffer; mimeType: string } | null = null;
 
-    comprovante = await uploadComprovanteWhatsApp({
-      telefone: from,
-      mediaId: media.id,
-      buffer,
-      mimeType,
-      tipoDocumento,
-      contaOrigemBanco: invoice?.contaOrigemBanco ?? null,
-      contaOrigemTitular: invoice?.contaOrigemTitular ?? null,
-      contaOrigemDocumento: invoice?.contaOrigemDocumento ?? null,
-      contaOrigemAgencia: invoice?.contaOrigemAgencia ?? null,
-      contaOrigemNumero: invoice?.contaOrigemNumero ?? null,
-      metodoPagamento: invoice?.metodoPagamento ?? null,
-      numeroDocumento: invoice?.numeroDocumento ?? null,
-    });
+  // Download, leitura (Gemini) e upload no Storage ficam em blocos separados:
+  // antes, uma falha no upload jogava fora uma leitura que tinha dado certo
+  // e o usuario recebia "nao consegui ler" mesmo com a nota lida.
+  try {
+    arquivo = await downloadWhatsAppMedia(media.id);
   } catch (error) {
-    console.error("Erro ao processar comprovante:", error);
-    Sentry.captureException(error, { tags: { fluxo: "nota_fiscal_recebida" } });
-    invoice = null;
+    console.error("Erro ao baixar comprovante do WhatsApp:", error);
+    Sentry.captureException(error, { tags: { fluxo: "nota_fiscal_recebida", etapa: "download" } });
+  }
+
+  if (arquivo) {
+    try {
+      invoice = await extractInvoiceData(arquivo.buffer, arquivo.mimeType);
+    } catch (error) {
+      console.error("Erro ao ler comprovante com o Gemini:", error);
+      Sentry.captureException(error, { tags: { fluxo: "nota_fiscal_recebida", etapa: "gemini" } });
+    }
+
+    try {
+      comprovante = await uploadComprovanteWhatsApp({
+        telefone: from,
+        mediaId: media.id,
+        buffer: arquivo.buffer,
+        mimeType: arquivo.mimeType,
+        tipoDocumento:
+          invoice?.tipoDocumento === "comprovante_pagamento"
+            ? "comprovante_pagamento"
+            : "documento_cobranca",
+        contaOrigemBanco: invoice?.contaOrigemBanco ?? null,
+        contaOrigemTitular: invoice?.contaOrigemTitular ?? null,
+        contaOrigemDocumento: invoice?.contaOrigemDocumento ?? null,
+        contaOrigemAgencia: invoice?.contaOrigemAgencia ?? null,
+        contaOrigemNumero: invoice?.contaOrigemNumero ?? null,
+        metodoPagamento: invoice?.metodoPagamento ?? null,
+        numeroDocumento: invoice?.numeroDocumento ?? null,
+      });
+    } catch (error) {
+      console.error("Erro ao salvar comprovante no Storage:", error);
+      Sentry.captureException(error, { tags: { fluxo: "nota_fiscal_recebida", etapa: "upload" } });
+    }
   }
 
   // O Gemini as vezes classifica certo como comprovante de pagamento mas
