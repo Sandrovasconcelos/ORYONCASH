@@ -20,3 +20,20 @@ export function formatBRL(valor: number): string {
     currency: "BRL",
   });
 }
+
+/** Aceita 19/08, 19/08/26, 19/08/2026, hoje e ontem; devolve AAAA-MM-DD ou null. */
+export function parseDataCorrecao(texto: string, hoje: string): string | null {
+  const t = texto.trim().toLowerCase();
+  if (t === "hoje") return hoje;
+  if (t === "ontem") return new Date(Date.parse(`${hoje}T00:00:00Z`) - 86_400_000).toISOString().slice(0, 10);
+  const m = t.match(/^(\d{1,2})[/.-](\d{1,2})(?:[/.-](\d{2}|\d{4}))?$/);
+  if (!m) return null;
+  const dia = Number(m[1]);
+  const mes = Number(m[2]);
+  let ano = m[3] ? Number(m[3]) : Number(hoje.slice(0, 4));
+  if (ano < 100) ano += 2000;
+  const iso = `${ano}-${String(mes).padStart(2, "0")}-${String(dia).padStart(2, "0")}`;
+  const d = new Date(`${iso}T00:00:00Z`);
+  if (Number.isNaN(d.getTime()) || d.getUTCDate() !== dia || d.getUTCMonth() + 1 !== mes) return null;
+  return iso;
+}

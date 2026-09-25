@@ -36,6 +36,7 @@ export const ESTADOS = {
   CORRIGIR_SELECIONANDO_LANCAMENTO: "corrigir_selecionando_lancamento",
   CORRIGIR_SELECIONANDO_CAMPO: "corrigir_selecionando_campo",
   CORRIGIR_VALOR_NOVO: "corrigir_valor_novo",
+  CORRIGIR_DATA_NOVA: "corrigir_data_nova",
   CORRIGIR_DESCRICAO_NOVA: "corrigir_descricao_nova",
   CORRIGIR_CATEGORIA_NOVA: "corrigir_categoria_nova",
   CORRIGIR_ETAPA_NOVA: "corrigir_etapa_nova",
@@ -97,6 +98,7 @@ export const TIPO_REMOVER_IDS = {
 
 export const CAMPO_IDS = {
   VALOR: "campo:valor",
+  DATA: "campo:data",
   CATEGORIA: "campo:categoria",
   ETAPA: "campo:etapa",
   MATERIAL: "campo:material",

@@ -24,6 +24,13 @@ Regras:
 - "descricao": a descrição/histórico da transação como aparece no extrato
   (ex: "PIX ENVIADO JOAO SILVA", "COMPRA CARTAO LOJA X", "TARIFA PACOTE
   SERVICOS"). Mantenha resumido mas identificável.
+- Se o extrato tiver uma coluna de FAVORECIDO/BENEFICIÁRIO/DESTINATÁRIO (nome de
+  quem recebeu ou enviou o PIX/TED), inclua o nome no fim da descrição no
+  formato "DESCRICAO - Nome" (ex: "DEB PIX CHAVE - Valdemir de Jesus"). O nome
+  pode estar em coluna separada à direita; nunca o deixe de fora. Não inclua
+  CPF/CNPJ.
+- Ignore linhas que não são movimentação: "SALDO DIA", "SALDO ANTERIOR",
+  "SALDO FINAL", totais e cabeçalhos.
 - "valor": valor da transação, sempre positivo (sem sinal).
 - "tipo": "debito" quando o dinheiro saiu da conta (pagamento, saque,
   tarifa, transferência enviada), "credito" quando entrou (depósito,

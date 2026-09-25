@@ -6,6 +6,7 @@ import { abrirAcaoDeDespesa, handleIncomingMessage, iniciarLancamentoDeTransacao
 import { cartaoPorId } from "@/lib/conciliacao/avisos";
 import { buscarTransacaoPendente, ignorarTransacao } from "@/lib/conciliacao/queries";
 import { aplicarRegrasDeIgnorar, salvarRegra } from "@/lib/conciliacao/regras";
+import { aceitarVinculoPorValor, buscarVinculosPorValor } from "@/lib/conciliacao/vinculosPorValor";
 import { desfazerDespesaRecente } from "@/lib/conversation/queries";
 import { registrarAtividade } from "@/lib/atividades";
 import { formatBRL } from "@/lib/conversation/format";
@@ -234,6 +235,22 @@ async function resolverPagamento(toque: Toque) {
   } else if (acao === "xi") {
     await ignorarTransacao(id);
     resultado = "🙈 Ignorado.";
+  } else if (acao === "xv") {
+    const vinculo = (await buscarVinculosPorValor([transacao])).get(transacao.id);
+    const autorNome = await getNomePorTelefone(toque.de).catch(() => "Telegram");
+    const r = vinculo
+      ? await aceitarVinculoPorValor({
+          transacaoId: id,
+          despesaId: vinculo.despesaId,
+          ajustarData: true,
+          autorNome,
+          autorTelefone: toque.de,
+          origem: "whatsapp",
+        }).catch(() => ({ ok: false }))
+      : { ok: false };
+    resultado = r.ok
+      ? `🔗 Vinculado. A data do lançamento agora é ${transacao.data.split("-").reverse().slice(0, 2).join("/")}.`
+      : "Não achei mais o lançamento certo pra vincular. Use Lançar ou resolva no dashboard.";
   } else if (acao === "xs") {
     await salvarRegra({ descricao: transacao.descricao, acao: "ignorar" });
     await ignorarTransacao(id);
@@ -309,7 +326,7 @@ export async function POST(request: NextRequest) {
   const { incoming, callback } = parseTelegramUpdate(update);
 
   if (callback) {
-    if (!/^(cp|dz|cr|ap|xl|xi|xs):/.test(callback.data)) await confirmarToque(callback);
+    if (!/^(cp|dz|cr|ap|xl|xi|xs|xv):/.test(callback.data)) await confirmarToque(callback);
     if (callback.data.startsWith("pg:")) {
       await navegarPagina(callback);
       return NextResponse.json({ ok: true });
@@ -348,7 +365,7 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ ok: true });
   }
 
-  if (callback && /^(xl|xi|xs):/.test(callback.data)) {
+  if (callback && /^(xl|xi|xs|xv):/.test(callback.data)) {
     await resolverPagamento(callback);
     return NextResponse.json({ ok: true });
   }

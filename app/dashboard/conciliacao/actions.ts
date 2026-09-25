@@ -10,6 +10,7 @@ import { getAutorNomeDashboard } from "@/app/dashboard/actions";
 import { processarExtrato, reconciliarExtrato } from "@/lib/conciliacao/queries";
 import { apagarRegra, aplicarRegrasDeIgnorar, salvarRegra } from "@/lib/conciliacao/regras";
 import { avisoPagamentosSemLancamento } from "@/lib/conciliacao/avisos";
+import { aceitarVinculoPorValor, buscarVinculosPorValor } from "@/lib/conciliacao/vinculosPorValor";
 import { enviarNotificacao, numeroNotificacao } from "@/lib/alertas/notificar";
 import { createAdminClient } from "@/lib/supabase/admin";
 
@@ -265,6 +266,39 @@ export async function criarDespesaDaTransacaoAction(formData: FormData) {
   });
 
   await atualizarTotaisExtrato(extratoId);
+  revalidatePath(`/dashboard/conciliacao/${extratoId}`);
+  revalidatePath("/dashboard/despesas");
+}
+
+export async function aceitarVinculoAction(formData: FormData) {
+  const transacaoId = String(formData.get("transacao_id") ?? "");
+  const despesaId = String(formData.get("despesa_id") ?? "");
+  const extratoId = String(formData.get("extrato_id") ?? "");
+  const ajustarData = formData.get("ajustar_data") === "sim";
+  if (!transacaoId || !despesaId) return;
+
+  const autorNome = await getAutorNomeDashboard();
+  await aceitarVinculoPorValor({ transacaoId, despesaId, ajustarData, autorNome, origem: "dashboard" });
+  revalidatePath(`/dashboard/conciliacao/${extratoId}`);
+  revalidatePath("/dashboard/despesas");
+}
+
+/** Aceita de uma vez todas as sugestoes (mesmo valor, data diferente) do extrato, acertando as datas. */
+export async function aceitarTodasSugestoesAction(formData: FormData) {
+  const extratoId = String(formData.get("extrato_id") ?? "");
+  if (!extratoId) return;
+
+  const { data: pendentes } = await createAdminClient()
+    .from("extrato_transacoes")
+    .select("id, data, valor")
+    .eq("extrato_id", extratoId)
+    .eq("status", "pendente")
+    .eq("tipo", "debito");
+  const sugestoes = await buscarVinculosPorValor(pendentes ?? []);
+  const autorNome = await getAutorNomeDashboard();
+  for (const s of sugestoes.values()) {
+    await aceitarVinculoPorValor({ transacaoId: s.transacaoId, despesaId: s.despesaId, ajustarData: true, autorNome, origem: "dashboard" });
+  }
   revalidatePath(`/dashboard/conciliacao/${extratoId}`);
   revalidatePath("/dashboard/despesas");
 }

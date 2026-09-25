@@ -150,6 +150,7 @@ export async function sendListCamposParaCorrigir(to: string) {
       {
         rows: [
           { id: CAMPO_IDS.VALOR, title: "💰 Valor" },
+          { id: CAMPO_IDS.DATA, title: "📅 Data" },
           { id: CAMPO_IDS.CATEGORIA, title: "📁 Categoria" },
           { id: CAMPO_IDS.ETAPA, title: "📐 Etapa" },
           { id: CAMPO_IDS.MATERIAL, title: "📦 Material" },

@@ -945,6 +945,7 @@ export async function updateDespesaCampo(
   id: string,
   patch: Partial<{
     valor: number;
+    data: string;
     descricao: string | null;
     categoria_id: string;
     etapa_id: string;

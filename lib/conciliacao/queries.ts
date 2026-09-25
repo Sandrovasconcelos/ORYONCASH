@@ -19,6 +19,46 @@ function somarDias(dataISO: string, dias: number): string {
 }
 
 /**
+ * Extratos de periodos que se sobrepoem (ex: parcial do dia 27 e o mes inteiro)
+ * duplicariam as mesmas transacoes. Compara por data + valor + tipo (a
+ * descricao muda de um formato de extrato pra outro) contando repeticoes:
+ * se o extrato anterior ja tem 6 PIX de R$ 3.690 no dia, so entram os que
+ * passarem de 6.
+ */
+async function descartarJaImportadas<T extends { data: string; valor: number; tipo: string }>(
+  contaBancariaId: string | null,
+  extratoIdAtual: string,
+  transacoes: T[]
+): Promise<T[]> {
+  if (!contaBancariaId || transacoes.length === 0) return transacoes;
+  const supabase = createAdminClient();
+  const datas = transacoes.map((t) => t.data).sort();
+  const { data: existentes } = await supabase
+    .from("extrato_transacoes")
+    .select("data, valor, tipo, extratos_bancarios!inner(conta_bancaria_id)")
+    .eq("extratos_bancarios.conta_bancaria_id", contaBancariaId)
+    .neq("extrato_id", extratoIdAtual)
+    .gte("data", datas[0])
+    .lte("data", datas[datas.length - 1])
+    .limit(5000);
+  if (!existentes || existentes.length === 0) return transacoes;
+
+  const chave = (t: { data: string; valor: number; tipo: string }) => `${t.data}|${Math.round(t.valor * 100)}|${t.tipo}`;
+  const jaTem = new Map<string, number>();
+  for (const e of existentes) jaTem.set(chave(e), (jaTem.get(chave(e)) ?? 0) + 1);
+
+  return transacoes.filter((t) => {
+    const k = chave(t);
+    const restante = jaTem.get(k) ?? 0;
+    if (restante > 0) {
+      jaTem.set(k, restante - 1);
+      return false;
+    }
+    return true;
+  });
+}
+
+/**
  * Baixa o arquivo do extrato ja enviado pro Storage, extrai as transacoes
  * via Gemini, grava tudo e tenta casar automaticamente com despesas
  * existentes da mesma conta. Roda de forma sincrona dentro da server action
@@ -42,12 +82,21 @@ export async function processarExtrato(extratoId: string): Promise<void> {
     if (erroDownload || !arquivo) throw erroDownload ?? new Error("Arquivo não encontrado no Storage.");
 
     const buffer = Buffer.from(await arquivo.arrayBuffer());
-    const transacoesExtraidas = await extractBankStatement(buffer, arquivo.type || "application/pdf");
+    const lidas = await extractBankStatement(buffer, arquivo.type || "application/pdf");
+    // Linhas de saldo/total podem escapar com valor zero.
+    const validas = lidas.filter((t) => t.valor > 0);
+    const transacoesExtraidas = await descartarJaImportadas(extrato.conta_bancaria_id, extratoId, validas);
 
     if (transacoesExtraidas.length === 0) {
       await supabase
         .from("extratos_bancarios")
-        .update({ status: "erro", erro: "Não foi possível identificar nenhuma transação no arquivo." })
+        .update({
+          status: "erro",
+          erro:
+            validas.length > 0
+              ? "Todas as transações desse arquivo já estavam em outro extrato desta conta (períodos repetidos)."
+              : "Não foi possível identificar nenhuma transação no arquivo.",
+        })
         .eq("id", extratoId);
       return;
     }

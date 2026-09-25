@@ -12,7 +12,7 @@ import {
   type DespesaDeAudio,
 } from "@/lib/gemini/extractDespesaAudio";
 import { extractSpreadsheetAsText } from "@/lib/orcamento/parseSpreadsheet";
-import { formatBRL, parseValorBR } from "./format";
+import { formatBRL, parseDataCorrecao, parseValorBR } from "./format";
 import { ESTADOS, MENU_IDS, CAMPO_IDS, TIPO_REMOVER_IDS, COMANDOS_CANCELAR, RECORRENCIA_IDS } from "./states";
 import { sendMenuPrincipal } from "./menu";
 import { sendListPeriodoRelatorio, gerarEEnviarRelatorio } from "./relatorio";
@@ -44,6 +44,7 @@ import {
   findFornecedorPorTexto,
   findMaterialPorTexto,
   resolverPorNumeroOuNome,
+  hojeNoBrasil,
   listObrasAtivas,
   createObra,
   createMaterial,
@@ -382,6 +383,8 @@ export async function handleIncomingMessage(message: IncomingMessage) {
       return handleCorrigirSelecionandoCampo(from, message, session);
     case ESTADOS.CORRIGIR_VALOR_NOVO:
       return handleCorrigirValorNovo(from, message, session);
+    case ESTADOS.CORRIGIR_DATA_NOVA:
+      return handleCorrigirDataNova(from, message, session);
     case ESTADOS.CORRIGIR_DESCRICAO_NOVA:
       return handleCorrigirDescricaoNova(from, message, session);
     case ESTADOS.CORRIGIR_CATEGORIA_NOVA:
@@ -2548,6 +2551,10 @@ async function handleCorrigirSelecionandoCampo(
       await saveSession(from, ESTADOS.CORRIGIR_VALOR_NOVO, dados);
       await sendText(from, "💰 Qual o novo valor? (ex: 150,00)");
       return;
+    case CAMPO_IDS.DATA:
+      await saveSession(from, ESTADOS.CORRIGIR_DATA_NOVA, dados);
+      await sendText(from, `📅 Qual a data correta do gasto? (ex: 19/08, 19/08/2026, *hoje* ou *ontem*)`);
+      return;
     case CAMPO_IDS.DESCRICAO:
       await saveSession(from, ESTADOS.CORRIGIR_DESCRICAO_NOVA, dados);
       await sendText(from, "⌨️ Digite a nova descrição:");
@@ -2606,6 +2613,20 @@ async function handleCorrigirValorNovo(
   await updateDespesaCampo(dados.despesaId!, { valor });
   await registrarEdicaoDespesa(from, dados, `Valor alterado para ${formatBRL(valor)}`, { valor });
   await sendText(from, "✅ Valor atualizado.");
+  await resetSession(from);
+  await sendMenuPrincipal(from);
+}
+
+async function handleCorrigirDataNova(from: string, message: IncomingMessage, session: Session) {
+  const data = message.text ? parseDataCorrecao(message.text, hojeNoBrasil()) : null;
+  if (!data) {
+    await sendText(from, "📅 Não entendi a data. Digite assim: 19/08, 19/08/2026, hoje ou ontem.");
+    return;
+  }
+  const dados = session.dados_coletados as Dados;
+  await updateDespesaCampo(dados.despesaId!, { data });
+  await registrarEdicaoDespesa(from, dados, `Data alterada para ${data.split("-").reverse().join("/")}`, { data });
+  await sendText(from, "✅ Data atualizada.");
   await resetSession(from);
   await sendMenuPrincipal(from);
 }

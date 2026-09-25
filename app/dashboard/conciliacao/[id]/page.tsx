@@ -3,7 +3,8 @@ import { notFound } from "next/navigation";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { formatBRL } from "@/lib/conversation/format";
 import { formatDataBrasil, formatDataHoraBrasil } from "@/lib/format-date";
-import { desvincularTransacaoAction, reconciliarExtratoAction } from "../actions";
+import { aceitarTodasSugestoesAction, aceitarVinculoAction, desvincularTransacaoAction, reconciliarExtratoAction } from "../actions";
+import { buscarVinculosPorValor } from "@/lib/conciliacao/vinculosPorValor";
 import { SubmitButton } from "../../submit-button";
 import { RevisaoTransacaoModal } from "./revisao-transacao-modal";
 import { sugerirLancamentos } from "@/lib/conciliacao/sugestoes";
@@ -71,6 +72,7 @@ export default async function ConciliacaoDetalhePage({
   const pendentes = (transacoes ?? []).filter((t) => t.status === "pendente" && t.tipo === "debito");
   const totalPendente = pendentes.reduce((soma, t) => soma + t.valor, 0);
   const sugestoes = await sugerirLancamentos(pendentes).catch(() => new Map());
+  const vinculosPorValor = await buscarVinculosPorValor(pendentes).catch(() => new Map());
   const transacoesVisiveis = filtro === "pendente" ? pendentes : (transacoes ?? []);
 
   const idsJaVinculados = new Set((transacoes ?? []).map((t) => t.despesa_id).filter(Boolean));
@@ -143,6 +145,21 @@ export default async function ConciliacaoDetalhePage({
         </div>
       )}
 
+      {vinculosPorValor.size > 0 && (
+        <div className="flex flex-wrap items-center justify-between gap-3 rounded-card border border-status-warning/30 bg-status-warning/10 p-4 text-sm text-brand-gray-700 shadow-card">
+          <p>
+            <strong className="text-brand-black">{vinculosPorValor.size} pagamento(s) têm lançamento de mesmo valor com data diferente</strong>
+            {" "}(lançados dias depois). Aceite pra vincular e acertar a data do lançamento pela data do pagamento no banco.
+          </p>
+          <form action={aceitarTodasSugestoesAction}>
+            <input type="hidden" name="extrato_id" value={extrato.id} />
+            <SubmitButton className="rounded-brand-sm bg-brand-black px-3 py-2 text-xs font-bold text-white" pendingText="Vinculando…">
+              Aceitar todas e acertar as datas
+            </SubmitButton>
+          </form>
+        </div>
+      )}
+
       {transacoesVisiveis.length > 0 && (
         <div className="overflow-hidden rounded-card border border-black/5 bg-white shadow-card">
           <table className="w-full text-sm">
@@ -197,6 +214,27 @@ export default async function ConciliacaoDetalhePage({
                           </p>
                           {despesa.descricao && <p className="text-brand-gray-500">{despesa.descricao}</p>}
                         </>
+                      ) : vinculosPorValor.get(t.id) ? (
+                        <div className="flex flex-col gap-1">
+                          <p className="font-semibold text-status-warning">Possível lançamento (data diferente)</p>
+                          <p>
+                            {vinculosPorValor.get(t.id)!.despesaData.split("-").reverse().join("/")} · {formatBRL(vinculosPorValor.get(t.id)!.despesaValor)}
+                            {vinculosPorValor.get(t.id)!.despesaDescricao ? ` · ${vinculosPorValor.get(t.id)!.despesaDescricao}` : ""}
+                          </p>
+                          <div className="flex gap-3">
+                            {["sim", "nao"].map((ajustar) => (
+                              <form key={ajustar} action={aceitarVinculoAction}>
+                                <input type="hidden" name="transacao_id" value={t.id} />
+                                <input type="hidden" name="despesa_id" value={vinculosPorValor.get(t.id)!.despesaId} />
+                                <input type="hidden" name="extrato_id" value={extrato.id} />
+                                <input type="hidden" name="ajustar_data" value={ajustar} />
+                                <button type="submit" className="font-bold text-brand-red hover:underline">
+                                  {ajustar === "sim" ? "Vincular e acertar a data" : "Só vincular"}
+                                </button>
+                              </form>
+                            ))}
+                          </div>
+                        </div>
                       ) : (
                         "—"
                       )}

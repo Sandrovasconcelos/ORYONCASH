@@ -3,6 +3,7 @@ import { formatBRL } from "@/lib/conversation/format";
 import { botaoDashboard, type Teclado } from "@/lib/telegram/interativo";
 import { nomeDoBeneficiario } from "./classificar";
 import { sugerirLancamentos, type SugestaoLancamento } from "./sugestoes";
+import { buscarVinculosPorValor, type VinculoPorValor } from "./vinculosPorValor";
 
 const MAX_BOTOES = 8;
 
@@ -53,7 +54,8 @@ export async function avisoPagamentosSemLancamento(): Promise<{ mensagem: string
 /** Cartao de um pagamento, com as acoes possiveis. */
 export function cartaoDoPagamento(
   p: Pendente,
-  sugestao: SugestaoLancamento | undefined
+  sugestao: SugestaoLancamento | undefined,
+  vinculo?: VinculoPorValor
 ): { mensagem: string; botoes: Teclado } {
   const linhas = [
     "🏦 *Pagamento sem lançamento*",
@@ -68,10 +70,17 @@ export function cartaoDoPagamento(
         (sugestao.origem === "regra" ? " (como você lançou da última vez)." : ".")
     );
   }
+  if (vinculo) {
+    linhas.push(
+      "",
+      `🔗 Já existe um lançamento de mesmo valor, de ${dataCurta(vinculo.despesaData)}${vinculo.despesaDescricao ? ` (${vinculo.despesaDescricao})` : ""}. Se for o mesmo pagamento, vincule e a data do lançamento passa a ser ${dataCurta(p.data)}.`
+    );
+  }
   const quem = nomeDoBeneficiario(p.descricao);
   return {
     mensagem: linhas.join("\n"),
     botoes: [
+      ...(vinculo ? [[{ text: `🔗 Vincular ao lançamento de ${dataCurta(vinculo.despesaData)}`, callback_data: `xv:${p.id}` }]] : []),
       [{ text: "✅ Lançar", callback_data: `xl:${p.id}` }],
       [
         { text: "🙈 Ignorar só este", callback_data: `xi:${p.id}` },
@@ -89,5 +98,6 @@ export async function cartaoPorId(id: string) {
     .maybeSingle();
   if (!data || data.status !== "pendente" || data.tipo !== "debito") return null;
   const sugestao = (await sugerirLancamentos([data]).catch(() => new Map())).get(data.id);
-  return cartaoDoPagamento(data, sugestao);
+  const vinculo = (await buscarVinculosPorValor([data]).catch(() => new Map())).get(data.id);
+  return cartaoDoPagamento(data, sugestao, vinculo);
 }

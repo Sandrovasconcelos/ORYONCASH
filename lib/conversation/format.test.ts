@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { parseValorBR, formatBRL } from "./format";
+import { parseValorBR, formatBRL, parseDataCorrecao } from "./format";
 
 describe("parseValorBR", () => {
   it("aceita numero simples", () => {
@@ -44,5 +44,30 @@ describe("formatBRL", () => {
 
   it("formata zero corretamente", () => {
     expect(formatBRL(0)).toContain("0,00");
+  });
+});
+
+describe("parseDataCorrecao", () => {
+  const hoje = "2026-09-25";
+
+  it("aceita dia/mes usando o ano corrente", () => {
+    expect(parseDataCorrecao("19/08", hoje)).toBe("2026-08-19");
+    expect(parseDataCorrecao("4-8", hoje)).toBe("2026-08-04");
+  });
+
+  it("aceita ano com 2 ou 4 digitos", () => {
+    expect(parseDataCorrecao("19/08/2026", hoje)).toBe("2026-08-19");
+    expect(parseDataCorrecao("19/08/26", hoje)).toBe("2026-08-19");
+  });
+
+  it("aceita hoje e ontem", () => {
+    expect(parseDataCorrecao("hoje", hoje)).toBe("2026-09-25");
+    expect(parseDataCorrecao("Ontem", hoje)).toBe("2026-09-24");
+  });
+
+  it("rejeita datas inexistentes e texto solto", () => {
+    expect(parseDataCorrecao("31/02", hoje)).toBeNull();
+    expect(parseDataCorrecao("banana", hoje)).toBeNull();
+    expect(parseDataCorrecao("32/01", hoje)).toBeNull();
   });
 });
