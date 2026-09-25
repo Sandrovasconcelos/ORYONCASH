@@ -2,7 +2,10 @@ import { NextRequest, NextResponse } from "next/server";
 import { timingSafeEqual } from "crypto";
 import * as Sentry from "@sentry/nextjs";
 import { isAllowedNumber } from "@/lib/whatsapp/verify";
-import { abrirAcaoDeDespesa, handleIncomingMessage } from "@/lib/conversation/engine";
+import { abrirAcaoDeDespesa, handleIncomingMessage, iniciarLancamentoDeTransacao } from "@/lib/conversation/engine";
+import { cartaoPorId } from "@/lib/conciliacao/avisos";
+import { buscarTransacaoPendente, ignorarTransacao } from "@/lib/conciliacao/queries";
+import { aplicarRegrasDeIgnorar, salvarRegra } from "@/lib/conciliacao/regras";
 import { desfazerDespesaRecente } from "@/lib/conversation/queries";
 import { registrarAtividade } from "@/lib/atividades";
 import { formatBRL } from "@/lib/conversation/format";
@@ -13,7 +16,7 @@ import {
 } from "@/lib/whatsapp/processar";
 import { parseTelegramUpdate, type TgUpdate, type Toque } from "@/lib/telegram/parse";
 import { telegramCall } from "@/lib/telegram/api";
-import { sendTelegramText } from "@/lib/telegram/messages";
+import { sendTelegramText, sendTelegramTextComBotoes } from "@/lib/telegram/messages";
 import { chatIdDe } from "@/lib/telegram/ids";
 import { marcarContaAPagarComoPaga } from "@/lib/contasAPagar/queries";
 import { getNomePorTelefone } from "@/lib/atividades";
@@ -205,6 +208,65 @@ async function abrirAcaoDoAviso(toque: Toque) {
   }
 }
 
+/** Toque num pagamento do aviso do extrato: manda o cartao com as acoes. */
+async function abrirPagamento(toque: Toque) {
+  const cartao = await cartaoPorId(toque.data.slice(3));
+  if (!cartao) {
+    await telegramCall("answerCallbackQuery", {
+      callback_query_id: toque.queryId,
+      text: "Esse pagamento já foi resolvido.",
+    }).catch(() => {});
+    return;
+  }
+  await telegramCall("answerCallbackQuery", { callback_query_id: toque.queryId }).catch(() => {});
+  await sendTelegramTextComBotoes(toque.de, cartao.mensagem, cartao.botoes);
+}
+
+/** Lancar / ignorar so este / ignorar sempre, no cartao de um pagamento do extrato. */
+async function resolverPagamento(toque: Toque) {
+  const acao = toque.data.slice(0, 2);
+  const id = toque.data.slice(3);
+  const transacao = await buscarTransacaoPendente(id);
+
+  let resultado: string;
+  if (!transacao) {
+    resultado = "Esse pagamento já foi resolvido.";
+  } else if (acao === "xi") {
+    await ignorarTransacao(id);
+    resultado = "🙈 Ignorado.";
+  } else if (acao === "xs") {
+    await salvarRegra({ descricao: transacao.descricao, acao: "ignorar" });
+    await ignorarTransacao(id);
+    await aplicarRegrasDeIgnorar(transacao.extrato_id).catch(() => 0);
+    resultado = "🙈 Ignorado — nos próximos extratos também.";
+  } else {
+    resultado = "➡️ Vamos lançar (siga as perguntas abaixo).";
+  }
+
+  await telegramCall("answerCallbackQuery", {
+    callback_query_id: toque.queryId,
+    text: resultado,
+  }).catch(() => {});
+  await telegramCall("editMessageText", {
+    chat_id: toque.chatId,
+    message_id: toque.messageId,
+    text: `${toque.texto}
+
+${resultado}`,
+    ...(toque.entidades.length > 0 ? { entities: toque.entidades } : {}),
+    reply_markup: semTeclado,
+  }).catch(() => removerBotoesDeAcao(toque));
+
+  if (transacao && acao === "xl") {
+    try {
+      await comTimeoutDeAviso(toque.de, iniciarLancamentoDeTransacao(toque.de, id));
+    } catch (error) {
+      console.error("Erro ao iniciar lançamento do extrato:", error);
+      Sentry.captureException(error);
+    }
+  }
+}
+
 export async function GET(request: NextRequest) {
   if (!segredoValido(request.headers.get("x-telegram-bot-api-secret-token"))) {
     return new NextResponse("Forbidden", { status: 401 });
@@ -247,7 +309,7 @@ export async function POST(request: NextRequest) {
   const { incoming, callback } = parseTelegramUpdate(update);
 
   if (callback) {
-    if (!/^(cp|dz|cr|ap):/.test(callback.data)) await confirmarToque(callback);
+    if (!/^(cp|dz|cr|ap|xl|xi|xs):/.test(callback.data)) await confirmarToque(callback);
     if (callback.data.startsWith("pg:")) {
       await navegarPagina(callback);
       return NextResponse.json({ ok: true });
@@ -278,6 +340,16 @@ export async function POST(request: NextRequest) {
 
   if (callback?.data.startsWith("cp:")) {
     await pagarConta(callback);
+    return NextResponse.json({ ok: true });
+  }
+
+  if (callback?.data.startsWith("xp:")) {
+    await abrirPagamento(callback);
+    return NextResponse.json({ ok: true });
+  }
+
+  if (callback && /^(xl|xi|xs):/.test(callback.data)) {
+    await resolverPagamento(callback);
     return NextResponse.json({ ok: true });
   }
 

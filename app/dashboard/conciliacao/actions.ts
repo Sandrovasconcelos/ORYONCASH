@@ -8,6 +8,10 @@ import { hojeNoBrasil } from "@/lib/conversation/queries";
 import { registrarAtividade } from "@/lib/atividades";
 import { getAutorNomeDashboard } from "@/app/dashboard/actions";
 import { processarExtrato, reconciliarExtrato } from "@/lib/conciliacao/queries";
+import { apagarRegra, aplicarRegrasDeIgnorar, salvarRegra } from "@/lib/conciliacao/regras";
+import { avisoPagamentosSemLancamento } from "@/lib/conciliacao/avisos";
+import { enviarNotificacao, numeroNotificacao } from "@/lib/alertas/notificar";
+import { createAdminClient } from "@/lib/supabase/admin";
 
 const TAMANHO_MAXIMO_ARQUIVO_BYTES = 15 * 1024 * 1024;
 const MIME_TYPES_EXTRATO = new Set(["application/pdf", "image/jpeg", "image/png", "image/webp"]);
@@ -83,6 +87,14 @@ export async function uploadExtratoAction(formData: FormData) {
     await processarExtrato(extrato.id);
   } catch (error) {
     console.error("Falha ao processar extrato bancário:", error);
+  }
+
+  // Avisa no Telegram o que ficou sem lancamento (best effort).
+  try {
+    const [numero, aviso] = await Promise.all([numeroNotificacao(), avisoPagamentosSemLancamento()]);
+    if (numero && aviso) await enviarNotificacao(numero, aviso.mensagem, { botoes: aviso.botoes });
+  } catch (error) {
+    console.error("Falha ao avisar pendencias do extrato:", error);
   }
 
   await registrarAtividade({
@@ -173,6 +185,18 @@ export async function ignorarTransacaoAction(formData: FormData) {
   const extratoId = String(formData.get("extrato_id") ?? "");
   if (!transacaoId) return;
 
+  // "Sempre ignorar pagamentos como este": vira regra e vale ja pros demais pendentes.
+  if (formData.get("lembrar") === "on") {
+    const { data: t } = await createAdminClient()
+      .from("extrato_transacoes")
+      .select("descricao")
+      .eq("id", transacaoId)
+      .maybeSingle();
+    if (t && (await salvarRegra({ descricao: t.descricao, acao: "ignorar" }))) {
+      await aplicarRegrasDeIgnorar(extratoId);
+    }
+  }
+
   const supabase = await createClient();
   await supabase
     .from("extrato_transacoes")
@@ -223,14 +247,49 @@ export async function criarDespesaDaTransacaoAction(formData: FormData) {
     dadosDepois: depois,
   });
 
-  await supabase
+  const { data: transacaoOrigem } = await supabase
     .from("extrato_transacoes")
     .update({ despesa_id: despesa.id, status: "conciliado" })
-    .eq("id", transacaoId);
+    .eq("id", transacaoId)
+    .select("descricao")
+    .maybeSingle();
+
+  // Aprende: da proxima vez que o extrato tiver pagamento pra esse beneficiario,
+  // a obra e a categoria ja vem preenchidas.
+  await salvarRegra({
+    descricao: transacaoOrigem?.descricao ?? null,
+    acao: "lancar",
+    obraId,
+    categoriaId,
+    fornecedorId,
+  });
 
   await atualizarTotaisExtrato(extratoId);
   revalidatePath(`/dashboard/conciliacao/${extratoId}`);
   revalidatePath("/dashboard/despesas");
+}
+
+export async function apagarRegraAction(formData: FormData) {
+  const id = String(formData.get("id") ?? "");
+  if (!id) return;
+  await apagarRegra(id);
+  revalidatePath("/dashboard/conciliacao");
+}
+
+export async function atualizarRegraAction(formData: FormData) {
+  const id = String(formData.get("id") ?? "");
+  const acao = String(formData.get("acao") ?? "");
+  if (!id || (acao !== "ignorar" && acao !== "lancar")) return;
+  await createAdminClient()
+    .from("conciliacao_regras")
+    .update({
+      acao,
+      obra_id: acao === "lancar" ? String(formData.get("obra_id") ?? "") || null : null,
+      categoria_id: acao === "lancar" ? String(formData.get("categoria_id") ?? "") || null : null,
+      updated_at: new Date().toISOString(),
+    })
+    .eq("id", id);
+  revalidatePath("/dashboard/conciliacao");
 }
 
 async function atualizarTotaisExtrato(extratoId: string) {

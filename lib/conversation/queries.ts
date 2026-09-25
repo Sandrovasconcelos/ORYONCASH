@@ -676,6 +676,8 @@ export async function createDespesa(input: {
   fornecedorId?: string | null;
   criadoPorTelefone?: string | null;
   criadoPorNome?: string | null;
+  /** Data do gasto (AAAA-MM-DD); padrao = hoje. Usada quando o lancamento vem do extrato. */
+  data?: string;
   documentoAnexado?: "documento_cobranca" | "comprovante_pagamento" | null;
 }) {
   const supabase = createAdminClient();
@@ -689,7 +691,7 @@ export async function createDespesa(input: {
     valor_unitario: input.valorUnitario ?? null,
     material_id: input.materialId ?? null,
     fornecedor_id: input.fornecedorId ?? null,
-    data: hojeNoBrasil(),
+    data: input.data ?? hojeNoBrasil(),
     origem: "whatsapp" as const,
     criado_por_telefone: input.criadoPorTelefone ?? null,
     criado_por_nome: input.criadoPorNome ?? null,

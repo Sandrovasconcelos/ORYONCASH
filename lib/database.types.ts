@@ -444,6 +444,34 @@ export interface Database {
         >;
         Relationships: [];
       };
+      conciliacao_regras: {
+        Row: {
+          id: string;
+          chave: string;
+          acao: "ignorar" | "lancar";
+          obra_id: string | null;
+          categoria_id: string | null;
+          fornecedor_id: string | null;
+          exemplo: string | null;
+          vezes_usada: number;
+          created_at: string;
+          updated_at: string;
+        };
+        Insert: {
+          id?: string;
+          chave: string;
+          acao: "ignorar" | "lancar";
+          obra_id?: string | null;
+          categoria_id?: string | null;
+          fornecedor_id?: string | null;
+          exemplo?: string | null;
+          vezes_usada?: number;
+          created_at?: string;
+          updated_at?: string;
+        };
+        Update: Partial<Database["public"]["Tables"]["conciliacao_regras"]["Insert"]>;
+        Relationships: [];
+      };
       saude_canais: {
         Row: {
           canal: string;

@@ -44,7 +44,20 @@ export async function buscarDespesasSemComprovante(): Promise<DespesaSemComprova
   // Sem a tabela nao da pra saber o que falta - melhor nao avisar do que avisar tudo.
   if (erroComprovantes) return [];
 
-  const comProva = new Set((comprovantes ?? []).map((c) => c.despesa_id));
+  // Pagamento ligado a uma transacao do extrato bancario tambem esta comprovado.
+  const { data: noExtrato } = await supabase
+    .from("extrato_transacoes")
+    .select("despesa_id")
+    .eq("status", "conciliado")
+    .in(
+      "despesa_id",
+      despesas.map((d) => d.id)
+    );
+
+  const comProva = new Set([
+    ...(comprovantes ?? []).map((c) => c.despesa_id),
+    ...(noExtrato ?? []).map((t) => t.despesa_id),
+  ]);
   return despesas
     .filter((d) => !comProva.has(d.id))
     .map((d) => ({

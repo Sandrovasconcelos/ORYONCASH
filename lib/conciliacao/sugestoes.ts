@@ -1,10 +1,13 @@
 import { createAdminClient } from "@/lib/supabase/admin";
 import { encontrarPorPista } from "@/lib/conversation/queries";
 import { nomeDoBeneficiario } from "./classificar";
+import { carregarRegras, chaveDaTransacao } from "./regras";
 
 export type SugestaoLancamento = {
-  fornecedorId: string;
+  fornecedorId: string | null;
   fornecedorNome: string;
+  /** regra = o usuario ja lancou/ensinou isso antes; historico = deduzido dos lancamentos do fornecedor. */
+  origem: "regra" | "historico";
   obraId: string | null;
   categoriaId: string | null;
   baseadaEm: number;
@@ -24,7 +27,8 @@ export async function sugerirLancamentos(
 
   const supabase = createAdminClient();
   const desde = new Date(Date.now() - 365 * 24 * 60 * 60 * 1000).toISOString().slice(0, 10);
-  const [{ data: fornecedores }, { data: despesas }] = await Promise.all([
+  const [regras, { data: fornecedores }, { data: despesas }] = await Promise.all([
+    carregarRegras(),
     supabase.from("fornecedores").select("id, nome").is("deleted_at", null),
     supabase
       .from("despesas")
@@ -49,6 +53,23 @@ export async function sugerirLancamentos(
 
   for (const t of transacoes) {
     const nome = nomeDoBeneficiario(t.descricao);
+
+    // Regra aprendida vale mais que o historico: foi decisao explicita.
+    const chave = chaveDaTransacao(t.descricao);
+    const regra = chave ? regras.get(chave) : undefined;
+    if (regra?.acao === "lancar") {
+      const fornecedorDaRegra = fornecedores.find((f) => f.id === regra.fornecedor_id);
+      resultado.set(t.id, {
+        fornecedorId: regra.fornecedor_id,
+        fornecedorNome: fornecedorDaRegra?.nome ?? nome ?? t.descricao ?? "Pagamento",
+        origem: "regra",
+        obraId: regra.obra_id,
+        categoriaId: regra.categoria_id,
+        baseadaEm: regra.vezes_usada,
+      });
+      continue;
+    }
+
     if (!nome) continue;
     const fornecedor = encontrarPorPista(fornecedores, nome);
     if (!fornecedor) continue;
@@ -59,6 +80,7 @@ export async function sugerirLancamentos(
     resultado.set(t.id, {
       fornecedorId: fornecedor.id,
       fornecedorNome: fornecedor.nome,
+      origem: "historico",
       obraId: melhor?.obraId ?? null,
       categoriaId: melhor?.categoriaId ?? null,
       baseadaEm: total,

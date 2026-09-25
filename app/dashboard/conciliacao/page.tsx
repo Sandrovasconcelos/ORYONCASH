@@ -1,7 +1,8 @@
 import Link from "next/link";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { formatDataHoraBrasil, formatDataBrasil } from "@/lib/format-date";
-import { uploadExtratoAction } from "./actions";
+import { uploadExtratoAction, apagarRegraAction, atualizarRegraAction } from "./actions";
+import { listarRegras } from "@/lib/conciliacao/regras";
 import { SubmitButton } from "../submit-button";
 import { ExcluirExtratoButton } from "./excluir-extrato-button";
 import { pendentesPorExtrato } from "@/lib/conciliacao/pendentes";
@@ -41,6 +42,13 @@ export default async function ConciliacaoPage() {
 
   const extratos = extratosQuery.data ?? [];
   const pendentes = await pendentesPorExtrato();
+  const regras = await listarRegras();
+  const [{ data: obrasRegra }, { data: categoriasRegra }] = await Promise.all([
+    supabase.from("obras").select("id, nome").is("deleted_at", null).order("nome"),
+    supabase.from("categorias").select("id, nome").is("deleted_at", null).order("nome"),
+  ]);
+  const nomeObra = new Map((obrasRegra ?? []).map((o) => [o.id, o.nome]));
+  const nomeCategoria = new Map((categoriasRegra ?? []).map((c) => [c.id, c.nome]));
   const totalPendentes = [...pendentes.values()].reduce(
     (soma, p) => ({ quantidade: soma.quantidade + p.quantidade, total: soma.total + p.total }),
     { quantidade: 0, total: 0 }
@@ -158,6 +166,64 @@ export default async function ConciliacaoPage() {
           </ul>
         )}
       </div>
+
+      {regras.length > 0 && (
+        <div className="rounded-card border border-black/5 bg-white shadow-card">
+          <div className="border-b border-black/5 px-5 py-3">
+            <p className="text-sm font-bold text-brand-black">Regras aprendidas</p>
+            <p className="mt-0.5 text-xs text-brand-gray-500">
+              O app lembra o que você decidiu e repete nos próximos extratos. Edite ou apague se algo estiver errado.
+            </p>
+          </div>
+          <ul className="divide-y divide-black/5">
+            {regras.map((r) => (
+              <li key={r.id} className="px-5 py-3">
+                <div className="flex items-center justify-between gap-3">
+                  <div className="min-w-0">
+                    <p className="truncate text-sm font-bold text-brand-black">{r.exemplo ?? r.chave}</p>
+                    <p className="text-xs text-brand-gray-500">
+                      {r.acao === "ignorar"
+                        ? "Sempre ignorar (não é despesa de obra)"
+                        : `Lançar em ${nomeObra.get(r.obra_id ?? "") ?? "—"} · ${nomeCategoria.get(r.categoria_id ?? "") ?? "—"}`}
+                    </p>
+                  </div>
+                  <form action={apagarRegraAction}>
+                    <input type="hidden" name="id" value={r.id} />
+                    <button type="submit" className="text-xs font-bold text-brand-gray-500 hover:text-brand-red">
+                      Apagar
+                    </button>
+                  </form>
+                </div>
+                <details className="mt-2">
+                  <summary className="cursor-pointer text-xs font-bold text-brand-gray-600">Editar</summary>
+                  <form action={atualizarRegraAction} className="mt-2 grid grid-cols-1 gap-3 sm:grid-cols-4">
+                    <input type="hidden" name="id" value={r.id} />
+                    <select name="acao" defaultValue={r.acao} className="rounded-brand-sm border border-black/10 px-3 py-2 text-sm">
+                      <option value="lancar">Lançar</option>
+                      <option value="ignorar">Ignorar</option>
+                    </select>
+                    <select name="obra_id" defaultValue={r.obra_id ?? ""} className="rounded-brand-sm border border-black/10 px-3 py-2 text-sm">
+                      <option value="">Obra…</option>
+                      {(obrasRegra ?? []).map((o) => (
+                        <option key={o.id} value={o.id}>{o.nome}</option>
+                      ))}
+                    </select>
+                    <select name="categoria_id" defaultValue={r.categoria_id ?? ""} className="rounded-brand-sm border border-black/10 px-3 py-2 text-sm">
+                      <option value="">Categoria…</option>
+                      {(categoriasRegra ?? []).map((c) => (
+                        <option key={c.id} value={c.id}>{c.nome}</option>
+                      ))}
+                    </select>
+                    <SubmitButton className="rounded-brand-sm bg-brand-black px-3 py-2 text-xs font-bold text-white" pendingText="Salvando…">
+                      Salvar
+                    </SubmitButton>
+                  </form>
+                </details>
+              </li>
+            ))}
+          </ul>
+        </div>
+      )}
     </div>
   );
 }

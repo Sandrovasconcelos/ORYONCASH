@@ -2,6 +2,7 @@ import { createAdminClient } from "@/lib/supabase/admin";
 import { extractBankStatement } from "@/lib/gemini/extractBankStatement";
 import { casarTransacoes } from "@/lib/conciliacao/matching";
 import { ehMovimentoFinanceiro } from "@/lib/conciliacao/classificar";
+import { aplicarRegrasDeIgnorar } from "@/lib/conciliacao/regras";
 
 const JANELA_BUSCA_DESPESA_DIAS = 3;
 
@@ -71,6 +72,9 @@ export async function processarExtrato(extratoId: string): Promise<void> {
 
     if (erroInsert || !transacoesInseridas) throw erroInsert ?? new Error("Falha ao gravar transações.");
 
+    // Regras aprendidas (ex: "sempre ignorar transferencia pra mim mesmo").
+    await aplicarRegrasDeIgnorar(extratoId);
+
     const datas = transacoesExtraidas.map((t) => t.data).sort();
     const periodoInicio = datas[0];
     const periodoFim = datas[datas.length - 1];
@@ -119,6 +123,8 @@ export async function reconciliarExtrato(extratoId: string): Promise<number> {
     .eq("id", extratoId)
     .maybeSingle();
   if (!extrato?.conta_bancaria_id) return 0;
+
+  await aplicarRegrasDeIgnorar(extratoId);
 
   const { data: pendentes } = await supabase
     .from("extrato_transacoes")
@@ -194,4 +200,54 @@ async function conciliarAutomaticamente(input: {
   }
 
   return casamentos.size;
+}
+
+/** Transacao de debito ainda sem lancamento (null se ja foi resolvida ou nao existe). */
+export async function buscarTransacaoPendente(id: string) {
+  const { data } = await createAdminClient()
+    .from("extrato_transacoes")
+    .select("id, extrato_id, data, descricao, valor, tipo, status")
+    .eq("id", id)
+    .maybeSingle();
+  return data && data.status === "pendente" && data.tipo === "debito" ? data : null;
+}
+
+/** Liga a transacao ao lancamento e atualiza os totais do extrato. */
+export async function vincularTransacaoADespesa(transacaoId: string, despesaId: string): Promise<void> {
+  const supabase = createAdminClient();
+  const { data: transacao } = await supabase
+    .from("extrato_transacoes")
+    .update({ despesa_id: despesaId, status: "conciliado" })
+    .eq("id", transacaoId)
+    .select("extrato_id")
+    .maybeSingle();
+  if (transacao) await atualizarTotaisDoExtrato(transacao.extrato_id);
+}
+
+/** Descarta a transacao (nao e despesa de obra). */
+export async function ignorarTransacao(transacaoId: string): Promise<void> {
+  const supabase = createAdminClient();
+  const { data: transacao } = await supabase
+    .from("extrato_transacoes")
+    .update({ status: "ignorado", despesa_id: null })
+    .eq("id", transacaoId)
+    .select("extrato_id")
+    .maybeSingle();
+  if (transacao) await atualizarTotaisDoExtrato(transacao.extrato_id);
+}
+
+async function atualizarTotaisDoExtrato(extratoId: string): Promise<void> {
+  const supabase = createAdminClient();
+  const [{ count: total }, { count: conciliadas }] = await Promise.all([
+    supabase.from("extrato_transacoes").select("id", { count: "exact", head: true }).eq("extrato_id", extratoId),
+    supabase
+      .from("extrato_transacoes")
+      .select("id", { count: "exact", head: true })
+      .eq("extrato_id", extratoId)
+      .eq("status", "conciliado"),
+  ]);
+  await supabase
+    .from("extratos_bancarios")
+    .update({ total_transacoes: total ?? 0, total_conciliadas: conciliadas ?? 0 })
+    .eq("id", extratoId);
 }

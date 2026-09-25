@@ -41,8 +41,9 @@ export function RevisaoTransacaoModal({
   obras: { id: string; nome: string }[];
   categorias: { id: string; nome: string }[];
   sugestao?: {
-    fornecedorId: string;
+    fornecedorId: string | null;
     fornecedorNome: string;
+    origem: "regra" | "historico";
     obraId: string | null;
     categoriaId: string | null;
     baseadaEm: number;
@@ -71,6 +72,10 @@ export function RevisaoTransacaoModal({
           <form action={ignorarTransacaoAction}>
             <input type="hidden" name="transacao_id" value={transacaoId} />
             <input type="hidden" name="extrato_id" value={extratoId} />
+            <label className="mb-3 flex items-center gap-2 text-xs font-semibold text-brand-gray-600">
+              <input type="checkbox" name="lembrar" defaultChecked />
+              Sempre ignorar pagamentos como este nos próximos extratos
+            </label>
             <SubmitButton className="oc-button oc-button-soft w-full sm:w-auto" pendingText="Ignorando...">
               Ignorar (não é despesa de obra)
             </SubmitButton>
@@ -142,7 +147,9 @@ export function RevisaoTransacaoModal({
             {sugestao && (
               <p className="rounded-brand-sm bg-brand-gray-100 px-3 py-2 text-xs text-brand-gray-600">
                 Fornecedor reconhecido: <strong>{sugestao.fornecedorNome}</strong>
-                {sugestao.baseadaEm > 0
+                {sugestao.origem === "regra"
+                  ? " — obra e categoria vieram do que você lançou da última vez pra ele. Confira antes de criar."
+                  : sugestao.baseadaEm > 0
                   ? ` — obra e categoria sugeridas pelos ${sugestao.baseadaEm} lançamento(s) anteriores dele. Confira antes de criar.`
                   : " — ainda sem lançamentos anteriores, escolha obra e categoria."}
               </p>

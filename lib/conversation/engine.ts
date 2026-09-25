@@ -72,6 +72,10 @@ import {
 import { registrarAtividade, getNomePorTelefone } from "@/lib/atividades";
 import { notificarComprovantePagamentoAnexado } from "@/lib/alertas/notificar";
 import { criarContaAPagar } from "@/lib/contasAPagar/queries";
+import { buscarTransacaoPendente, vincularTransacaoADespesa } from "@/lib/conciliacao/queries";
+import { sugerirLancamentos } from "@/lib/conciliacao/sugestoes";
+import { salvarRegra } from "@/lib/conciliacao/regras";
+import { nomeDoBeneficiario } from "@/lib/conciliacao/classificar";
 
 const MIME_TYPES_PLANILHA = [
   "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
@@ -128,6 +132,10 @@ type Dados = {
   };
 
   despesaId?: string;
+  // Lancamento vindo de um pagamento do extrato bancario.
+  extratoTransacaoId?: string;
+  extratoDescricao?: string;
+  dataDespesa?: string;
   despesaIdsPagamento?: string[];
   materialId?: string;
   materialNomePendente?: string;
@@ -931,6 +939,7 @@ async function handleDespesaConfirmacao(
       materialId: dados.materialId ?? null,
       criadoPorTelefone: from,
       criadoPorNome: autorNome,
+      data: dados.dataDespesa,
       documentoAnexado:
         dados.comprovante?.tipoDocumento === "documento_cobranca" ||
         dados.comprovante?.tipoDocumento === "comprovante_pagamento"
@@ -953,6 +962,23 @@ async function handleDespesaConfirmacao(
       resumo: `Despesa de ${formatBRL(dados.valor!)} (${dados.categoriaNome}, ${dados.obraNome}) registrada por ${autorNome}`,
       dadosDepois: dados,
     });
+    // Veio de um pagamento do extrato: liga os dois, guarda a regra pra proxima
+    // e nao pede comprovante (o proprio extrato ja prova o pagamento).
+    if (dados.extratoTransacaoId) {
+      await vincularTransacaoADespesa(dados.extratoTransacaoId, despesa.id);
+      await salvarRegra({
+        descricao: dados.extratoDescricao ?? null,
+        acao: "lancar",
+        obraId: dados.obraId,
+        categoriaId: dados.categoriaId,
+        fornecedorId: dados.fornecedorId ?? null,
+      });
+      await sendText(from, "✅ Despesa registrada e conciliada com o extrato.");
+      await resetSession(from);
+      await sendMenuPrincipal(from);
+      return;
+    }
+
     await sendText(from, "✅ Despesa registrada com sucesso!");
 
     if (dados.comprovante?.tipoDocumento === "comprovante_pagamento") {
@@ -1497,7 +1523,8 @@ async function iniciarDespesaUnicaExtraida(
     obra: null,
     categoria: null,
     etapa: null,
-  }
+  },
+  extras: { dados?: Partial<Dados>; titulo?: string } = {}
 ) {
   const obras = await listObrasAtivas();
   if (obras.length === 0) {
@@ -1518,10 +1545,11 @@ async function iniciarDespesaUnicaExtraida(
     fornecedorId: extraido.fornecedorId,
     fornecedorNome: extraido.fornecedorNome,
     comprovante: extraido.comprovante,
+    ...extras.dados,
   };
 
   const resumo =
-    `✅ *Identifiquei uma nova despesa*\n` +
+    `${extras.titulo ?? "✅ *Identifiquei uma nova despesa*"}\n` +
     `💰 *Valor:* ${formatBRL(extraido.valor)}\n` +
     `📝 *Descrição:* ${extraido.descricao}`;
 
@@ -2986,4 +3014,47 @@ export async function abrirAcaoDeDespesa(
     replyId: `despesa:${despesaId}`,
     media: null,
   });
+}
+
+/**
+ * Botao "Lançar" de um pagamento do extrato sem lançamento: abre o fluxo
+ * normal de despesa com valor, data, fornecedor, obra e categoria ja
+ * preenchidos (sugestao da regra aprendida ou do historico do fornecedor).
+ * Ao confirmar, o lancamento fica ligado ao extrato.
+ */
+export async function iniciarLancamentoDeTransacao(from: string, transacaoId: string): Promise<void> {
+  const transacao = await buscarTransacaoPendente(transacaoId);
+  if (!transacao) {
+    await sendText(from, "Esse pagamento já foi resolvido (lançado ou ignorado).");
+    return;
+  }
+
+  const sugestao = (await sugerirLancamentos([transacao]).catch(() => new Map())).get(transacao.id);
+  const [obra, categoria] = await Promise.all([
+    sugestao?.obraId ? findObraById(sugestao.obraId) : Promise.resolve(null),
+    sugestao?.categoriaId ? findCategoriaById(sugestao.categoriaId) : Promise.resolve(null),
+  ]);
+
+  const descricao =
+    sugestao?.fornecedorNome ?? nomeDoBeneficiario(transacao.descricao) ?? transacao.descricao ?? "Pagamento";
+  const dia = transacao.data.split("-").reverse().slice(0, 2).join("/");
+
+  await iniciarDespesaUnicaExtraida(
+    from,
+    {
+      valor: transacao.valor,
+      descricao,
+      fornecedorId: sugestao?.fornecedorId ?? undefined,
+      fornecedorNome: sugestao?.fornecedorNome,
+    },
+    { obra: obra?.nome ?? null, categoria: categoria?.nome ?? null, etapa: null },
+    {
+      titulo: `🏦 *Pagamento do extrato de ${dia}*`,
+      dados: {
+        extratoTransacaoId: transacao.id,
+        extratoDescricao: transacao.descricao ?? undefined,
+        dataDespesa: transacao.data,
+      },
+    }
+  );
 }
