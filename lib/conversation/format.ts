@@ -37,3 +37,17 @@ export function parseDataCorrecao(texto: string, hoje: string): string | null {
   if (Number.isNaN(d.getTime()) || d.getUTCDate() !== dia || d.getUTCMonth() + 1 !== mes) return null;
   return iso;
 }
+
+/**
+ * Data lida de um comprovante de pagamento so vale se for uma data real, nao
+ * futura e recente (ate 120 dias) - leitura errada nao pode mandar o
+ * lancamento pra 2019. Devolve AAAA-MM-DD ou undefined.
+ */
+export function dataDePagamentoValida(iso: string | null | undefined, hoje: string): string | undefined {
+  if (!iso || !/^\d{4}-\d{2}-\d{2}$/.test(iso)) return undefined;
+  const d = Date.parse(`${iso}T00:00:00Z`);
+  const h = Date.parse(`${hoje}T00:00:00Z`);
+  if (Number.isNaN(d) || d > h) return undefined;
+  if (h - d > 120 * 86_400_000) return undefined;
+  return iso;
+}

@@ -12,7 +12,7 @@ import {
   type DespesaDeAudio,
 } from "@/lib/gemini/extractDespesaAudio";
 import { extractSpreadsheetAsText } from "@/lib/orcamento/parseSpreadsheet";
-import { formatBRL, parseDataCorrecao, parseValorBR } from "./format";
+import { dataDePagamentoValida, formatBRL, parseDataCorrecao, parseValorBR } from "./format";
 import { ESTADOS, MENU_IDS, CAMPO_IDS, TIPO_REMOVER_IDS, COMANDOS_CANCELAR, RECORRENCIA_IDS } from "./states";
 import { sendMenuPrincipal } from "./menu";
 import { sendListPeriodoRelatorio, gerarEEnviarRelatorio } from "./relatorio";
@@ -84,6 +84,7 @@ import {
   registrarEEProcessarExtrato,
 } from "@/lib/conciliacao/enviarExtrato";
 import { ehTelegram } from "@/lib/telegram/ids";
+import { carregarNotas } from "@/lib/despesas/notas";
 import { sendTelegramTextComBotoes } from "@/lib/telegram/messages";
 import type { Teclado } from "@/lib/telegram/interativo";
 import { nomeDoBeneficiario } from "@/lib/conciliacao/classificar";
@@ -937,6 +938,9 @@ async function enviarConfirmacao(from: string, dados: Dados) {
     texto += `
 📝 Descrição: ${dados.descricao}`;
   }
+  if (dados.dataDespesa) {
+    texto += `\n📅 Data do gasto: ${formatDataBR(dados.dataDespesa)}`;
+  }
 
   await sendButtons(from, texto, [
     { id: "confirm:sim", title: "Confirmar" },
@@ -1297,6 +1301,10 @@ export async function processarDocumentoLido(
   if (!options.forcarNovaDespesa && invoice?.tipoDocumento === "comprovante_pagamento" && comprovante) {
     await saveSession(from, ESTADOS.ANEXAR_PAGAMENTO_SELECIONANDO_LANCAMENTO, {
       comprovante,
+      // Dia real do pagamento, lido do comprovante: acerta a data do lancamento escolhido.
+      ...(dataDePagamentoValida(invoice.dataDocumento, hojeNoBrasil())
+        ? { dataDespesa: dataDePagamentoValida(invoice.dataDocumento, hojeNoBrasil()) }
+        : {}),
     });
     await sendText(
       from,
@@ -1399,6 +1407,13 @@ async function continuarProcessamentoNota(
   // (obra -> categoria -> etapa -> confirma). Se o arquivo for comprovante
   // de pagamento e o usuário estava em Registrar Despesa, ele vira uma nova
   // despesa já paga, com o arquivo no ícone de pagamento.
+  // Comprovante de pagamento: o gasto vale na data em que foi pago (nao no dia
+  // em que o comprovante foi enviado, que pode ser dias depois).
+  const dataDoPagamento =
+    invoice.tipoDocumento === "comprovante_pagamento"
+      ? dataDePagamentoValida(invoice.dataDocumento, hojeNoBrasil())
+      : undefined;
+
   if (invoice.itens.length === 1) {
     await iniciarDespesaUnicaExtraida(from, {
       valor: invoice.itens[0].valorTotal,
@@ -1408,11 +1423,12 @@ async function continuarProcessamentoNota(
       fornecedorId: fornecedor.id,
       fornecedorNome: fornecedor.nome,
       comprovante,
-    });
+    }, { obra: null, categoria: null, etapa: null }, dataDoPagamento ? { dados: { dataDespesa: dataDoPagamento } } : {});
     return;
   }
 
   const dados: Dados = {
+    dataDespesa: dataDoPagamento,
     fornecedorId: fornecedor.id,
     fornecedorNome: fornecedor.nome,
     notaItens: invoice.itens,
@@ -1701,7 +1717,14 @@ async function handleAnexarPagamentoSelecionandoLancamento(
       console.error("Falha ao notificar comprovante de pagamento por WhatsApp:", error);
       Sentry.captureException(error);
     });
-    await sendText(from, "✅ Comprovante de pagamento vinculado com sucesso.");
+    let avisoData = "";
+    if (dados.dataDespesa) {
+      // A nota inteira (todos os itens) vale na data do pagamento.
+      const nota = (await carregarNotas([despesa.id])).get(despesa.id);
+      for (const id of nota?.membros ?? [despesa.id]) await updateDespesaCampo(id, { data: dados.dataDespesa });
+      avisoData = ` A data do lançamento agora é ${formatDataBR(dados.dataDespesa)} (dia do pagamento no comprovante).`;
+    }
+    await sendText(from, `✅ Comprovante de pagamento vinculado com sucesso.${avisoData}`);
     await resetSession(from);
     await sendMenuPrincipal(from);
     return;
@@ -1962,7 +1985,8 @@ async function enviarConfirmacaoNota(from: string, dados: Dados) {
     `🏢 Fornecedor: ${dados.fornecedorNome}\n` +
     `🏗️ Obra: ${dados.obraNome}\n\n` +
     `*Itens:*\n${linhasItens}\n\n` +
-    `💰 Total: ${formatBRL(dados.notaValorTotal ?? somaItens)}`;
+    `💰 Total: ${formatBRL(dados.notaValorTotal ?? somaItens)}` +
+    (dados.dataDespesa ? `\n📅 Data do pagamento: ${formatDataBR(dados.dataDespesa)}` : "");
 
   await sendButtons(from, texto, [
     { id: "confirm:sim", title: "Confirmar" },
@@ -2019,6 +2043,7 @@ async function handleNotaConfirmacao(
         fornecedorId: dados.fornecedorId ?? null,
         criadoPorTelefone: from,
         criadoPorNome: autorNome,
+        data: dados.dataDespesa,
         documentoAnexado:
         dados.comprovante?.tipoDocumento === "documento_cobranca" ||
         dados.comprovante?.tipoDocumento === "comprovante_pagamento"

@@ -36,6 +36,8 @@ export type InvoiceData = {
   metodoPagamento: string | null;
   numeroDocumento: string | null;
   dataVencimento: string | null;
+  /** Comprovante de pagamento: dia em que o pagamento foi efetuado. Nota/boleto: emissao. AAAA-MM-DD. */
+  dataDocumento?: string | null;
   itens: InvoiceItem[];
   valorTotalNota: number | null;
 };
@@ -97,6 +99,10 @@ Regras:
   documento for um boleto/conta/fatura ainda não paga (ex: conta de luz,
   boleto de aluguel). Use null se não houver data de vencimento visível ou
   se o documento já for um comprovante de pagamento concluído.
+- "dataDocumento": no formato AAAA-MM-DD. Em COMPROVANTE DE PAGAMENTO, o dia em
+  que o pagamento foi efetuado (ex: "Pix enviado 18/09/2026, 18:21:50" =
+  2026-09-18). Em nota fiscal/boleto/conta, a data de emissão. Use null se
+  não estiver visível.
 - Responda APENAS com o JSON, sem texto adicional.`;
 
 const RESPONSE_SCHEMA = {
@@ -135,6 +141,7 @@ const RESPONSE_SCHEMA = {
     },
     valorTotalNota: { type: "number", nullable: true },
     dataVencimento: { type: "string", nullable: true },
+    dataDocumento: { type: "string", nullable: true },
   },
   required: [
     "tipoDocumento",

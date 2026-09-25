@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { parseValorBR, formatBRL, parseDataCorrecao } from "./format";
+import { parseValorBR, formatBRL, parseDataCorrecao, dataDePagamentoValida } from "./format";
 
 describe("parseValorBR", () => {
   it("aceita numero simples", () => {
@@ -69,5 +69,22 @@ describe("parseDataCorrecao", () => {
     expect(parseDataCorrecao("31/02", hoje)).toBeNull();
     expect(parseDataCorrecao("banana", hoje)).toBeNull();
     expect(parseDataCorrecao("32/01", hoje)).toBeNull();
+  });
+});
+
+describe("dataDePagamentoValida", () => {
+  const hoje = "2026-09-25";
+
+  it("aceita data recente e passada", () => {
+    expect(dataDePagamentoValida("2026-09-18", hoje)).toBe("2026-09-18");
+    expect(dataDePagamentoValida("2026-09-25", hoje)).toBe("2026-09-25");
+  });
+
+  it("rejeita futura, muito antiga e formato invalido", () => {
+    expect(dataDePagamentoValida("2026-09-26", hoje)).toBeUndefined();
+    expect(dataDePagamentoValida("2026-01-01", hoje)).toBeUndefined();
+    expect(dataDePagamentoValida("18/09/2026", hoje)).toBeUndefined();
+    expect(dataDePagamentoValida(null, hoje)).toBeUndefined();
+    expect(dataDePagamentoValida("2026-13-45", hoje)).toBeUndefined();
   });
 });
