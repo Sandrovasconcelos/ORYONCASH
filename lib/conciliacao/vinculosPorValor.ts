@@ -2,6 +2,7 @@ import { createAdminClient } from "@/lib/supabase/admin";
 import { formatBRL } from "@/lib/conversation/format";
 import { registrarAtividade } from "@/lib/atividades";
 import { vincularTransacaoADespesa } from "./queries";
+import { carregarNotas, colapsarNotas, expandirParaNota } from "@/lib/despesas/notas";
 
 /** Lancamentos feitos dias depois do pagamento (nao deu pra lancar no dia). */
 const JANELA_DIAS = 45;
@@ -12,6 +13,8 @@ export type VinculoPorValor = {
   despesaData: string;
   despesaValor: number;
   despesaDescricao: string | null;
+  /** Quantos itens (despesas) a nota tem; 1 = lancamento avulso. */
+  itens: number;
   transacaoData: string;
   dias: number;
 };
@@ -50,8 +53,11 @@ export async function buscarVinculosPorValor(
       .limit(5000),
     supabase.from("extrato_transacoes").select("despesa_id").not("despesa_id", "is", null),
   ]);
-  const usadas = new Set((vinculadas ?? []).map((v) => v.despesa_id));
-  const livres = (despesas ?? []).filter((d) => !usadas.has(d.id));
+  const usadas = await expandirParaNota(
+    (vinculadas ?? []).map((v) => v.despesa_id).filter((id): id is string => Boolean(id))
+  );
+  // Itens da mesma nota contam como um lancamento so (o banco paga a nota inteira).
+  const livres = (await colapsarNotas(despesas ?? [])).filter((c) => !c.membros.some((m) => usadas.has(m)));
 
   const candidatosDaTransacao = new Map<string, typeof livres>();
   const transacoesDaDespesa = new Map<string, string[]>();
@@ -76,6 +82,7 @@ export async function buscarVinculosPorValor(
       despesaData: d.data,
       despesaValor: d.valor,
       despesaDescricao: d.descricao,
+      itens: d.membros.length,
       transacaoData: t.data,
       dias: diffDias(d.data, t.data),
     });
@@ -106,8 +113,13 @@ export async function aceitarVinculoPorValor(input: {
   ]);
   if (!transacao || transacao.status !== "pendente" || !despesa || despesa.deleted_at) return { ok: false };
 
-  if (input.ajustarData && despesa.data !== transacao.data) {
-    const { error } = await supabase.from("despesas").update({ data: transacao.data }).eq("id", despesa.id);
+  // Nota com varios itens: a data (e o vinculo) vale pra nota toda.
+  const grupo = (await carregarNotas([despesa.id])).get(despesa.id);
+  const alvo = grupo?.membros ?? [despesa.id];
+  const valorTotal = grupo?.total ?? despesa.valor;
+
+  if (input.ajustarData && (despesa.data !== transacao.data || alvo.length > 1)) {
+    const { error } = await supabase.from("despesas").update({ data: transacao.data }).in("id", alvo);
     if (error) throw error;
     await registrarAtividade({
       tipo: "edicao",
@@ -116,9 +128,9 @@ export async function aceitarVinculoPorValor(input: {
       origem: input.origem,
       autorTelefone: input.autorTelefone ?? null,
       autorNome: input.autorNome,
-      resumo: `Data do lançamento de ${formatBRL(despesa.valor)} corrigida de ${dataBR(despesa.data)} para ${dataBR(transacao.data)} (data do pagamento no extrato) por ${input.autorNome}`,
+      resumo: `Data ${alvo.length > 1 ? `da nota (${alvo.length} itens, ${formatBRL(valorTotal)})` : `do lançamento de ${formatBRL(despesa.valor)}`} corrigida de ${dataBR(despesa.data)} para ${dataBR(transacao.data)} (data do pagamento no extrato) por ${input.autorNome}`,
       dadosAntes: { data: despesa.data },
-      dadosDepois: { data: transacao.data },
+      dadosDepois: { data: transacao.data, itens: alvo.length },
     });
   }
 
@@ -127,6 +139,6 @@ export async function aceitarVinculoPorValor(input: {
     ok: true,
     dataAntiga: despesa.data,
     dataNova: input.ajustarData ? transacao.data : despesa.data,
-    valor: despesa.valor,
+    valor: valorTotal,
   };
 }

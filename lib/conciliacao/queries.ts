@@ -3,6 +3,7 @@ import { extractBankStatement } from "@/lib/gemini/extractBankStatement";
 import { casarTransacoes } from "@/lib/conciliacao/matching";
 import { ehMovimentoFinanceiro } from "@/lib/conciliacao/classificar";
 import { aplicarRegrasDeIgnorar } from "@/lib/conciliacao/regras";
+import { colapsarNotas, expandirParaNota } from "@/lib/despesas/notas";
 
 const JANELA_BUSCA_DESPESA_DIAS = 3;
 
@@ -286,7 +287,7 @@ async function conciliarAutomaticamente(input: {
   // automatico praticamente sempre vazio.
   const { data: despesasCandidatas } = await supabase
     .from("despesas")
-    .select("id, data, valor")
+    .select("id, data, valor, descricao")
     .or(`conta_bancaria_id.eq.${input.contaBancariaId},conta_bancaria_id.is.null`)
     .is("deleted_at", null)
     .gte("data", subtrairDias(input.periodoInicio, JANELA_BUSCA_DESPESA_DIAS))
@@ -296,9 +297,14 @@ async function conciliarAutomaticamente(input: {
     .from("extrato_transacoes")
     .select("despesa_id")
     .not("despesa_id", "is", null);
-  const idsJaVinculados = new Set((jaVinculadas ?? []).map((v) => v.despesa_id));
+  // Uma nota com varios itens e UM pagamento no banco: os itens viram uma
+  // candidata com o valor somado, e se um item ja foi ligado a nota toda esta.
+  const idsJaVinculados = await expandirParaNota(
+    (jaVinculadas ?? []).map((v) => v.despesa_id).filter((id): id is string => Boolean(id))
+  );
 
-  const despesasDisponiveis = (despesasCandidatas ?? []).filter((d) => !idsJaVinculados.has(d.id));
+  const candidatas = await colapsarNotas(despesasCandidatas ?? []);
+  const despesasDisponiveis = candidatas.filter((c) => !c.membros.some((m) => idsJaVinculados.has(m)));
 
   const casamentos = casarTransacoes(input.transacoes, despesasDisponiveis);
   if (casamentos.size === 0) return 0;

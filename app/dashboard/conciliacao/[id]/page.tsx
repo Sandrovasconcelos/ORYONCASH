@@ -5,6 +5,7 @@ import { formatBRL } from "@/lib/conversation/format";
 import { formatDataBrasil, formatDataHoraBrasil } from "@/lib/format-date";
 import { aceitarTodasSugestoesAction, aceitarVinculoAction, desvincularTransacaoAction, reconciliarExtratoAction } from "../actions";
 import { buscarVinculosPorValor } from "@/lib/conciliacao/vinculosPorValor";
+import { carregarNotas, expandirParaNota } from "@/lib/despesas/notas";
 import { SubmitButton } from "../../submit-button";
 import { RevisaoTransacaoModal } from "./revisao-transacao-modal";
 import { sugerirLancamentos } from "@/lib/conciliacao/sugestoes";
@@ -75,8 +76,20 @@ export default async function ConciliacaoDetalhePage({
   const vinculosPorValor = await buscarVinculosPorValor(pendentes).catch(() => new Map());
   const transacoesVisiveis = filtro === "pendente" ? pendentes : (transacoes ?? []);
 
-  const idsJaVinculados = new Set((transacoes ?? []).map((t) => t.despesa_id).filter(Boolean));
-  const candidatasDisponiveis = (despesasCandidatas ?? []).filter((d) => !idsJaVinculados.has(d.id));
+  const idsLigados = (transacoes ?? []).map((t) => t.despesa_id).filter((id): id is string => Boolean(id));
+  // Nota com varios itens = um pagamento so no banco: o vinculo vale pra nota toda.
+  const idsJaVinculados = await expandirParaNota(idsLigados);
+  const notasPorDespesa = await carregarNotas([...idsLigados, ...(despesasCandidatas ?? []).map((d) => d.id)]);
+  const jaMostrada = new Set<string>();
+  const candidatasDisponiveis = (despesasCandidatas ?? [])
+    .filter((d) => !idsJaVinculados.has(d.id))
+    .flatMap((d) => {
+      const nota = notasPorDespesa.get(d.id);
+      if (!nota) return [d];
+      if (jaMostrada.has(nota.chave)) return [];
+      jaMostrada.add(nota.chave);
+      return [{ ...d, valor: nota.total, descricao: `Nota com ${nota.membros.length} itens${d.descricao ? ` (ex.: ${d.descricao})` : ""}` }];
+    });
 
   return (
     <div className="flex flex-col gap-6">
@@ -208,7 +221,14 @@ export default async function ConciliacaoDetalhePage({
                     <td className="px-4 py-3 text-xs text-brand-gray-600">
                       {despesa ? (
                         <>
-                          <p className="font-semibold text-brand-black">{formatBRL(despesa.valor)}</p>
+                          <p className="font-semibold text-brand-black">
+                            {formatBRL(notasPorDespesa.get(despesa.id)?.total ?? despesa.valor)}
+                          </p>
+                          {notasPorDespesa.get(despesa.id) && (
+                            <p className="font-semibold text-brand-red">
+                              🧾 Nota com {notasPorDespesa.get(despesa.id)!.membros.length} itens
+                            </p>
+                          )}
                           <p>
                             {despesa.obras?.nome ?? "—"} · {despesa.categorias?.nome ?? "—"}
                           </p>
@@ -218,7 +238,7 @@ export default async function ConciliacaoDetalhePage({
                         <div className="flex flex-col gap-1">
                           <p className="font-semibold text-status-warning">Possível lançamento (data diferente)</p>
                           <p>
-                            {vinculosPorValor.get(t.id)!.despesaData.split("-").reverse().join("/")} · {formatBRL(vinculosPorValor.get(t.id)!.despesaValor)}
+                            {vinculosPorValor.get(t.id)!.despesaData.split("-").reverse().join("/")} · {formatBRL(vinculosPorValor.get(t.id)!.despesaValor)}{vinculosPorValor.get(t.id)!.itens > 1 ? ` · nota com ${vinculosPorValor.get(t.id)!.itens} itens` : ""}
                             {vinculosPorValor.get(t.id)!.despesaDescricao ? ` · ${vinculosPorValor.get(t.id)!.despesaDescricao}` : ""}
                           </p>
                           <div className="flex gap-3">

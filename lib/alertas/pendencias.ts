@@ -1,4 +1,5 @@
 import { createAdminClient } from "@/lib/supabase/admin";
+import { expandirParaNota } from "@/lib/despesas/notas";
 import { formatBRL } from "@/lib/conversation/format";
 import { botaoDashboard, type Teclado } from "@/lib/telegram/interativo";
 
@@ -54,9 +55,13 @@ export async function buscarDespesasSemComprovante(): Promise<DespesaSemComprova
       despesas.map((d) => d.id)
     );
 
+  // Pagamento ligado a uma nota vale pra todos os itens dela.
+  const noExtratoComNota = await expandirParaNota(
+    (noExtrato ?? []).map((t) => t.despesa_id).filter((id): id is string => Boolean(id))
+  );
   const comProva = new Set([
     ...(comprovantes ?? []).map((c) => c.despesa_id),
-    ...(noExtrato ?? []).map((t) => t.despesa_id),
+    ...noExtratoComNota,
   ]);
   return despesas
     .filter((d) => !comProva.has(d.id))

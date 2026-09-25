@@ -19,6 +19,7 @@ import { PorPaginaSelect } from "./por-pagina-select";
 import { SelecaoLancamentosProvider } from "./selecao-context";
 import { DespesaCheckbox, SelecionarTodosCheckbox } from "./despesa-checkbox";
 import { SelecaoActionBar } from "./selecao-action-bar";
+import { carregarNotas } from "@/lib/despesas/notas";
 
 export const dynamic = "force-dynamic";
 
@@ -426,6 +427,8 @@ export default async function DespesasPage({
       : 1;
   const inicioPagina = (paginaAtual - 1) * porPagina;
   const despesasPagina = despesas.slice(inicioPagina, inicioPagina + porPagina);
+  // Nota completa (todos os itens e o total), mesmo quando o filtro/pagina mostra so parte dela.
+  const notasCompletas = await carregarNotas(despesasPagina.map((d) => d.id));
 
   // So gera signed URL pros comprovantes que vao realmente aparecer na tela
   // (a pagina atual), em paralelo - antes disso rodava sequencialmente pra
@@ -723,6 +726,14 @@ export default async function DespesasPage({
         </div>
       )}
 
+      {notasCompletas.size > 0 && (
+        <div className="rounded-card border border-brand-gray-300/60 bg-white px-4 py-3 text-xs text-brand-gray-600 shadow-card">
+          <strong className="text-brand-black">🧾 Como ler as notas com vários itens:</strong> cada produto da nota é
+          um lançamento, mas o pagamento (PIX/boleto) é um só, com o valor da nota inteira. Itens da mesma nota
+          têm a mesma barra colorida na esquerda, e o mesmo comprovante aparece em todos eles.
+        </div>
+      )}
+
       <div className="overflow-hidden overflow-x-auto rounded-card border border-brand-gray-300/60 bg-white shadow-card">
         <table className="w-full min-w-[760px] text-left text-sm">
           <thead className="bg-brand-gray-100 text-[11px] uppercase tracking-[0.12em] text-brand-gray-500">
@@ -762,6 +773,7 @@ export default async function DespesasPage({
                 (etapa) => etapa.obra_id === d.obra_id || etapa.obra_id === null
               );
               const grupoNota = grupoNotaPorDespesa.get(d.id);
+              const notaCompleta = notasCompletas.get(d.id);
 
               return (
                 <tr key={d.id} className="align-top hover:bg-brand-gray-100/60">
@@ -831,7 +843,8 @@ export default async function DespesasPage({
                                 className="inline-flex w-fit items-center gap-1 rounded-full px-2 py-0.5 text-[10px] font-extrabold"
                                 style={{ background: `${grupoNota.cor}1a`, color: grupoNota.cor }}
                               >
-                                🧾 Mesma nota · {grupoNota.indice}/{grupoNota.total}
+                                🧾 Mesma nota · {grupoNota.indice}/{notaCompleta?.membros.length ?? grupoNota.total}
+                                {notaCompleta ? ` · total ${formatBRL(notaCompleta.total)}` : ""}
                               </span>
                             )}
                           </div>
@@ -874,11 +887,15 @@ export default async function DespesasPage({
                           target="_blank"
                           rel="noreferrer"
                           aria-label="Ver comprovante de pagamento"
-                          title="Ver comprovante de pagamento"
+                          title={
+                            notaCompleta
+                              ? `Comprovante do pagamento da nota inteira: ${formatBRL(notaCompleta.total)} (${notaCompleta.membros.length} itens). É o mesmo comprovante em todos os itens.`
+                              : "Ver comprovante de pagamento"
+                          }
                           className="inline-flex items-center gap-1.5 whitespace-nowrap rounded-brand-sm border border-status-success/25 bg-[#e9f8f0] px-2.5 py-2 text-[11px] font-bold text-status-success hover:bg-status-success hover:text-white"
                         >
                           <ActionIcon name="payment" />
-                          Pago
+                          {notaCompleta ? "Pago · nota toda" : "Pago"}
                         </Link>
                       ) : (
                         <span
@@ -891,6 +908,11 @@ export default async function DespesasPage({
                         </span>
                       )}
                     </div>
+                    {notaCompleta && comprovantesPagamento[0]?.url && (
+                      <p className="mt-1.5 max-w-[190px] text-[10px] leading-snug text-brand-gray-500">
+                        O comprovante cobre a nota inteira ({formatBRL(notaCompleta.total)}), não só este item.
+                      </p>
+                    )}
                   </td>
                   <td className="px-5 py-4 text-right">
                     <div className="flex items-center justify-end gap-2 whitespace-nowrap">
