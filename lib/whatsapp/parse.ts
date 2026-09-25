@@ -59,28 +59,18 @@ export function parseIncomingMessage(payload: unknown): IncomingMessage | null {
 
   if (message.type === "interactive") {
     const interactive = message.interactive;
-    if (interactive?.type === "list_reply") {
-      return {
-        id,
-        from,
-        text: null,
-        replyId: interactive.list_reply?.id ?? null,
-        media: null,
-      };
-    }
-    if (interactive?.type === "button_reply") {
-      // Botao de lista numerada curta (n:<numero>) = a pessoa digitou o numero.
-      const idDoBotao = interactive.button_reply?.id ?? null;
-      if (idDoBotao?.startsWith("n:")) {
-        return { id, from, text: idDoBotao.slice(2), replyId: null, media: null };
+    // Botao ou item de lista de uma lista numerada (n:<numero>) = a pessoa digitou o numero.
+    const idDaResposta =
+      interactive?.type === "list_reply"
+        ? (interactive.list_reply?.id ?? null)
+        : interactive?.type === "button_reply"
+          ? (interactive.button_reply?.id ?? null)
+          : null;
+    if (idDaResposta !== null || interactive?.type === "list_reply" || interactive?.type === "button_reply") {
+      if (idDaResposta?.startsWith("n:")) {
+        return { id, from, text: idDaResposta.slice(2), replyId: null, media: null };
       }
-      return {
-        id,
-        from,
-        text: null,
-        replyId: interactive.button_reply?.id ?? null,
-        media: null,
-      };
+      return { id, from, text: null, replyId: idDaResposta, media: null };
     }
   }
 
