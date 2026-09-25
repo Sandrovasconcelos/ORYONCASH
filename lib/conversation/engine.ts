@@ -84,6 +84,7 @@ import {
   registrarEEProcessarExtrato,
 } from "@/lib/conciliacao/enviarExtrato";
 import { enviarComBotoes } from "@/lib/whatsapp/botoes";
+import { CHAVE_LISTA_NA_SESSAO, mostrarPaginaDaLista } from "@/lib/whatsapp/listaNumerada";
 import {
   PADRAO_ACAO_DE_BOTAO,
   desfazerLancamentoPorBotao,
@@ -272,6 +273,16 @@ function isMenuReply(replyId: string | null): boolean {
 export async function handleIncomingMessage(message: IncomingMessage) {
   const { from } = message;
   const session = await getSession(from);
+
+  // "Ver mais" / "Anterior" de uma lista do WhatsApp: so mostra outra pagina, sem mexer no fluxo.
+  const pagina = message.replyId?.match(/^pg:([^:]+):(\d+)$/);
+  if (pagina) {
+    const ok = await mostrarPaginaDaLista(from, pagina[1], Number(pagina[2]));
+    if (!ok) await sendText(from, "Essa lista expirou. Digite o número ou o nome da opção, ou *menu* pra recomeçar.");
+    return;
+  }
+  // A lista guardada so serve pra paginar; nao vaza pros dados do fluxo.
+  delete session.dados_coletados[CHAVE_LISTA_NA_SESSAO];
 
   if (message.media) {
     if (session.estado_atual === ESTADOS.ANEXAR_PAGAMENTO_ARQUIVO) {
