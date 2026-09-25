@@ -106,3 +106,22 @@ export function rotuloDoBotao(teclado: Teclado | undefined, callbackData: string
   }
   return null;
 }
+
+// ---------- Botoes dos avisos automaticos ----------
+
+export function botaoDashboard(caminho = "", rotulo = "🌐 Abrir dashboard"): Botao {
+  return { text: rotulo, url: `${URL_DASHBOARD}${caminho}` };
+}
+
+/** Um botao "Paguei" por conta (ate 8) + atalho pro dashboard. */
+export function tecladoContasAPagar(contas: { id: string; descricao: string }[]): Teclado {
+  const linhas: Teclado = contas
+    .slice(0, 8)
+    .map((c) => [{ text: `✅ Paguei: ${c.descricao}`.slice(0, 60), callback_data: `cp:${c.id}` }]);
+  linhas.push([botaoDashboard("/contas-a-pagar", "📅 Ver contas a pagar")]);
+  return linhas;
+}
+
+export const TECLADO_RESUMO: Teclado = [
+  [{ text: "📄 Gerar relatório", callback_data: MENU_IDS.RELATORIO }, botaoDashboard()],
+];

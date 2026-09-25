@@ -12,6 +12,8 @@ import { parseTelegramUpdate, type TgUpdate, type Toque } from "@/lib/telegram/p
 import { telegramCall } from "@/lib/telegram/api";
 import { sendTelegramText } from "@/lib/telegram/messages";
 import { chatIdDe } from "@/lib/telegram/ids";
+import { marcarContaAPagarComoPaga } from "@/lib/contasAPagar/queries";
+import { getNomePorTelefone } from "@/lib/atividades";
 import {
   TECLADO_FIXO,
   extrairItensNumerados,
@@ -84,6 +86,40 @@ async function registrarEscolha(toque: Toque) {
   }
 }
 
+/**
+ * Botao "Paguei" do aviso de contas a pagar: marca a conta como paga (cria a
+ * despesa) e responde com um aviso rapido na tela; o botao dessa conta some.
+ */
+async function pagarConta(toque: Toque) {
+  const contaId = toque.data.slice(3);
+  const autorNome = await getNomePorTelefone(toque.de).catch(() => "Telegram");
+  const resultado = await marcarContaAPagarComoPaga({
+    contaId,
+    autorTelefone: toque.de,
+    autorNome,
+  }).catch((error) => {
+    console.error("Falha ao marcar conta como paga pelo Telegram:", error);
+    return null;
+  });
+
+  await telegramCall("answerCallbackQuery", {
+    callback_query_id: toque.queryId,
+    text: resultado
+      ? "✅ Conta marcada como paga e lançada nas despesas."
+      : "Essa conta já estava paga (ou não foi encontrada).",
+    show_alert: !resultado,
+  }).catch(() => {});
+
+  const restante = toque.teclado
+    .map((linha) => linha.filter((b) => b.callback_data !== toque.data))
+    .filter((linha) => linha.length > 0);
+  await telegramCall("editMessageReplyMarkup", {
+    chat_id: toque.chatId,
+    message_id: toque.messageId,
+    reply_markup: { inline_keyboard: restante },
+  }).catch(() => {});
+}
+
 export async function GET(request: NextRequest) {
   if (!segredoValido(request.headers.get("x-telegram-bot-api-secret-token"))) {
     return new NextResponse("Forbidden", { status: 401 });
@@ -126,7 +162,7 @@ export async function POST(request: NextRequest) {
   const { incoming, callback } = parseTelegramUpdate(update);
 
   if (callback) {
-    await confirmarToque(callback);
+    if (!callback.data.startsWith("cp:")) await confirmarToque(callback);
     if (callback.data.startsWith("pg:")) {
       await navegarPagina(callback);
       return NextResponse.json({ ok: true });
@@ -152,6 +188,11 @@ export async function POST(request: NextRequest) {
 
   if (await excedeuLimiteDeTaxa(incoming.from)) {
     console.error(`Rate limit excedido pro usuario ${chatIdDe(incoming.from)} (Telegram)`);
+    return NextResponse.json({ ok: true });
+  }
+
+  if (callback?.data.startsWith("cp:")) {
+    await pagarConta(callback);
     return NextResponse.json({ ok: true });
   }
 

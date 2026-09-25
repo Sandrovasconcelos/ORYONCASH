@@ -117,3 +117,8 @@ export async function sendTelegramDocument(
     { nome: "document", arquivo, filename }
   );
 }
+
+/** Aviso com botoes (URL e/ou toque) - usado nas notificacoes automaticas. */
+export async function sendTelegramTextComBotoes(to: string, body: string, teclado: Teclado) {
+  await enviarMensagem(chatIdDe(to), body, teclado);
+}

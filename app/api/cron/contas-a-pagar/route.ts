@@ -3,6 +3,7 @@ import * as Sentry from "@sentry/nextjs";
 import { buscarContasParaAvisar } from "@/lib/contasAPagar/queries";
 import { numeroNotificacao, enviarNotificacao } from "@/lib/alertas/notificar";
 import { formatarAvisoContasAPagar } from "@/lib/whatsapp/notificacoes";
+import { tecladoContasAPagar } from "@/lib/telegram/interativo";
 
 export async function GET(request: NextRequest) {
   const auth = request.headers.get("authorization");
@@ -22,7 +23,9 @@ export async function GET(request: NextRequest) {
     }
 
     const mensagem = formatarAvisoContasAPagar({ vencendo, vencidas });
-    await enviarNotificacao(numero, mensagem);
+    await enviarNotificacao(numero, mensagem, {
+      botoes: tecladoContasAPagar([...vencidas, ...vencendo]),
+    });
 
     return NextResponse.json({ enviado: true, vencendo: vencendo.length, vencidas: vencidas.length });
   } catch (error) {

@@ -9,6 +9,8 @@ import {
   formatarResumoSemanal,
 } from "@/lib/whatsapp/notificacoes";
 import { sendText } from "@/lib/whatsapp/messages";
+import { sendTelegramTextComBotoes } from "@/lib/telegram/messages";
+import { TECLADO_RESUMO, botaoDashboard, type Teclado } from "@/lib/telegram/interativo";
 import { destinoTelegram, ehTelegram, idsTelegramParaAvisos } from "@/lib/telegram/ids";
 
 // Duplicado de lib/conversation/queries.ts (nao importado de la) pra evitar
@@ -62,7 +64,7 @@ export async function enviarNotificacaoDiaria(): Promise<{
     return { enviado: false, motivo: "Nada a reportar hoje.", alertas: [] };
   }
 
-  await enviarNotificacao(destino, mensagem);
+  await enviarNotificacao(destino, mensagem, { botoes: [[botaoDashboard()]] });
   return { enviado: true, alertas: alertasFiltrados };
 }
 
@@ -99,13 +101,28 @@ export async function numeroNotificacao(): Promise<string | null> {
  * de TELEGRAM_NOTIFY_IDS - assim um canal fora do ar nao deixa o dono sem
  * saber de nada.
  */
-export async function enviarNotificacao(numero: string, mensagem: string): Promise<void> {
+export async function enviarNotificacao(
+  numero: string,
+  mensagem: string,
+  opcoes: { botoes?: Teclado } = {}
+): Promise<void> {
   const extras = idsTelegramParaAvisos().map(destinoTelegram);
   const destinosTelegram = ehTelegram(numero) ? [numero, ...extras] : extras;
 
+  // Telegram recebe os botoes; WhatsApp so texto (os botoes de URL viram link).
+  const enviarPara = (destino: string) => {
+    if (ehTelegram(destino)) {
+      return opcoes.botoes
+        ? sendTelegramTextComBotoes(destino, mensagem, opcoes.botoes)
+        : sendText(destino, mensagem);
+    }
+    const links = (opcoes.botoes ?? []).flat().filter((b) => b.url).map((b) => `${b.text}: ${b.url}`);
+    return sendText(destino, links.length > 0 ? `${mensagem}\n\n${links.join("\n")}` : mensagem);
+  };
+
   if (!ehTelegram(numero)) {
     try {
-      await sendText(numero, mensagem);
+      await enviarPara(numero);
       return;
     } catch (error) {
       if (extras.length === 0) throw error;
@@ -114,9 +131,25 @@ export async function enviarNotificacao(numero: string, mensagem: string): Promi
   }
 
   const unicos = Array.from(new Set(destinosTelegram));
-  const resultados = await Promise.allSettled(unicos.map((d) => sendText(d, mensagem)));
+  const resultados = await Promise.allSettled(unicos.map((d) => enviarPara(d)));
   if (resultados.every((r) => r.status === "rejected")) {
     throw (resultados[0] as PromiseRejectedResult).reason;
+  }
+}
+
+/**
+ * Feed da equipe: se TELEGRAM_GRUPO_ID estiver configurado, cada lancamento
+ * novo tambem aparece no grupo do Telegram (o bot precisa estar no grupo).
+ * Nunca derruba quem chamou.
+ */
+async function postarNoGrupo(mensagem: string, botoes?: Teclado): Promise<void> {
+  const grupoId = (process.env.TELEGRAM_GRUPO_ID ?? "").trim();
+  if (!/^-?\d+$/.test(grupoId)) return;
+  try {
+    const destino = destinoTelegram(grupoId);
+    await (botoes ? sendTelegramTextComBotoes(destino, mensagem, botoes) : sendText(destino, mensagem));
+  } catch (error) {
+    console.error("Falha ao postar no grupo do Telegram:", error);
   }
 }
 
@@ -129,7 +162,7 @@ export async function enviarResumoDiario(): Promise<{ enviado: boolean; motivo?:
   const resumo = await buscarResumoPeriodo(hoje, hoje);
   const mensagem = formatarResumoDiario(formatarDataBRCurta(hoje), resumo);
 
-  await enviarNotificacao(numero, mensagem);
+  await enviarNotificacao(numero, mensagem, { botoes: TECLADO_RESUMO });
   return { enviado: true };
 }
 
@@ -145,7 +178,7 @@ export async function enviarResumoSemanal(): Promise<{ enviado: boolean; motivo?
   const periodoLabel = `${formatarDataBRCurta(inicioSemana)} a ${formatarDataBRCurta(fimSemana)}`;
   const mensagem = formatarResumoSemanal(periodoLabel, resumo);
 
-  await enviarNotificacao(numero, mensagem);
+  await enviarNotificacao(numero, mensagem, { botoes: TECLADO_RESUMO });
   return { enviado: true };
 }
 
@@ -166,8 +199,10 @@ export async function notificarLancamento(input: {
   documentoAnexado: "documento_cobranca" | "comprovante_pagamento" | null;
 }): Promise<void> {
   const numero = await numeroNotificacao();
-  if (!numero) return;
-  if (input.autorTelefone && input.autorTelefone === numero) return;
+  const temGrupo = /^-?\d+$/.test((process.env.TELEGRAM_GRUPO_ID ?? "").trim());
+  // Dono: nao avisa de algo que ele mesmo acabou de fazer. Grupo: sempre.
+  const avisarDono = Boolean(numero) && !(input.autorTelefone && input.autorTelefone === numero);
+  if (!avisarDono && !temGrupo) return;
 
   const supabase = createAdminClient();
   const [{ data: categoria }, { data: obra }, { data: material }] = await Promise.all([
@@ -189,7 +224,9 @@ export async function notificarLancamento(input: {
     materialNome: material?.nome ?? null,
     documentoAnexado: input.documentoAnexado,
   });
-  await enviarNotificacao(numero, mensagem);
+  const botoes: Teclado = [[botaoDashboard("/despesas", "🧾 Ver lançamentos")]];
+  await postarNoGrupo(mensagem, botoes);
+  if (avisarDono && numero) await enviarNotificacao(numero, mensagem, { botoes });
 }
 
 /**
@@ -205,8 +242,9 @@ export async function notificarComprovantePagamentoAnexado(input: {
   autorNome: string | null;
 }): Promise<void> {
   const numero = await numeroNotificacao();
-  if (!numero) return;
-  if (input.autorTelefone && input.autorTelefone === numero) return;
+  const temGrupo = /^-?\d+$/.test((process.env.TELEGRAM_GRUPO_ID ?? "").trim());
+  const avisarDono = Boolean(numero) && !(input.autorTelefone && input.autorTelefone === numero);
+  if (!avisarDono && !temGrupo) return;
 
   let obraNome: string | null = null;
   if (input.obraId) {
@@ -220,5 +258,6 @@ export async function notificarComprovantePagamentoAnexado(input: {
     obraNome,
     autorNome: input.autorNome,
   });
-  await enviarNotificacao(numero, mensagem);
+  await postarNoGrupo(mensagem);
+  if (avisarDono && numero) await enviarNotificacao(numero, mensagem);
 }

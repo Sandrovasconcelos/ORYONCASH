@@ -28,6 +28,8 @@ export type TgUpdate = {
 
 export type Toque = {
   queryId: string;
+  /** Quem tocou, no formato tg_<id>. */
+  de: string;
   chatId: number;
   messageId: number;
   data: string;
@@ -61,6 +63,7 @@ export function parseTelegramUpdate(update: TgUpdate): ResultadoParse {
     const data = cb.data ?? "";
     const toque: Toque = {
       queryId: cb.id,
+      de: destinoTelegram(cb.from.id),
       chatId: cb.message.chat.id,
       messageId: cb.message.message_id,
       data,
