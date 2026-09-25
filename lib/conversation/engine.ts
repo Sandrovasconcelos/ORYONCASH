@@ -43,6 +43,7 @@ import {
   findEtapaPorPista,
   findFornecedorPorTexto,
   findMaterialPorTexto,
+  resolverPorNumeroOuNome,
   listObrasAtivas,
   createObra,
   createMaterial,
@@ -75,6 +76,15 @@ import { criarContaAPagar } from "@/lib/contasAPagar/queries";
 import { buscarTransacaoPendente, vincularTransacaoADespesa } from "@/lib/conciliacao/queries";
 import { sugerirLancamentos } from "@/lib/conciliacao/sugestoes";
 import { salvarRegra } from "@/lib/conciliacao/regras";
+import { avisoPagamentosSemLancamento } from "@/lib/conciliacao/avisos";
+import {
+  MIME_TYPES_EXTRATO,
+  listarContasBancarias,
+  registrarEEProcessarExtrato,
+} from "@/lib/conciliacao/enviarExtrato";
+import { ehTelegram } from "@/lib/telegram/ids";
+import { sendTelegramTextComBotoes } from "@/lib/telegram/messages";
+import type { Teclado } from "@/lib/telegram/interativo";
 import { nomeDoBeneficiario } from "@/lib/conciliacao/classificar";
 
 const MIME_TYPES_PLANILHA = [
@@ -262,6 +272,9 @@ export async function handleIncomingMessage(message: IncomingMessage) {
     if (session.estado_atual === ESTADOS.CONTA_A_PAGAR_ARQUIVO) {
       return handleContaAPagarArquivoRecebido(from, message.media);
     }
+    if (session.estado_atual === ESTADOS.CONCILIACAO_ARQUIVO) {
+      return handleExtratoRecebido(from, message.media, session);
+    }
     if (MIME_TYPES_PLANILHA.includes(message.media.mimeType)) {
       return handleOrcamentoRecebido(from, message.media);
     }
@@ -357,6 +370,12 @@ export async function handleIncomingMessage(message: IncomingMessage) {
     case ESTADOS.ORCAMENTO_CONFIRMACAO:
       return handleOrcamentoConfirmacao(from, message, session);
 
+    case ESTADOS.CONCILIACAO_CONTA:
+      return handleConciliacaoConta(from, message);
+    case ESTADOS.CONCILIACAO_ARQUIVO:
+      await sendText(from, "🏦 Envie o *PDF ou a foto do extrato* aqui no chat. Pra cancelar, digite *menu*.");
+      return;
+
     case ESTADOS.CORRIGIR_SELECIONANDO_LANCAMENTO:
       return handleCorrigirSelecionandoLancamento(from, message);
     case ESTADOS.CORRIGIR_SELECIONANDO_CAMPO:
@@ -445,6 +464,9 @@ async function handleMenu(from: string, message: IncomingMessage) {
       return;
     case MENU_IDS.RELATORIO:
       await iniciarRelatorio(from);
+      return;
+    case MENU_IDS.CONCILIACAO:
+      await iniciarConciliacao(from);
       return;
     default:
       if (await tentarLancamentoRapido(from, message.text)) return;
@@ -3057,4 +3079,114 @@ export async function iniciarLancamentoDeTransacao(from: string, transacaoId: st
       },
     }
   );
+}
+
+// ---------- Conciliação bancária ----------
+
+/** Mensagem com botoes: Telegram recebe os botoes, WhatsApp recebe os links em texto. */
+async function enviarComBotoes(to: string, mensagem: string, botoes: Teclado) {
+  if (ehTelegram(to)) return sendTelegramTextComBotoes(to, mensagem, botoes);
+  const links = botoes.flat().filter((b) => b.url).map((b) => `${b.text}: ${b.url}`);
+  return sendText(to, links.length > 0 ? `${mensagem}\n\n${links.join("\n")}` : mensagem);
+}
+
+async function iniciarConciliacao(from: string) {
+  // 1) O que ja esta pendente, com botao pra lancar/ignorar cada pagamento.
+  const aviso = await avisoPagamentosSemLancamento().catch(() => null);
+  if (aviso) {
+    await enviarComBotoes(from, aviso.mensagem, aviso.botoes);
+  } else {
+    await sendText(from, "✅ Nenhum pagamento do extrato está sem lançamento.");
+  }
+
+  // 2) Enviar um extrato novo.
+  const contas = await listarContasBancarias();
+  if (contas.length === 0) {
+    await sendText(from, "Cadastre uma conta bancária no dashboard antes de enviar um extrato.");
+    await resetSession(from);
+    return;
+  }
+  if (contas.length === 1) {
+    await saveSession(from, ESTADOS.CONCILIACAO_ARQUIVO, { contaBancariaId: contas[0].id, contaBancariaNome: contas[0].nome } as Dados);
+    await sendText(
+      from,
+      `📤 Pra conciliar um extrato novo da conta *${contas[0].nome}*, envie o *PDF ou a foto do extrato* aqui no chat. (Ou digite *menu* pra sair.)`
+    );
+    return;
+  }
+
+  await saveSession(from, ESTADOS.CONCILIACAO_CONTA, {});
+  await sendText(
+    from,
+    `📤 *Enviar um extrato novo — de qual conta?*\n\n${contas.map((c, i) => `${i + 1}. ${c.nome}`).join("\n")}\n\nResponda com o número ou digite o nome. (Ou digite *menu* pra sair.)`
+  );
+}
+
+async function handleConciliacaoConta(from: string, message: IncomingMessage) {
+  const contas = await listarContasBancarias();
+  const conta = message.text ? resolverPorNumeroOuNome(contas, message.text) : null;
+  if (!conta) {
+    await sendText(
+      from,
+      `Não achei essa conta. Escolha:\n\n${contas.map((c, i) => `${i + 1}. ${c.nome}`).join("\n")}\n\nResponda com o número ou digite o nome.`
+    );
+    return;
+  }
+  await saveSession(from, ESTADOS.CONCILIACAO_ARQUIVO, { contaBancariaId: conta.id, contaBancariaNome: conta.nome } as Dados);
+  await sendText(from, `📤 Conta *${conta.nome}*. Agora envie o *PDF ou a foto do extrato* aqui no chat.`);
+}
+
+async function handleExtratoRecebido(from: string, media: IncomingMedia, session: Session) {
+  const dados = session.dados_coletados as { contaBancariaId?: string; contaBancariaNome?: string };
+  if (!dados.contaBancariaId) {
+    await resetSession(from);
+    await iniciarConciliacao(from);
+    return;
+  }
+
+  const mimeBase = media.mimeType.split(";")[0].trim();
+  if (!MIME_TYPES_EXTRATO.includes(mimeBase)) {
+    await sendText(from, "Esse tipo de arquivo não serve pro extrato. Envie um *PDF* ou uma *foto* do extrato.");
+    return;
+  }
+
+  await sendText(from, "🏦 Recebi o extrato, lendo e conciliando… isso pode levar até 1 minuto.");
+  try {
+    const arquivo = await downloadWhatsAppMedia(media.id, media.mimeType);
+    const autorNome = await getNomePorTelefone(from);
+    const r = await registrarEEProcessarExtrato({
+      buffer: arquivo.buffer,
+      mimeType: mimeBase,
+      contaBancariaId: dados.contaBancariaId,
+      autorNome,
+    });
+    await registrarAtividade({
+      tipo: "criacao",
+      entidade: "extrato_bancario",
+      entidadeId: r.extratoId,
+      origem: "whatsapp",
+      autorTelefone: from,
+      autorNome,
+      resumo: `Extrato bancário enviado por ${autorNome} (pelo chat) para conciliação`,
+    });
+    await resetSession(from);
+    await sendText(
+      from,
+      `✅ *Extrato lido!*\n\n📄 ${r.totalTransacoes} transações\n🔗 ${r.totalConciliadas} conciliadas com lançamentos\n🙈 ${r.ignoradas} descartadas (entradas, aplicações, regras)`
+    );
+    const aviso = await avisoPagamentosSemLancamento().catch(() => null);
+    if (aviso) {
+      await enviarComBotoes(from, aviso.mensagem, aviso.botoes);
+    } else {
+      await sendText(from, "🎉 Todos os pagamentos do extrato têm lançamento no app.");
+    }
+  } catch (error) {
+    console.error("Erro ao processar extrato pelo chat:", error);
+    Sentry.captureException(error, { tags: { fluxo: "extrato_chat" } });
+    await resetSession(from);
+    await sendText(
+      from,
+      "😕 Não consegui ler esse extrato agora (o leitor pode estar sobrecarregado ou o arquivo é muito grande). Tente de novo em alguns minutos, ou envie pelo dashboard em Conciliação."
+    );
+  }
 }

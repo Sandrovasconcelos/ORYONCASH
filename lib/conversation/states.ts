@@ -58,6 +58,9 @@ export const ESTADOS = {
   CONTA_A_PAGAR_OBRA: "conta_a_pagar_obra",
   CONTA_A_PAGAR_RECORRENCIA: "conta_a_pagar_recorrencia",
   CONTA_A_PAGAR_DIAS_AVISO: "conta_a_pagar_dias_aviso",
+
+  CONCILIACAO_CONTA: "conciliacao_conta",
+  CONCILIACAO_ARQUIVO: "conciliacao_arquivo",
 } as const;
 
 export const MENU_IDS = {
@@ -70,6 +73,7 @@ export const MENU_IDS = {
   REMOVER_CADASTRO: "menu:remover_cadastro",
   RELATORIO: "menu:relatorio",
   CONTA_A_PAGAR: "menu:conta_a_pagar",
+  CONCILIACAO: "menu:conciliacao",
 } as const;
 
 export const RECORRENCIA_IDS = {

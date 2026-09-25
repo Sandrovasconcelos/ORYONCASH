@@ -50,6 +50,11 @@ export async function sendMenuPrincipal(to: string) {
             description: "Enviar obra, material ou fornecedor para remoção",
           },
           {
+            id: MENU_IDS.CONCILIACAO,
+            title: "🏦 Conciliação",
+            description: "Pagamentos do banco sem lançamento e envio de extrato",
+          },
+          {
             id: MENU_IDS.RELATORIO,
             title: "📄 Relatório",
             description: "Gerar e receber o PDF de despesas por aqui",
