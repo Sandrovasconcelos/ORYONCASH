@@ -33,7 +33,7 @@ export default async function NumerosPage() {
         </div>
         <CadastroModal
           titulo="Autorizar novo número"
-          descricao="Use telefone com DDI e DDD. Exemplo: 5598988219864."
+          descricao="WhatsApp: telefone com DDI e DDD (5598988219864). Telegram: o ID que o bot mostra no /start (tg_123456789)."
           botao="+ Autorizar número"
           variante="primario"
         >
@@ -53,7 +53,7 @@ export default async function NumerosPage() {
                 name="telefone"
                 required
                 inputMode="numeric"
-                placeholder="Ex: 5598988219864"
+                placeholder="5598988219864 ou tg_123456789"
                 className="oc-input"
               />
             </label>

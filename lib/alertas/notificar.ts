@@ -9,6 +9,7 @@ import {
   formatarResumoSemanal,
 } from "@/lib/whatsapp/notificacoes";
 import { sendText } from "@/lib/whatsapp/messages";
+import { destinoTelegram, ehTelegram, idsTelegramParaAvisos } from "@/lib/telegram/ids";
 
 // Duplicado de lib/conversation/queries.ts (nao importado de la) pra evitar
 // import circular: queries.ts chama notificarLancamento deste arquivo.
@@ -43,7 +44,9 @@ export async function enviarNotificacaoDiaria(): Promise<{
     .eq("id", true)
     .maybeSingle();
 
-  if (!config?.numero_whatsapp) {
+  const [primeiroTelegram] = idsTelegramParaAvisos();
+  const destino = config?.numero_whatsapp || (primeiroTelegram ? destinoTelegram(primeiroTelegram) : null);
+  if (!config || !destino) {
     return { enviado: false, motivo: "Nenhum número de WhatsApp configurado para notificações." };
   }
 
@@ -59,7 +62,7 @@ export async function enviarNotificacaoDiaria(): Promise<{
     return { enviado: false, motivo: "Nada a reportar hoje.", alertas: [] };
   }
 
-  await sendText(config.numero_whatsapp, mensagem);
+  await enviarNotificacao(destino, mensagem);
   return { enviado: true, alertas: alertasFiltrados };
 }
 
@@ -82,7 +85,39 @@ export async function numeroNotificacao(): Promise<string | null> {
     .select("numero_whatsapp")
     .eq("id", true)
     .maybeSingle();
-  return config?.numero_whatsapp ?? null;
+  if (config?.numero_whatsapp) return config.numero_whatsapp;
+
+  // Sem numero configurado mas com Telegram de avisos (TELEGRAM_NOTIFY_IDS):
+  // os avisos seguem funcionando so por la.
+  const [primeiroTelegram] = idsTelegramParaAvisos();
+  return primeiroTelegram ? destinoTelegram(primeiroTelegram) : null;
+}
+
+/**
+ * Envia um aviso pro numero configurado; se o envio falhar (ex: conta do
+ * WhatsApp bloqueada) ou o destino ja for Telegram, entrega tambem nos ids
+ * de TELEGRAM_NOTIFY_IDS - assim um canal fora do ar nao deixa o dono sem
+ * saber de nada.
+ */
+export async function enviarNotificacao(numero: string, mensagem: string): Promise<void> {
+  const extras = idsTelegramParaAvisos().map(destinoTelegram);
+  const destinosTelegram = ehTelegram(numero) ? [numero, ...extras] : extras;
+
+  if (!ehTelegram(numero)) {
+    try {
+      await sendText(numero, mensagem);
+      return;
+    } catch (error) {
+      if (extras.length === 0) throw error;
+      console.error("Aviso pelo WhatsApp falhou, usando o Telegram:", error);
+    }
+  }
+
+  const unicos = Array.from(new Set(destinosTelegram));
+  const resultados = await Promise.allSettled(unicos.map((d) => sendText(d, mensagem)));
+  if (resultados.every((r) => r.status === "rejected")) {
+    throw (resultados[0] as PromiseRejectedResult).reason;
+  }
 }
 
 /** Roda todo dia às 22h (Brasília) — resumo do dia por conta e por obra/etapa. Manda sempre, mesmo sem lançamento. */
@@ -94,7 +129,7 @@ export async function enviarResumoDiario(): Promise<{ enviado: boolean; motivo?:
   const resumo = await buscarResumoPeriodo(hoje, hoje);
   const mensagem = formatarResumoDiario(formatarDataBRCurta(hoje), resumo);
 
-  await sendText(numero, mensagem);
+  await enviarNotificacao(numero, mensagem);
   return { enviado: true };
 }
 
@@ -110,7 +145,7 @@ export async function enviarResumoSemanal(): Promise<{ enviado: boolean; motivo?
   const periodoLabel = `${formatarDataBRCurta(inicioSemana)} a ${formatarDataBRCurta(fimSemana)}`;
   const mensagem = formatarResumoSemanal(periodoLabel, resumo);
 
-  await sendText(numero, mensagem);
+  await enviarNotificacao(numero, mensagem);
   return { enviado: true };
 }
 
@@ -154,7 +189,7 @@ export async function notificarLancamento(input: {
     materialNome: material?.nome ?? null,
     documentoAnexado: input.documentoAnexado,
   });
-  await sendText(numero, mensagem);
+  await enviarNotificacao(numero, mensagem);
 }
 
 /**
@@ -185,5 +220,5 @@ export async function notificarComprovantePagamentoAnexado(input: {
     obraNome,
     autorNome: input.autorNome,
   });
-  await sendText(numero, mensagem);
+  await enviarNotificacao(numero, mensagem);
 }

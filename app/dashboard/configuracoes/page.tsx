@@ -70,11 +70,11 @@ export default async function ConfiguracoesPage({
                 name="numero_whatsapp"
                 defaultValue={config?.numero_whatsapp ?? ""}
                 inputMode="numeric"
-                placeholder="Ex: 5598988219864"
+                placeholder="5598988219864 ou tg_123456789"
                 className="oc-input"
               />
               <span className="text-xs font-normal text-brand-gray-500">
-                Com DDI e DDD, só números.
+                WhatsApp: DDI + DDD, só números. Telegram: o ID no formato tg_123456789.
               </span>
             </label>
 

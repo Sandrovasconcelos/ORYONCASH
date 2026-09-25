@@ -1395,8 +1395,17 @@ export async function permanentlyDeleteFromTrashAction(formData: FormData) {
   revalidatePath("/dashboard/despesas");
 }
 
+/**
+ * Aceita telefone do WhatsApp (so digitos) ou id do Telegram (tg_123456789,
+ * tambem digitado como "tg 123456789" ou "tg:123456789").
+ */
+function normalizarContato(bruto: string): string {
+  const tg = bruto.trim().match(/^tg[\s_:-]*(\d+)$/i);
+  return tg ? `tg_${tg[1]}` : bruto.replace(/\D/g, "");
+}
+
 export async function createNumeroAction(formData: FormData) {
-  const telefone = String(formData.get("telefone") ?? "").replace(/\D/g, "");
+  const telefone = normalizarContato(String(formData.get("telefone") ?? ""));
   const nome = String(formData.get("nome") ?? "").trim();
   if (!telefone || !nome) return;
 
@@ -1502,7 +1511,7 @@ export async function deleteNumeroAction(formData: FormData) {
 }
 
 export async function updateConfiguracaoNotificacaoAction(formData: FormData) {
-  const numeroWhatsapp = String(formData.get("numero_whatsapp") ?? "").replace(/\D/g, "") || null;
+  const numeroWhatsapp = normalizarContato(String(formData.get("numero_whatsapp") ?? "")) || null;
 
   const supabase = await createClient();
   await supabase

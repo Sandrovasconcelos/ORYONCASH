@@ -1,4 +1,11 @@
 import { sendWhatsAppMessage } from "./graph";
+import { ehTelegram } from "@/lib/telegram/ids";
+import {
+  sendTelegramText,
+  sendTelegramDocument,
+  sendTelegramList,
+  sendTelegramButtons,
+} from "@/lib/telegram/messages";
 
 function truncate(text: string, max: number) {
   return text.length > max ? `${text.slice(0, max - 1)}…` : text;
@@ -8,6 +15,7 @@ export type ListRow = { id: string; title: string; description?: string };
 export type ListSection = { title?: string; rows: ListRow[] };
 
 export async function sendText(to: string, body: string) {
+  if (ehTelegram(to)) return sendTelegramText(to, body);
   return sendWhatsAppMessage({
     to,
     type: "text",
@@ -17,6 +25,7 @@ export async function sendText(to: string, body: string) {
 
 /** Manda um documento (PDF, etc.) por link publico/assinado. Precisa de uma URL acessivel sem login. */
 export async function sendDocument(to: string, link: string, filename: string, caption?: string) {
+  if (ehTelegram(to)) return sendTelegramDocument(to, link, filename, caption);
   return sendWhatsAppMessage({
     to,
     type: "document",
@@ -33,6 +42,7 @@ export async function sendList(
     sections: ListSection[];
   }
 ) {
+  if (ehTelegram(to)) return sendTelegramList(to, opts);
   return sendWhatsAppMessage({
     to,
     type: "interactive",
@@ -64,6 +74,7 @@ export async function sendButtons(
   bodyText: string,
   buttons: { id: string; title: string }[]
 ) {
+  if (ehTelegram(to)) return sendTelegramButtons(to, bodyText, buttons);
   return sendWhatsAppMessage({
     to,
     type: "interactive",

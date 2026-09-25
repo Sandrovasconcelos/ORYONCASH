@@ -1,4 +1,5 @@
 import { fetchComTimeout } from "@/lib/fetchComTimeout";
+import { baixarArquivoTelegram } from "@/lib/telegram/api";
 
 const GRAPH_API_VERSION = process.env.WHATSAPP_API_VERSION || "v21.0";
 // Duas chamadas sequenciais (resolver URL + baixar bytes) dividem o
@@ -12,8 +13,15 @@ const GRAPH_TIMEOUT_MS = 8_000;
  * (ambas exigem o token de acesso do app).
  */
 export async function downloadWhatsAppMedia(
-  mediaId: string
+  mediaId: string,
+  mimeTypeConhecido?: string
 ): Promise<{ buffer: Buffer; mimeType: string }> {
+  // Midia vinda do Telegram (id "tg_<file_id>") - o mime ja veio na mensagem.
+  if (mediaId.startsWith("tg_")) {
+    const buffer = await baixarArquivoTelegram(mediaId.slice(3));
+    return { buffer, mimeType: mimeTypeConhecido ?? "application/octet-stream" };
+  }
+
   const token = process.env.WHATSAPP_ACCESS_TOKEN;
 
   const metaRes = await fetchComTimeout(

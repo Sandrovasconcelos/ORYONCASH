@@ -1116,7 +1116,7 @@ async function handleNotaFiscalRecebida(
   // antes, uma falha no upload jogava fora uma leitura que tinha dado certo
   // e o usuario recebia "nao consegui ler" mesmo com a nota lida.
   try {
-    arquivo = await downloadWhatsAppMedia(media.id);
+    arquivo = await downloadWhatsAppMedia(media.id, media.mimeType);
   } catch (error) {
     console.error("Erro ao baixar comprovante do WhatsApp:", error);
     Sentry.captureException(error, { tags: { fluxo: "nota_fiscal_recebida", etapa: "download" } });
@@ -1315,7 +1315,7 @@ async function handleAudioRecebido(from: string, media: IncomingMedia) {
 
   let extraido;
   try {
-    const { buffer, mimeType } = await downloadWhatsAppMedia(media.id);
+    const { buffer, mimeType } = await downloadWhatsAppMedia(media.id, media.mimeType);
     extraido = await extractDespesaDeAudio(buffer, mimeType);
    } catch (error) {
     console.error("Erro ao processar áudio:", error);
@@ -1510,7 +1510,7 @@ async function handleAnexarPagamentoArquivo(
   }
 
   try {
-    const { buffer, mimeType } = await downloadWhatsAppMedia(media.id);
+    const { buffer, mimeType } = await downloadWhatsAppMedia(media.id, media.mimeType);
     const pagamentoExtraido = await extractInvoiceData(buffer, mimeType);
     const comprovantePagamento = await uploadComprovanteWhatsApp({
       telefone: from,
@@ -1855,7 +1855,7 @@ async function handleOrcamentoRecebido(from: string, media: IncomingMedia) {
 
   let orcamento;
   try {
-    const { buffer } = await downloadWhatsAppMedia(media.id);
+    const { buffer } = await downloadWhatsAppMedia(media.id, media.mimeType);
     const texto = extractSpreadsheetAsText(buffer);
     orcamento = await extractOrcamentoData(texto);
    } catch (error) {
@@ -2031,7 +2031,7 @@ async function handleContaAPagarArquivoRecebido(from: string, media: IncomingMed
   await sendText(from, "📅 Recebi a conta, analisando...");
 
   try {
-    const { buffer, mimeType } = await downloadWhatsAppMedia(media.id);
+    const { buffer, mimeType } = await downloadWhatsAppMedia(media.id, media.mimeType);
     const extraido = await extractInvoiceData(buffer, mimeType);
     const arquivo = await uploadComprovanteWhatsApp({
       telefone: from,
