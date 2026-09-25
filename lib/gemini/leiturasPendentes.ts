@@ -42,9 +42,11 @@ export type LeituraPendente = {
 };
 
 function urlBase(): string {
-  const producao = process.env.VERCEL_PROJECT_PRODUCTION_URL;
-  if (producao) return `https://${producao}`;
-  if (process.env.VERCEL_URL) return `https://${process.env.VERCEL_URL}`;
+  if (process.env.APP_URL) return process.env.APP_URL.replace(/\/$/, "");
+  // Sempre o dominio de producao: a URL unica de cada deploy (VERCEL_URL)
+  // pode estar atras da protecao de deploy da Vercel e recusar a chamada.
+  if (process.env.VERCEL_PROJECT_PRODUCTION_URL) return `https://${process.env.VERCEL_PROJECT_PRODUCTION_URL}`;
+  if (process.env.VERCEL) return "https://oryoncash.vercel.app";
   return "http://localhost:3000";
 }
 
