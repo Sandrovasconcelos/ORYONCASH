@@ -160,6 +160,67 @@ export async function processarExtrato(extratoId: string): Promise<void> {
 }
 
 /**
+ * Extrato enviado por cima de um periodo que ja estava em outro extrato da
+ * mesma conta (versao anterior do app, ou arquivo reenviado) traz as mesmas
+ * transacoes de novo - o pagamento ja conciliado la aparecia aqui como "sem
+ * lancamento". Remove desta lista as que ja existem em extratos mais antigos
+ * (mesma data, valor e tipo, contando repeticoes). So mexe em pendentes e
+ * ignoradas: o que ja foi conciliado nunca e apagado.
+ */
+async function removerDuplicadasDeExtratosAnteriores(extratoId: string, contaBancariaId: string | null): Promise<number> {
+  if (!contaBancariaId) return 0;
+  const supabase = createAdminClient();
+
+  const { data: atual } = await supabase.from("extratos_bancarios").select("created_at").eq("id", extratoId).maybeSingle();
+  const { data: minhas } = await supabase
+    .from("extrato_transacoes")
+    .select("id, data, valor, tipo, status")
+    .eq("extrato_id", extratoId)
+    .limit(5000);
+  if (!atual || !minhas || minhas.length === 0) return 0;
+
+  const { data: anteriores } = await supabase
+    .from("extrato_transacoes")
+    .select("data, valor, tipo, extratos_bancarios!inner(conta_bancaria_id, created_at)")
+    .eq("extratos_bancarios.conta_bancaria_id", contaBancariaId)
+    .lt("extratos_bancarios.created_at", atual.created_at)
+    .neq("extrato_id", extratoId)
+    .limit(5000);
+  if (!anteriores || anteriores.length === 0) return 0;
+
+  const chave = (t: { data: string; valor: number; tipo: string }) => `${t.data}|${Math.round(t.valor * 100)}|${t.tipo}`;
+  const jaTem = new Map<string, number>();
+  for (const t of anteriores) jaTem.set(chave(t), (jaTem.get(chave(t)) ?? 0) + 1);
+
+  const remover: string[] = [];
+  for (const t of minhas) {
+    if (t.status === "conciliado") continue;
+    const k = chave(t);
+    const restante = jaTem.get(k) ?? 0;
+    if (restante > 0) {
+      jaTem.set(k, restante - 1);
+      remover.push(t.id);
+    }
+  }
+  if (remover.length === 0) return 0;
+
+  await supabase.from("extrato_transacoes").delete().in("id", remover);
+  const [{ count: total }, { count: conciliadas }] = await Promise.all([
+    supabase.from("extrato_transacoes").select("id", { count: "exact", head: true }).eq("extrato_id", extratoId),
+    supabase
+      .from("extrato_transacoes")
+      .select("id", { count: "exact", head: true })
+      .eq("extrato_id", extratoId)
+      .eq("status", "conciliado"),
+  ]);
+  await supabase
+    .from("extratos_bancarios")
+    .update({ total_transacoes: total ?? 0, total_conciliadas: conciliadas ?? 0 })
+    .eq("id", extratoId);
+  return remover.length;
+}
+
+/**
  * Roda o casamento de novo so nas transacoes que continuam sem lancamento.
  * Serve porque o lancamento costuma ser feito DEPOIS de o extrato ser enviado
  * (o extrato de agosto so era conciliado no upload e nunca mais).
@@ -173,6 +234,7 @@ export async function reconciliarExtrato(extratoId: string): Promise<number> {
     .maybeSingle();
   if (!extrato?.conta_bancaria_id) return 0;
 
+  await removerDuplicadasDeExtratosAnteriores(extratoId, extrato.conta_bancaria_id);
   await aplicarRegrasDeIgnorar(extratoId);
 
   const { data: pendentes } = await supabase
