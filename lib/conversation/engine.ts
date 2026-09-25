@@ -3,6 +3,7 @@ import type { IncomingMessage, IncomingMedia } from "@/lib/whatsapp/parse";
 import { sendText, sendButtons } from "@/lib/whatsapp/messages";
 import { getSession, saveSession, resetSession, type Session } from "@/lib/whatsapp/session";
 import { downloadWhatsAppMedia } from "@/lib/whatsapp/media";
+import { agendarLeituraPendente, type ComprovanteSalvo } from "@/lib/gemini/leiturasPendentes";
 import { extractInvoiceData, type InvoiceItem, type InvoiceData } from "@/lib/gemini/extractInvoice";
 import { extractOrcamentoData, type OrcamentoEtapa } from "@/lib/gemini/extractOrcamento";
 import { extractDespesaDeAudio } from "@/lib/gemini/extractDespesaAudio";
@@ -1111,6 +1112,9 @@ async function handleNotaFiscalRecebida(
   let invoice: InvoiceData | null = null;
   let comprovante: Dados["comprovante"] | undefined;
   let arquivo: { buffer: Buffer; mimeType: string } | null = null;
+  // true so quando o Gemini LANCOU erro (indisponibilidade) - diferente de
+  // "leu mas nao achou dados", que segue direto pro preenchimento manual.
+  let falhaDoProvedor = false;
 
   // Download, leitura (Gemini) e upload no Storage ficam em blocos separados:
   // antes, uma falha no upload jogava fora uma leitura que tinha dado certo
@@ -1126,6 +1130,7 @@ async function handleNotaFiscalRecebida(
     try {
       invoice = await extractInvoiceData(arquivo.buffer, arquivo.mimeType);
     } catch (error) {
+      falhaDoProvedor = true;
       console.error("Erro ao ler comprovante com o Gemini:", error);
       Sentry.captureException(error, { tags: { fluxo: "nota_fiscal_recebida", etapa: "gemini" } });
     }
@@ -1153,6 +1158,41 @@ async function handleNotaFiscalRecebida(
       Sentry.captureException(error, { tags: { fluxo: "nota_fiscal_recebida", etapa: "upload" } });
     }
   }
+
+  // Gemini indisponivel: em vez de largar o usuario no preenchimento manual,
+  // o arquivo (ja salvo) entra na fila e uma cadeia de tentativas em segundo
+  // plano le de novo e retoma a conversa sozinha quando conseguir.
+  if (!invoice && falhaDoProvedor && comprovante) {
+    const agendado = await agendarLeituraPendente({
+      telefone: from,
+      comprovante: comprovante as unknown as ComprovanteSalvo,
+      forcarNovaDespesa: options.forcarNovaDespesa ?? false,
+    });
+    if (agendado) {
+      await sendText(
+        from,
+        "⏳ O leitor automático está sobrecarregado agora. Guardei seu arquivo e vou tentar ler de novo sozinho nos próximos minutos — te aviso aqui assim que conseguir.\n\nSe preferir não esperar, é só usar o menu → Registrar Despesa."
+      );
+      return;
+    }
+  }
+
+  await processarDocumentoLido(from, invoice, comprovante, options);
+}
+
+/**
+ * Tudo que acontece DEPOIS de o documento ser lido (ou de a leitura falhar
+ * de vez): comprovante de pagamento, fallback manual, duplicidade,
+ * classificacao. Separado da leitura pra a fila de tentativas em segundo
+ * plano poder retomar a conversa do ponto certo quando conseguir ler.
+ */
+export async function processarDocumentoLido(
+  from: string,
+  invoiceLido: InvoiceData | null,
+  comprovante: Dados["comprovante"] | undefined,
+  options: { forcarNovaDespesa?: boolean } = {}
+) {
+  let invoice = invoiceLido;
 
   // O Gemini as vezes classifica certo como comprovante de pagamento mas
   // nao segue a instrucao de devolver um item unico (ex: recibo de Pix sem
@@ -2733,4 +2773,57 @@ async function handleRemoverConfirmacao(
 
   await resetSession(from);
   await sendMenuPrincipal(from);
+}
+
+// ---------- Retomada de leituras que ficaram na fila ----------
+
+/**
+ * Quando o arquivo foi salvo sem leitura, o comprovante ficou como "documento
+ * de cobranca" sem dados da conta de origem. Depois que a leitura tardia
+ * funciona, completa esses campos - eles alimentam a vinculacao ao lancamento.
+ */
+export function enriquecerComprovante(
+  comprovante: NonNullable<Dados["comprovante"]>,
+  invoice: InvoiceData
+): NonNullable<Dados["comprovante"]> {
+  return {
+    ...comprovante,
+    tipoDocumento:
+      invoice.tipoDocumento === "comprovante_pagamento" ? "comprovante_pagamento" : "documento_cobranca",
+    contaOrigemBanco: invoice.contaOrigemBanco ?? null,
+    contaOrigemTitular: invoice.contaOrigemTitular ?? null,
+    contaOrigemDocumento: invoice.contaOrigemDocumento ?? null,
+    contaOrigemAgencia: invoice.contaOrigemAgencia ?? null,
+    contaOrigemNumero: invoice.contaOrigemNumero ?? null,
+    metodoPagamento: invoice.metodoPagamento ?? null,
+    numeroDocumento: invoice.numeroDocumento ?? null,
+  };
+}
+
+/**
+ * Chamada pela fila de tentativas quando finalmente consegue ler o documento.
+ * So retoma o fluxo se o usuario estiver parado no menu - sobrescrever a
+ * sessao no meio de outro lancamento corromperia o que ele esta fazendo.
+ */
+export async function retomarDocumentoLido(
+  from: string,
+  invoice: InvoiceData,
+  comprovanteBase: NonNullable<Dados["comprovante"]>,
+  forcarNovaDespesa: boolean
+): Promise<"retomado" | "ocupado"> {
+  const comprovante = enriquecerComprovante(comprovanteBase, invoice);
+  const session = await getSession(from);
+
+  if (session.estado_atual !== ESTADOS.MENU) {
+    const total = invoice.valorTotalNota ? ` — ${formatBRL(invoice.valorTotalNota)}` : "";
+    await sendText(
+      from,
+      `✅ Consegui ler o documento que você tinha enviado (${invoice.fornecedorNome ?? "sem fornecedor"}${total}).\n\nComo você está no meio de outra operação, não interrompi. Quando terminar, envie o documento de novo — agora a leitura deve ser imediata.`
+    );
+    return "ocupado";
+  }
+
+  await sendText(from, "✅ Consegui ler o documento que você tinha enviado. Vamos seguir:");
+  await processarDocumentoLido(from, invoice, comprovante, { forcarNovaDespesa });
+  return "retomado";
 }

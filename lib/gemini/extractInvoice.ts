@@ -1,8 +1,11 @@
 import { chamarGemini } from "@/lib/gemini/chamarGemini";
 
 // Orcamento total de tempo pra leitura (a cadeia de modelos fica em
-// chamarGemini) - precisa somar menos que o teto de 60s do webhook.
-const GEMINI_ORCAMENTO_MS = 40_000;
+// chamarGemini) - precisa somar menos que o teto de 60s do webhook. 30s cobre
+// com folga o caso normal (medido: leituras de 3 a 18s); se nao bastar, a
+// leitura vai pra fila de tentativas em segundo plano (leiturasPendentes.ts)
+// em vez de o usuario cair no preenchimento manual.
+const GEMINI_ORCAMENTO_MS = 30_000;
 
 export type InvoiceItem = {
   descricao: string;
@@ -155,7 +158,8 @@ const RESPONSE_SCHEMA = {
 
 export async function extractInvoiceData(
   fileBuffer: Buffer,
-  mimeType: string
+  mimeType: string,
+  opcoes: { orcamentoMs?: number } = {}
 ): Promise<InvoiceData | null> {
   const res = await chamarGemini(
     {
@@ -169,7 +173,7 @@ export async function extractInvoiceData(
       ],
       generationConfig: { responseMimeType: "application/json", responseSchema: RESPONSE_SCHEMA },
     },
-    { orcamentoMs: GEMINI_ORCAMENTO_MS, contexto: `ler documento (mimeType=${mimeType})` }
+    { orcamentoMs: opcoes.orcamentoMs ?? GEMINI_ORCAMENTO_MS, contexto: `ler documento (mimeType=${mimeType})` }
   );
 
   const data = await res.json();

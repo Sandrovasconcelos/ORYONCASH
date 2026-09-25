@@ -444,6 +444,32 @@ export interface Database {
         >;
         Relationships: [];
       };
+      leituras_pendentes: {
+        Row: {
+          id: string;
+          telefone: string;
+          comprovante: Json;
+          forcar_nova_despesa: boolean;
+          tentativas: number;
+          status: "pendente" | "processando" | "concluida" | "desistiu";
+          ultimo_erro: string | null;
+          created_at: string;
+          updated_at: string;
+        };
+        Insert: {
+          id?: string;
+          telefone: string;
+          comprovante: Json;
+          forcar_nova_despesa?: boolean;
+          tentativas?: number;
+          status?: "pendente" | "processando" | "concluida" | "desistiu";
+          ultimo_erro?: string | null;
+          created_at?: string;
+          updated_at?: string;
+        };
+        Update: Partial<Database["public"]["Tables"]["leituras_pendentes"]["Insert"]>;
+        Relationships: [];
+      };
       configuracoes_notificacao: {
         Row: {
           id: boolean;
