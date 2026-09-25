@@ -1,7 +1,7 @@
 import Link from "next/link";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { formatDataHoraBrasil, formatDataBrasil } from "@/lib/format-date";
-import { uploadExtratoAction, apagarRegraAction, atualizarRegraAction } from "./actions";
+import { uploadExtratoAction, apagarRegraAction, atualizarRegraAction, reconciliarExtratoAction } from "./actions";
 import { listarRegras } from "@/lib/conciliacao/regras";
 import { SubmitButton } from "../submit-button";
 import { ExcluirExtratoButton } from "./excluir-extrato-button";
@@ -159,6 +159,14 @@ export default async function ConciliacaoPage() {
                   <span className={`shrink-0 rounded-full px-2.5 py-1 text-[11px] font-bold ${statusInfo.classe}`}>
                     {statusInfo.texto}
                   </span>
+                  {extrato.status === "concluido" && (
+                    <form action={reconciliarExtratoAction} className="shrink-0">
+                      <input type="hidden" name="extrato_id" value={extrato.id} />
+                      <SubmitButton className="text-xs font-bold text-brand-black hover:underline" pendingText="Conferindo…">
+                        Conciliar novamente
+                      </SubmitButton>
+                    </form>
+                  )}
                   <ExcluirExtratoButton id={extrato.id} nome={conta?.nome ?? "extrato"} />
                 </li>
               );
