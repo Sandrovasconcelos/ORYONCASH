@@ -29,6 +29,7 @@ export function RevisaoTransacaoModal({
   despesasCandidatas,
   obras,
   categorias,
+  sugestao,
 }: {
   transacaoId: string;
   extratoId: string;
@@ -39,6 +40,13 @@ export function RevisaoTransacaoModal({
   despesasCandidatas: DespesaCandidata[];
   obras: { id: string; nome: string }[];
   categorias: { id: string; nome: string }[];
+  sugestao?: {
+    fornecedorId: string;
+    fornecedorNome: string;
+    obraId: string | null;
+    categoriaId: string | null;
+    baseadaEm: number;
+  } | null;
 }) {
   const [open, setOpen] = useState(false);
   const [aba, setAba] = useState<"vincular" | "criar">(despesasCandidatas.length > 0 ? "vincular" : "criar");
@@ -130,12 +138,22 @@ export function RevisaoTransacaoModal({
             <input type="hidden" name="transacao_id" value={transacaoId} />
             <input type="hidden" name="extrato_id" value={extratoId} />
             <input type="hidden" name="conta_bancaria_id" value={contaBancariaId ?? ""} />
+            <input type="hidden" name="fornecedor_id" value={sugestao?.fornecedorId ?? ""} />
+            {sugestao && (
+              <p className="rounded-brand-sm bg-brand-gray-100 px-3 py-2 text-xs text-brand-gray-600">
+                Fornecedor reconhecido: <strong>{sugestao.fornecedorNome}</strong>
+                {sugestao.baseadaEm > 0
+                  ? ` — obra e categoria sugeridas pelos ${sugestao.baseadaEm} lançamento(s) anteriores dele. Confira antes de criar.`
+                  : " — ainda sem lançamentos anteriores, escolha obra e categoria."}
+              </p>
+            )}
             <div className="grid grid-cols-2 gap-3">
               <label className="flex flex-col gap-1 text-xs font-bold text-brand-gray-600">
                 Obra
                 <select
                   name="obra_id"
                   required
+                  defaultValue={sugestao?.obraId ?? ""}
                   className="rounded-brand-sm border border-black/10 px-3 py-2 text-sm font-medium text-brand-black"
                 >
                   <option value="">Selecione…</option>
@@ -151,6 +169,7 @@ export function RevisaoTransacaoModal({
                 <select
                   name="categoria_id"
                   required
+                  defaultValue={sugestao?.categoriaId ?? ""}
                   className="rounded-brand-sm border border-black/10 px-3 py-2 text-sm font-medium text-brand-black"
                 >
                   <option value="">Selecione…</option>
@@ -185,7 +204,7 @@ export function RevisaoTransacaoModal({
               Descrição
               <input
                 name="descricao"
-                defaultValue={transacaoDescricao ?? ""}
+                defaultValue={sugestao?.fornecedorNome ?? transacaoDescricao ?? ""}
                 className="rounded-brand-sm border border-black/10 px-3 py-2 text-sm font-medium text-brand-black"
               />
             </label>

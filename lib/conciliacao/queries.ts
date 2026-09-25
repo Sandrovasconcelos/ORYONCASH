@@ -1,6 +1,7 @@
 import { createAdminClient } from "@/lib/supabase/admin";
 import { extractBankStatement } from "@/lib/gemini/extractBankStatement";
 import { casarTransacoes } from "@/lib/conciliacao/matching";
+import { ehMovimentoFinanceiro } from "@/lib/conciliacao/classificar";
 
 const JANELA_BUSCA_DESPESA_DIAS = 3;
 
@@ -59,7 +60,11 @@ export async function processarExtrato(extratoId: string): Promise<void> {
           descricao: t.descricao,
           valor: t.valor,
           tipo: t.tipo,
-          status: t.tipo === "credito" ? ("ignorado" as const) : ("pendente" as const),
+          // Credito e aplicacao/resgate nao sao despesa de obra.
+          status:
+            t.tipo === "credito" || ehMovimentoFinanceiro(t.descricao)
+              ? ("ignorado" as const)
+              : ("pendente" as const),
         }))
       )
       .select("id, data, valor, tipo");
@@ -99,6 +104,55 @@ export async function processarExtrato(extratoId: string): Promise<void> {
       .eq("id", extratoId);
     throw error;
   }
+}
+
+/**
+ * Roda o casamento de novo so nas transacoes que continuam sem lancamento.
+ * Serve porque o lancamento costuma ser feito DEPOIS de o extrato ser enviado
+ * (o extrato de agosto so era conciliado no upload e nunca mais).
+ */
+export async function reconciliarExtrato(extratoId: string): Promise<number> {
+  const supabase = createAdminClient();
+  const { data: extrato } = await supabase
+    .from("extratos_bancarios")
+    .select("conta_bancaria_id")
+    .eq("id", extratoId)
+    .maybeSingle();
+  if (!extrato?.conta_bancaria_id) return 0;
+
+  const { data: pendentes } = await supabase
+    .from("extrato_transacoes")
+    .select("id, data, valor, tipo")
+    .eq("extrato_id", extratoId)
+    .eq("status", "pendente")
+    .eq("tipo", "debito");
+  if (!pendentes || pendentes.length === 0) return 0;
+
+  const datas = pendentes.map((t) => t.data).sort();
+  const novas = await conciliarAutomaticamente({
+    contaBancariaId: extrato.conta_bancaria_id,
+    periodoInicio: datas[0],
+    periodoFim: datas[datas.length - 1],
+    transacoes: pendentes,
+  });
+
+  if (novas > 0) {
+    const { count } = await supabase
+      .from("extrato_transacoes")
+      .select("id", { count: "exact", head: true })
+      .eq("extrato_id", extratoId)
+      .eq("status", "conciliado");
+    await supabase.from("extratos_bancarios").update({ total_conciliadas: count ?? 0 }).eq("id", extratoId);
+  }
+  return novas;
+}
+
+/** Reconcilia todos os extratos concluidos (usado pelo lembrete diario). */
+export async function reconciliarTodosOsExtratos(): Promise<number> {
+  const { data } = await createAdminClient().from("extratos_bancarios").select("id").eq("status", "concluido");
+  let total = 0;
+  for (const e of data ?? []) total += await reconciliarExtrato(e.id).catch(() => 0);
+  return total;
 }
 
 async function conciliarAutomaticamente(input: {

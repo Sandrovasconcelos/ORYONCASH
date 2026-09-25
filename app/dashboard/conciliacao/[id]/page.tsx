@@ -3,8 +3,10 @@ import { notFound } from "next/navigation";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { formatBRL } from "@/lib/conversation/format";
 import { formatDataBrasil, formatDataHoraBrasil } from "@/lib/format-date";
-import { desvincularTransacaoAction } from "../actions";
+import { desvincularTransacaoAction, reconciliarExtratoAction } from "../actions";
+import { SubmitButton } from "../../submit-button";
 import { RevisaoTransacaoModal } from "./revisao-transacao-modal";
+import { sugerirLancamentos } from "@/lib/conciliacao/sugestoes";
 
 export const dynamic = "force-dynamic";
 
@@ -16,10 +18,13 @@ const STATUS_LABEL: Record<string, { texto: string; classe: string }> = {
 
 export default async function ConciliacaoDetalhePage({
   params,
+  searchParams,
 }: {
   params: Promise<{ id: string }>;
+  searchParams: Promise<{ filtro?: string }>;
 }) {
   const { id } = await params;
+  const { filtro } = await searchParams;
   const supabase = createAdminClient();
 
   const { data: extrato } = await supabase
@@ -62,6 +67,11 @@ export default async function ConciliacaoDetalhePage({
         .is("deleted_at", null)
         .order("data", { ascending: false })
         .limit(200);
+
+  const pendentes = (transacoes ?? []).filter((t) => t.status === "pendente" && t.tipo === "debito");
+  const totalPendente = pendentes.reduce((soma, t) => soma + t.valor, 0);
+  const sugestoes = await sugerirLancamentos(pendentes).catch(() => new Map());
+  const transacoesVisiveis = filtro === "pendente" ? pendentes : (transacoes ?? []);
 
   const idsJaVinculados = new Set((transacoes ?? []).map((t) => t.despesa_id).filter(Boolean));
   const candidatasDisponiveis = (despesasCandidatas ?? []).filter((d) => !idsJaVinculados.has(d.id));
@@ -110,7 +120,30 @@ export default async function ConciliacaoDetalhePage({
         </div>
       )}
 
-      {(transacoes ?? []).length > 0 && (
+      {pendentes.length > 0 && (
+        <div className="flex flex-wrap items-center justify-between gap-3 rounded-card border border-status-danger/30 bg-status-danger/10 p-4 text-sm text-brand-gray-700 shadow-card">
+          <p>
+            <strong className="text-brand-black">{pendentes.length} pagamento(s) sem lançamento</strong> no app, somando{" "}
+            <strong className="text-brand-black">{formatBRL(totalPendente)}</strong>.
+          </p>
+          <div className="flex items-center gap-4">
+            <form action={reconciliarExtratoAction}>
+              <input type="hidden" name="extrato_id" value={extrato.id} />
+              <SubmitButton className="text-xs font-bold text-brand-black hover:underline" pendingText="Conferindo…">
+                Conciliar novamente
+              </SubmitButton>
+            </form>
+          <Link
+            href={filtro === "pendente" ? `/dashboard/conciliacao/${extrato.id}` : `/dashboard/conciliacao/${extrato.id}?filtro=pendente`}
+            className="text-xs font-bold text-brand-red hover:underline"
+          >
+            {filtro === "pendente" ? "Ver todas as transações" : "Ver só os sem lançamento"}
+          </Link>
+          </div>
+        </div>
+      )}
+
+      {transacoesVisiveis.length > 0 && (
         <div className="overflow-hidden rounded-card border border-black/5 bg-white shadow-card">
           <table className="w-full text-sm">
             <thead className="bg-brand-gray-100 text-left text-[11px] font-bold uppercase tracking-wide text-brand-gray-500">
@@ -124,7 +157,7 @@ export default async function ConciliacaoDetalhePage({
               </tr>
             </thead>
             <tbody className="divide-y divide-black/5">
-              {(transacoes ?? []).map((t) => {
+              {transacoesVisiveis.map((t) => {
                 const statusInfo = STATUS_LABEL[t.status] ?? STATUS_LABEL.pendente;
                 const despesa = (
                   t as {
@@ -188,6 +221,7 @@ export default async function ConciliacaoDetalhePage({
                           despesasCandidatas={candidatasDisponiveis}
                           obras={obras ?? []}
                           categorias={categorias ?? []}
+                          sugestao={sugestoes.get(t.id) ?? null}
                         />
                       ) : (
                         <span className="text-xs text-brand-gray-400">—</span>

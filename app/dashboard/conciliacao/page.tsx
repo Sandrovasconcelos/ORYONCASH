@@ -4,6 +4,8 @@ import { formatDataHoraBrasil, formatDataBrasil } from "@/lib/format-date";
 import { uploadExtratoAction } from "./actions";
 import { SubmitButton } from "../submit-button";
 import { ExcluirExtratoButton } from "./excluir-extrato-button";
+import { pendentesPorExtrato } from "@/lib/conciliacao/pendentes";
+import { formatBRL } from "@/lib/conversation/format";
 
 export const dynamic = "force-dynamic";
 export const maxDuration = 60;
@@ -38,6 +40,11 @@ export default async function ConciliacaoPage() {
   }
 
   const extratos = extratosQuery.data ?? [];
+  const pendentes = await pendentesPorExtrato();
+  const totalPendentes = [...pendentes.values()].reduce(
+    (soma, p) => ({ quantidade: soma.quantidade + p.quantidade, total: soma.total + p.total }),
+    { quantidade: 0, total: 0 }
+  );
 
   return (
     <div className="flex flex-col gap-6">
@@ -48,6 +55,13 @@ export default async function ConciliacaoPage() {
           que bateu e o que ainda precisa de atenção.
         </p>
       </div>
+
+      {totalPendentes.quantidade > 0 && (
+        <div className="rounded-card border border-status-danger/30 bg-status-danger/10 p-4 text-sm text-brand-gray-700 shadow-card">
+          <strong className="text-brand-black">{totalPendentes.quantidade} pagamento(s) saíram da conta e não têm lançamento no app</strong>{" "}
+          — {formatBRL(totalPendentes.total)} no total. Abra o extrato abaixo pra lançar ou descartar cada um.
+        </div>
+      )}
 
       <form
         action={uploadExtratoAction}
@@ -130,7 +144,7 @@ export default async function ConciliacaoPage() {
                     <p className="mt-0.5 text-xs text-brand-gray-500">
                       Enviado em {formatDataHoraBrasil(extrato.created_at)} ·{" "}
                       {extrato.status === "concluido"
-                        ? `${extrato.total_conciliadas}/${extrato.total_transacoes} conciliadas`
+                        ? `${extrato.total_conciliadas} conciliadas · ${pendentes.get(extrato.id)?.quantidade ?? 0} sem lançamento`
                         : extrato.erro ?? "—"}
                     </p>
                   </Link>

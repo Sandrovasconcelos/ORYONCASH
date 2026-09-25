@@ -7,7 +7,7 @@ import { formatBRL, parseValorBR } from "@/lib/conversation/format";
 import { hojeNoBrasil } from "@/lib/conversation/queries";
 import { registrarAtividade } from "@/lib/atividades";
 import { getAutorNomeDashboard } from "@/app/dashboard/actions";
-import { processarExtrato } from "@/lib/conciliacao/queries";
+import { processarExtrato, reconciliarExtrato } from "@/lib/conciliacao/queries";
 
 const TAMANHO_MAXIMO_ARQUIVO_BYTES = 15 * 1024 * 1024;
 const MIME_TYPES_EXTRATO = new Set(["application/pdf", "image/jpeg", "image/png", "image/webp"]);
@@ -98,6 +98,14 @@ export async function uploadExtratoAction(formData: FormData) {
   redirect(`/dashboard/conciliacao/${extrato.id}`);
 }
 
+export async function reconciliarExtratoAction(formData: FormData) {
+  const extratoId = String(formData.get("extrato_id") ?? "");
+  if (!extratoId) return;
+  await reconciliarExtrato(extratoId);
+  revalidatePath(`/dashboard/conciliacao/${extratoId}`);
+  revalidatePath("/dashboard/conciliacao");
+}
+
 export async function excluirExtratoAction(formData: FormData) {
   const id = String(formData.get("id") ?? "");
   if (!id) return;
@@ -181,6 +189,7 @@ export async function criarDespesaDaTransacaoAction(formData: FormData) {
   const contaBancariaId = String(formData.get("conta_bancaria_id") ?? "") || null;
   const obraId = String(formData.get("obra_id") ?? "");
   const categoriaId = String(formData.get("categoria_id") ?? "");
+  const fornecedorId = String(formData.get("fornecedor_id") ?? "") || null;
   const valor = parseValorBR(String(formData.get("valor") ?? "0")) ?? 0;
   const data = String(formData.get("data") ?? "") || hojeNoBrasil();
   const descricao = String(formData.get("descricao") ?? "").trim() || null;
@@ -194,6 +203,7 @@ export async function criarDespesaDaTransacaoAction(formData: FormData) {
     obra_id: obraId,
     categoria_id: categoriaId,
     conta_bancaria_id: contaBancariaId,
+    fornecedor_id: fornecedorId,
     valor,
     data,
     descricao,
