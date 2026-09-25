@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { resolverPorNumeroOuNome } from "./queries";
+import { encontrarPorPista, resolverPorNumeroOuNome } from "./queries";
 
 type Item = { id: string; nome: string };
 
@@ -48,5 +48,33 @@ describe("resolverPorNumeroOuNome", () => {
   it("retorna null pra texto vazio ou sem nenhum candidato", () => {
     expect(resolverPorNumeroOuNome(itens, "")).toBeNull();
     expect(resolverPorNumeroOuNome(itens, "xyz-nao-existe")).toBeNull();
+  });
+});
+
+describe("encontrarPorPista", () => {
+  const obras = [
+    { id: "a", nome: "01 COSTA AMALFITANA" },
+    { id: "b", nome: "02 Costa Amalfitana" },
+    { id: "c", nome: "Casa da Praia" },
+  ];
+
+  it("usa todas as palavras da pista, em qualquer ordem", () => {
+    expect(encontrarPorPista(obras, "costa 02")?.id).toBe("b");
+    expect(encontrarPorPista(obras, "Costa Amalfitana 01")?.id).toBe("a");
+  });
+
+  it("nao adivinha quando a pista serve pra mais de um cadastro", () => {
+    expect(encontrarPorPista(obras, "costa")).toBeNull();
+  });
+
+  it("numero solto casa pelo nome (nunca pela posicao na lista)", () => {
+    expect(encontrarPorPista(obras, "2")?.id).toBe("b");
+    expect(encontrarPorPista(obras, "3")).toBeNull();
+  });
+
+  it("ignora acento e caixa; sem match devolve null", () => {
+    expect(encontrarPorPista(obras, "PRAIA")?.id).toBe("c");
+    expect(encontrarPorPista(obras, "predio")).toBeNull();
+    expect(encontrarPorPista(obras, "")).toBeNull();
   });
 });
