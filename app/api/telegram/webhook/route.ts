@@ -4,12 +4,12 @@ import * as Sentry from "@sentry/nextjs";
 import { isAllowedNumber } from "@/lib/whatsapp/verify";
 import { abrirAcaoDeDespesa, handleIncomingMessage, iniciarLancamentoDeTransacao } from "@/lib/conversation/engine";
 import { cartaoPorId } from "@/lib/conciliacao/avisos";
-import { buscarTransacaoPendente, ignorarTransacao } from "@/lib/conciliacao/queries";
-import { aplicarRegrasDeIgnorar, salvarRegra } from "@/lib/conciliacao/regras";
-import { aceitarVinculoPorValor, buscarVinculosPorValor } from "@/lib/conciliacao/vinculosPorValor";
-import { desfazerDespesaRecente } from "@/lib/conversation/queries";
-import { registrarAtividade } from "@/lib/atividades";
-import { formatBRL } from "@/lib/conversation/format";
+import {
+  desfazerLancamentoPorBotao,
+  pagarContaPorBotao,
+  resolverPagamentoPorBotao,
+  type AcaoDePagamento,
+} from "@/lib/conversation/acoes";
 import { excedeuLimiteDeTaxa } from "@/lib/whatsapp/rateLimit";
 import {
   comTimeoutDeAviso,
@@ -19,8 +19,6 @@ import { parseTelegramUpdate, type TgUpdate, type Toque } from "@/lib/telegram/p
 import { telegramCall } from "@/lib/telegram/api";
 import { sendTelegramText, sendTelegramTextComBotoes } from "@/lib/telegram/messages";
 import { chatIdDe } from "@/lib/telegram/ids";
-import { marcarContaAPagarComoPaga } from "@/lib/contasAPagar/queries";
-import { getNomePorTelefone } from "@/lib/atividades";
 import {
   extrairItensNumerados,
   mensagemComEscolha,
@@ -97,23 +95,12 @@ async function registrarEscolha(toque: Toque) {
  * despesa) e responde com um aviso rapido na tela; o botao dessa conta some.
  */
 async function pagarConta(toque: Toque) {
-  const contaId = toque.data.slice(3);
-  const autorNome = await getNomePorTelefone(toque.de).catch(() => "Telegram");
-  const resultado = await marcarContaAPagarComoPaga({
-    contaId,
-    autorTelefone: toque.de,
-    autorNome,
-  }).catch((error) => {
-    console.error("Falha ao marcar conta como paga pelo Telegram:", error);
-    return null;
-  });
+  const r = await pagarContaPorBotao(toque.de, toque.data.slice(3));
 
   await telegramCall("answerCallbackQuery", {
     callback_query_id: toque.queryId,
-    text: resultado
-      ? "✅ Conta marcada como paga e lançada nas despesas."
-      : "Essa conta já estava paga (ou não foi encontrada).",
-    show_alert: !resultado,
+    text: r.texto,
+    show_alert: !r.ok,
   }).catch(() => {});
 
   const restante = toque.teclado
@@ -140,47 +127,27 @@ async function removerBotoesDeAcao(toque: Toque) {
 
 /** Botao "Desfazer" do aviso de lancamento (vale por 15 min). */
 async function desfazerLancamento(toque: Toque) {
-  const despesaId = toque.data.slice(3);
-  const autorNome = await getNomePorTelefone(toque.de).catch(() => "Telegram");
-  const r = await desfazerDespesaRecente(despesaId, autorNome).catch((error) => {
-    console.error("Falha ao desfazer lançamento pelo Telegram:", error);
-    return null;
-  });
-
-  let aviso: string;
-  if (!r) aviso = "Não consegui desfazer agora. Tente de novo ou use Corrigir → Excluir.";
-  else if (r.resultado === "desfeita") aviso = "↩️ Lançamento desfeito.";
-  else if (r.resultado === "expirou") aviso = "Já passaram mais de 15 minutos. Use Corrigir → Excluir para apagar.";
-  else aviso = "Esse lançamento já foi excluído.";
+  const r = await desfazerLancamentoPorBotao(toque.de, toque.data.slice(3));
 
   await telegramCall("answerCallbackQuery", {
     callback_query_id: toque.queryId,
-    text: aviso,
-    show_alert: !r || r.resultado !== "desfeita",
+    text: r.texto,
+    show_alert: r.status !== "desfeita",
   }).catch(() => {});
 
-  if (r?.resultado === "desfeita") {
-    await registrarAtividade({
-      tipo: "exclusao",
-      entidade: "despesa",
-      entidadeId: despesaId,
-      origem: "whatsapp",
-      autorTelefone: toque.de,
-      autorNome,
-      resumo: `Lançamento de ${formatBRL(r.valor ?? 0)} desfeito por ${autorNome} (botão do aviso)`,
-    }).catch(() => {});
+  if (r.status === "desfeita") {
     if (toque.texto) {
       await telegramCall("editMessageText", {
         chat_id: toque.chatId,
         message_id: toque.messageId,
-        text: `${toque.texto}\n\n↩️ Desfeito por ${autorNome}`,
+        text: `${toque.texto}\n\n↩️ Desfeito por ${r.autorNome}`,
         ...(toque.entidades.length > 0 ? { entities: toque.entidades } : {}),
         reply_markup: { inline_keyboard: [] },
       }).catch(() => removerBotoesDeAcao(toque));
     } else {
       await removerBotoesDeAcao(toque);
     }
-  } else if (r?.resultado === "expirou") {
+  } else if (r.status === "expirou") {
     // segue valendo Corrigir/Comprovante; so o Desfazer perde o sentido
     const restante = toque.teclado
       .map((linha) => linha.filter((b) => b.callback_data !== toque.data))
@@ -225,40 +192,10 @@ async function abrirPagamento(toque: Toque) {
 
 /** Lancar / ignorar so este / ignorar sempre, no cartao de um pagamento do extrato. */
 async function resolverPagamento(toque: Toque) {
-  const acao = toque.data.slice(0, 2);
+  const acao = toque.data.slice(0, 2) as AcaoDePagamento;
   const id = toque.data.slice(3);
-  const transacao = await buscarTransacaoPendente(id);
-
-  let resultado: string;
-  if (!transacao) {
-    resultado = "Esse pagamento já foi resolvido.";
-  } else if (acao === "xi") {
-    await ignorarTransacao(id);
-    resultado = "🙈 Ignorado.";
-  } else if (acao === "xv") {
-    const vinculo = (await buscarVinculosPorValor([transacao])).get(transacao.id);
-    const autorNome = await getNomePorTelefone(toque.de).catch(() => "Telegram");
-    const r = vinculo
-      ? await aceitarVinculoPorValor({
-          transacaoId: id,
-          despesaId: vinculo.despesaId,
-          ajustarData: true,
-          autorNome,
-          autorTelefone: toque.de,
-          origem: "whatsapp",
-        }).catch(() => ({ ok: false }))
-      : { ok: false };
-    resultado = r.ok
-      ? `🔗 Vinculado. A data do lançamento agora é ${transacao.data.split("-").reverse().slice(0, 2).join("/")}.`
-      : "Não achei mais o lançamento certo pra vincular. Use Lançar ou resolva no dashboard.";
-  } else if (acao === "xs") {
-    await salvarRegra({ descricao: transacao.descricao, acao: "ignorar" });
-    await ignorarTransacao(id);
-    await aplicarRegrasDeIgnorar(transacao.extrato_id).catch(() => 0);
-    resultado = "🙈 Ignorado — nos próximos extratos também.";
-  } else {
-    resultado = "➡️ Vamos lançar (siga as perguntas abaixo).";
-  }
+  const r = await resolverPagamentoPorBotao(toque.de, acao, id);
+  const resultado = r.texto;
 
   await telegramCall("answerCallbackQuery", {
     callback_query_id: toque.queryId,
@@ -267,14 +204,12 @@ async function resolverPagamento(toque: Toque) {
   await telegramCall("editMessageText", {
     chat_id: toque.chatId,
     message_id: toque.messageId,
-    text: `${toque.texto}
-
-${resultado}`,
+    text: `${toque.texto}\n\n${resultado}`,
     ...(toque.entidades.length > 0 ? { entities: toque.entidades } : {}),
     reply_markup: semTeclado,
   }).catch(() => removerBotoesDeAcao(toque));
 
-  if (transacao && acao === "xl") {
+  if (r.status === "ok" && acao === "xl") {
     try {
       await comTimeoutDeAviso(toque.de, iniciarLancamentoDeTransacao(toque.de, id));
     } catch (error) {

@@ -36,11 +36,26 @@ function dividirEmPartes(texto: string): string[] {
   return partes;
 }
 
+/** Copia so os campos que o Telegram conhece (curto/dica sao da lista do WhatsApp). */
+function paraTelegram(teclado: Teclado): Teclado {
+  return teclado.map((linha) =>
+    linha.map((b) => ({
+      text: b.text,
+      ...(b.callback_data ? { callback_data: b.callback_data } : {}),
+      ...(b.url ? { url: b.url } : {}),
+      ...(b.web_app ? { web_app: b.web_app } : {}),
+    }))
+  );
+}
+
 async function enviarMensagem(chatId: string, texto: string, teclado?: Teclado) {
   const partes = dividirEmPartes(texto);
   for (let i = 0; i < partes.length; i++) {
     const replyMarkup =
-      teclado && i === partes.length - 1 ? { inline_keyboard: teclado } : undefined;
+      teclado && i === partes.length - 1
+        ? // curto/dica sao so do WhatsApp - o Telegram nao precisa (nem deve receber) esses campos.
+          { inline_keyboard: paraTelegram(teclado) }
+        : undefined;
     try {
       await telegramCall("sendMessage", {
         chat_id: chatId,

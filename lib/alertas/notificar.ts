@@ -9,6 +9,7 @@ import {
   formatarResumoSemanal,
 } from "@/lib/whatsapp/notificacoes";
 import { sendText } from "@/lib/whatsapp/messages";
+import { enviarComBotoes } from "@/lib/whatsapp/botoes";
 import { rotuloOrigem } from "@/lib/origem";
 import { sendTelegramTextComBotoes } from "@/lib/telegram/messages";
 import { TECLADO_RESUMO, botaoDashboard, tecladoLancamento, type Teclado } from "@/lib/telegram/interativo";
@@ -110,16 +111,8 @@ export async function enviarNotificacao(
   const extras = idsTelegramParaAvisos().map(destinoTelegram);
   const destinosTelegram = ehTelegram(numero) ? [numero, ...extras] : extras;
 
-  // Telegram recebe os botoes; WhatsApp so texto (os botoes de URL viram link).
-  const enviarPara = (destino: string) => {
-    if (ehTelegram(destino)) {
-      return opcoes.botoes
-        ? sendTelegramTextComBotoes(destino, mensagem, opcoes.botoes)
-        : sendText(destino, mensagem);
-    }
-    const links = (opcoes.botoes ?? []).flat().filter((b) => b.url).map((b) => `${b.text}: ${b.url}`);
-    return sendText(destino, links.length > 0 ? `${mensagem}\n\n${links.join("\n")}` : mensagem);
-  };
+  // Telegram: teclado inline. WhatsApp: botoes/lista nativos (links viram texto).
+  const enviarPara = (destino: string) => enviarComBotoes(destino, mensagem, opcoes.botoes);
 
   if (!ehTelegram(numero)) {
     try {

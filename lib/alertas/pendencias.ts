@@ -99,7 +99,7 @@ export function formatarAvisoSemComprovante(itens: DespesaSemComprovante[]): str
 export function tecladoSemComprovante(itens: DespesaSemComprovante[]): Teclado {
   const linhas: Teclado = itens.slice(0, MAX_NO_AVISO).map((d) => {
     const nome = d.descricao ? d.descricao.slice(0, 24) : dataCurta(d.data);
-    return [{ text: `📎 ${formatBRL(d.valor)} · ${nome}`.slice(0, 60), callback_data: `ap:${d.id}` }];
+    return [{ text: `📎 ${formatBRL(d.valor)} · ${nome}`.slice(0, 60), callback_data: `ap:${d.id}`, curto: `📎 ${formatBRL(d.valor)}`.slice(0, 24), dica: `${dataCurta(d.data)} · ${d.descricao ?? d.obraNome ?? "Lançamento"}`.slice(0, 72) }];
   });
   linhas.push([botaoDashboard("/despesas", "🧾 Ver lançamentos")]);
   return linhas;

@@ -1,6 +1,14 @@
 import { MENU_IDS } from "@/lib/conversation/states";
 
-export type Botao = { text: string; callback_data?: string; url?: string; web_app?: { url: string } };
+export type Botao = {
+  text: string;
+  callback_data?: string;
+  url?: string;
+  web_app?: { url: string };
+  /** So WhatsApp (lista): titulo curto (ate 24) e descricao (ate 72). O Telegram ignora. */
+  curto?: string;
+  dica?: string;
+};
 export type Teclado = Botao[][];
 export type Entidade = { type: string; offset: number; length: number; [k: string]: unknown };
 
@@ -88,7 +96,7 @@ export function botaoDashboard(caminho = "", rotulo = "🌐 Abrir dashboard"): B
 export function tecladoContasAPagar(contas: { id: string; descricao: string }[]): Teclado {
   const linhas: Teclado = contas
     .slice(0, 8)
-    .map((c) => [{ text: `✅ Paguei: ${c.descricao}`.slice(0, 60), callback_data: `cp:${c.id}` }]);
+    .map((c) => [{ text: `✅ Paguei: ${c.descricao}`.slice(0, 60), callback_data: `cp:${c.id}`, curto: `✅ ${c.descricao}`.slice(0, 24), dica: `Marcar como paga: ${c.descricao}`.slice(0, 72) }]);
   linhas.push([botaoDashboard("/contas-a-pagar", "📅 Ver contas a pagar")]);
   return linhas;
 }

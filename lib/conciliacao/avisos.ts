@@ -36,7 +36,7 @@ export async function avisoPagamentosSemLancamento(): Promise<{ mensagem: string
   const total = pendentes.reduce((soma, p) => soma + p.valor, 0);
   const botoes: Teclado = pendentes.slice(0, MAX_BOTOES).map((p) => {
     const quem = nomeDoBeneficiario(p.descricao) ?? p.descricao ?? "Pagamento";
-    return [{ text: `${formatBRL(p.valor)} · ${quem} · ${dataCurta(p.data)}`.slice(0, 60), callback_data: `xp:${p.id}` }];
+    return [{ text: `${formatBRL(p.valor)} · ${quem} · ${dataCurta(p.data)}`.slice(0, 60), callback_data: `xp:${p.id}`, curto: `${formatBRL(p.valor)} · ${dataCurta(p.data)}`.slice(0, 24), dica: quem.slice(0, 72) }];
   });
   botoes.push([botaoDashboard("/conciliacao", "🏦 Abrir conciliação")]);
 
@@ -76,15 +76,16 @@ export function cartaoDoPagamento(
       `🔗 Já existe um lançamento de mesmo valor, de ${dataCurta(vinculo.despesaData)}${vinculo.despesaDescricao ? ` (${vinculo.despesaDescricao})` : ""}. Se for o mesmo pagamento, vincule e a data do lançamento passa a ser ${dataCurta(p.data)}.`
     );
   }
-  const quem = nomeDoBeneficiario(p.descricao);
   return {
     mensagem: linhas.join("\n"),
     botoes: [
-      ...(vinculo ? [[{ text: `🔗 Vincular ao lançamento de ${dataCurta(vinculo.despesaData)}`, callback_data: `xv:${p.id}` }]] : []),
-      [{ text: "✅ Lançar", callback_data: `xl:${p.id}` }],
+      ...(vinculo
+        ? [[{ text: `🔗 Vincular ao lançamento de ${dataCurta(vinculo.despesaData)}`, callback_data: `xv:${p.id}`, curto: `🔗 Vincular (${dataCurta(vinculo.despesaData)})`, dica: "Lançamento de mesmo valor, acerta a data" }]]
+        : []),
+      [{ text: "✅ Lançar", callback_data: `xl:${p.id}`, dica: "Abre o lançamento já preenchido" }],
       [
         { text: "🙈 Ignorar só este", callback_data: `xi:${p.id}` },
-        { text: quem ? "🙈 Ignorar sempre" : "🙈 Ignorar sempre este tipo", callback_data: `xs:${p.id}` },
+        { text: "🙈 Ignorar sempre", callback_data: `xs:${p.id}` },
       ],
     ],
   };

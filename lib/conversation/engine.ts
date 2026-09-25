@@ -83,10 +83,16 @@ import {
   listarContasBancarias,
   registrarEEProcessarExtrato,
 } from "@/lib/conciliacao/enviarExtrato";
-import { ehTelegram } from "@/lib/telegram/ids";
+import { enviarComBotoes } from "@/lib/whatsapp/botoes";
+import {
+  PADRAO_ACAO_DE_BOTAO,
+  desfazerLancamentoPorBotao,
+  pagarContaPorBotao,
+  resolverPagamentoPorBotao,
+  type AcaoDePagamento,
+} from "./acoes";
+import { cartaoPorId } from "@/lib/conciliacao/avisos";
 import { carregarNotas } from "@/lib/despesas/notas";
-import { sendTelegramTextComBotoes } from "@/lib/telegram/messages";
-import type { Teclado } from "@/lib/telegram/interativo";
 import { nomeDoBeneficiario } from "@/lib/conciliacao/classificar";
 
 const MIME_TYPES_PLANILHA = [
@@ -295,6 +301,12 @@ export async function handleIncomingMessage(message: IncomingMessage) {
     await sendText(from, "🏠 Ok, voltando ao menu principal.");
     await sendMenuPrincipal(from);
     return;
+  }
+
+  // Botoes dos avisos (desfazer, corrigir, paguei, pagamentos do extrato). No
+  // Telegram o webhook resolve antes de chegar aqui; no WhatsApp chegam por aqui.
+  if (message.replyId && PADRAO_ACAO_DE_BOTAO.test(message.replyId)) {
+    return tratarAcaoDeBotaoNoChat(from, message.replyId);
   }
 
   if (isMenuReply(message.replyId)) {
@@ -3129,13 +3141,6 @@ export async function iniciarLancamentoDeTransacao(from: string, transacaoId: st
 
 // ---------- Conciliação bancária ----------
 
-/** Mensagem com botoes: Telegram recebe os botoes, WhatsApp recebe os links em texto. */
-async function enviarComBotoes(to: string, mensagem: string, botoes: Teclado) {
-  if (ehTelegram(to)) return sendTelegramTextComBotoes(to, mensagem, botoes);
-  const links = botoes.flat().filter((b) => b.url).map((b) => `${b.text}: ${b.url}`);
-  return sendText(to, links.length > 0 ? `${mensagem}\n\n${links.join("\n")}` : mensagem);
-}
-
 async function iniciarConciliacao(from: string) {
   // 1) O que ja esta pendente, com botao pra lancar/ignorar cada pagamento.
   const aviso = await avisoPagamentosSemLancamento().catch(() => null);
@@ -3234,5 +3239,48 @@ async function handleExtratoRecebido(from: string, media: IncomingMedia, session
       from,
       "😕 Não consegui ler esse extrato agora (o leitor pode estar sobrecarregado ou o arquivo é muito grande). Tente de novo em alguns minutos, ou envie pelo dashboard em Conciliação."
     );
+  }
+}
+
+// ---------- Botoes dos avisos, resolvidos no proprio chat ----------
+
+/**
+ * Acoes dos botoes dos avisos automaticos quando o toque chega pelo motor
+ * (WhatsApp): mesma regra do Telegram (lib/conversation/acoes.ts), so que a
+ * resposta vai como mensagem de texto em vez de toast + edicao da mensagem.
+ */
+async function tratarAcaoDeBotaoNoChat(from: string, replyId: string) {
+  const acao = replyId.slice(0, 2);
+  const alvo = replyId.slice(3);
+
+  switch (acao) {
+    case "dz": {
+      const r = await desfazerLancamentoPorBotao(from, alvo);
+      await sendText(from, r.texto);
+      return;
+    }
+    case "cp": {
+      const r = await pagarContaPorBotao(from, alvo);
+      await sendText(from, r.texto);
+      return;
+    }
+    case "cr":
+      return abrirAcaoDeDespesa(from, "corrigir", alvo);
+    case "ap":
+      return abrirAcaoDeDespesa(from, "anexar", alvo);
+    case "xp": {
+      const cartao = await cartaoPorId(alvo);
+      if (!cartao) {
+        await sendText(from, "Esse pagamento já foi resolvido.");
+        return;
+      }
+      await enviarComBotoes(from, cartao.mensagem, cartao.botoes);
+      return;
+    }
+    default: {
+      const r = await resolverPagamentoPorBotao(from, acao as AcaoDePagamento, alvo);
+      await sendText(from, r.texto);
+      if (r.status === "ok" && acao === "xl") await iniciarLancamentoDeTransacao(from, alvo);
+    }
   }
 }
