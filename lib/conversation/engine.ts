@@ -2827,3 +2827,34 @@ export async function retomarDocumentoLido(
   await processarDocumentoLido(from, invoice, comprovante, { forcarNovaDespesa });
   return "retomado";
 }
+
+/**
+ * Botoes "Corrigir" e "Comprovante" do aviso de lancamento: pula a lista de
+ * escolha e entra direto no fluxo com a despesa ja selecionada (o toque
+ * explicito sobrescreve qualquer fluxo em andamento).
+ */
+export async function abrirAcaoDeDespesa(
+  from: string,
+  acao: "corrigir" | "anexar",
+  despesaId: string
+): Promise<void> {
+  const despesa = await findDespesaCompletaById(despesaId);
+  if (!despesa) {
+    await sendText(from, "Não encontrei esse lançamento (pode ter sido excluído).");
+    return;
+  }
+  await saveSession(
+    from,
+    acao === "corrigir"
+      ? ESTADOS.CORRIGIR_SELECIONANDO_LANCAMENTO
+      : ESTADOS.ANEXAR_PAGAMENTO_SELECIONANDO_LANCAMENTO,
+    {}
+  );
+  await handleIncomingMessage({
+    id: null,
+    from,
+    text: null,
+    replyId: `despesa:${despesaId}`,
+    media: null,
+  });
+}

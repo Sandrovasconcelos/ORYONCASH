@@ -692,6 +692,7 @@ export async function createDespesa(input: {
   if (result.error) throw result.error;
 
   const aviso = notificarLancamento({
+    despesaId: result.data.id,
     valor: input.valor,
     categoriaId: input.categoriaId,
     obraId: input.obraId,
@@ -926,6 +927,36 @@ export async function deleteDespesaPorId(id: string) {
   const supabase = createAdminClient();
   const { error } = await supabase.from("despesas").delete().eq("id", id);
   if (error) throw error;
+}
+
+export const JANELA_DESFAZER_MS = 15 * 60 * 1000;
+
+/**
+ * Botao "Desfazer" do aviso de lancamento: exclusao reversivel (deleted_at)
+ * que so vale nos primeiros minutos - depois disso a exclusao passa pelo
+ * fluxo normal de correcao, com confirmacao.
+ */
+export async function desfazerDespesaRecente(
+  id: string,
+  autorNome: string
+): Promise<{ resultado: "desfeita" | "expirou" | "nao_encontrada"; valor?: number }> {
+  const supabase = createAdminClient();
+  const { data: despesa } = await supabase
+    .from("despesas")
+    .select("id, valor, created_at, deleted_at")
+    .eq("id", id)
+    .maybeSingle();
+  if (!despesa || despesa.deleted_at) return { resultado: "nao_encontrada" };
+  if (Date.now() - Date.parse(despesa.created_at) > JANELA_DESFAZER_MS) {
+    return { resultado: "expirou", valor: despesa.valor };
+  }
+  const { error } = await supabase
+    .from("despesas")
+    .update({ deleted_at: new Date().toISOString(), deleted_by: autorNome, deleted_reason: "Desfeito pelo botão do aviso" })
+    .eq("id", id)
+    .is("deleted_at", null);
+  if (error) throw error;
+  return { resultado: "desfeita", valor: despesa.valor };
 }
 
 export async function getObraResumo(obraId: string) {

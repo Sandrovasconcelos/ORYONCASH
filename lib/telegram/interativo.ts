@@ -93,6 +93,19 @@ export function tecladoContasAPagar(contas: { id: string; descricao: string }[])
   return linhas;
 }
 
+/**
+ * Botoes do aviso de lancamento novo: desfazer (so vale por alguns minutos),
+ * corrigir e anexar comprovante de pagamento (quando ainda nao tem).
+ */
+export function tecladoLancamento(despesaId: string, opcoes: { comComprovante: boolean }): Teclado {
+  const acoes: Botao[] = [{ text: "✏️ Corrigir", callback_data: `cr:${despesaId}` }];
+  if (!opcoes.comComprovante) acoes.push({ text: "📎 Comprovante", callback_data: `ap:${despesaId}` });
+  return [
+    acoes,
+    [{ text: "↩️ Desfazer", callback_data: `dz:${despesaId}` }, botaoDashboard("/despesas", "🧾 Ver lançamentos")],
+  ];
+}
+
 export const TECLADO_RESUMO: Teclado = [
   [{ text: "📄 Gerar relatório", callback_data: MENU_IDS.RELATORIO }, botaoDashboard()],
 ];

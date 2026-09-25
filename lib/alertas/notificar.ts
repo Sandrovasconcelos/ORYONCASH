@@ -10,7 +10,7 @@ import {
 } from "@/lib/whatsapp/notificacoes";
 import { sendText } from "@/lib/whatsapp/messages";
 import { sendTelegramTextComBotoes } from "@/lib/telegram/messages";
-import { TECLADO_RESUMO, botaoDashboard, type Teclado } from "@/lib/telegram/interativo";
+import { TECLADO_RESUMO, botaoDashboard, tecladoLancamento, type Teclado } from "@/lib/telegram/interativo";
 import { destinoTelegram, ehTelegram, idsTelegramParaAvisos } from "@/lib/telegram/ids";
 
 // Duplicado de lib/conversation/queries.ts (nao importado de la) pra evitar
@@ -189,6 +189,7 @@ export async function enviarResumoSemanal(): Promise<{ enviado: boolean; motivo?
  * acabou de fazer e ja viu confirmado na hora.
  */
 export async function notificarLancamento(input: {
+  despesaId?: string;
   valor: number;
   categoriaId: string;
   obraId: string | null;
@@ -224,7 +225,9 @@ export async function notificarLancamento(input: {
     materialNome: material?.nome ?? null,
     documentoAnexado: input.documentoAnexado,
   });
-  const botoes: Teclado = [[botaoDashboard("/despesas", "🧾 Ver lançamentos")]];
+  const botoes: Teclado = input.despesaId
+    ? tecladoLancamento(input.despesaId, { comComprovante: input.documentoAnexado === "comprovante_pagamento" })
+    : [[botaoDashboard("/despesas", "🧾 Ver lançamentos")]];
   await postarNoGrupo(mensagem, botoes);
   if (avisarDono && numero) await enviarNotificacao(numero, mensagem, { botoes });
 }

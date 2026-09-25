@@ -2,7 +2,10 @@ import { NextRequest, NextResponse } from "next/server";
 import { timingSafeEqual } from "crypto";
 import * as Sentry from "@sentry/nextjs";
 import { isAllowedNumber } from "@/lib/whatsapp/verify";
-import { handleIncomingMessage } from "@/lib/conversation/engine";
+import { abrirAcaoDeDespesa, handleIncomingMessage } from "@/lib/conversation/engine";
+import { desfazerDespesaRecente } from "@/lib/conversation/queries";
+import { registrarAtividade } from "@/lib/atividades";
+import { formatBRL } from "@/lib/conversation/format";
 import { excedeuLimiteDeTaxa } from "@/lib/whatsapp/rateLimit";
 import {
   comTimeoutDeAviso,
@@ -119,6 +122,89 @@ async function pagarConta(toque: Toque) {
   }).catch(() => {});
 }
 
+/** Tira do aviso os botoes de acao sobre o lancamento (sobram so os links). */
+async function removerBotoesDeAcao(toque: Toque) {
+  const restante = toque.teclado
+    .map((linha) => linha.filter((b) => !b.callback_data))
+    .filter((linha) => linha.length > 0);
+  await telegramCall("editMessageReplyMarkup", {
+    chat_id: toque.chatId,
+    message_id: toque.messageId,
+    reply_markup: { inline_keyboard: restante },
+  }).catch(() => {});
+}
+
+/** Botao "Desfazer" do aviso de lancamento (vale por 15 min). */
+async function desfazerLancamento(toque: Toque) {
+  const despesaId = toque.data.slice(3);
+  const autorNome = await getNomePorTelefone(toque.de).catch(() => "Telegram");
+  const r = await desfazerDespesaRecente(despesaId, autorNome).catch((error) => {
+    console.error("Falha ao desfazer lançamento pelo Telegram:", error);
+    return null;
+  });
+
+  let aviso: string;
+  if (!r) aviso = "Não consegui desfazer agora. Tente de novo ou use Corrigir → Excluir.";
+  else if (r.resultado === "desfeita") aviso = "↩️ Lançamento desfeito.";
+  else if (r.resultado === "expirou") aviso = "Já passaram mais de 15 minutos. Use Corrigir → Excluir para apagar.";
+  else aviso = "Esse lançamento já foi excluído.";
+
+  await telegramCall("answerCallbackQuery", {
+    callback_query_id: toque.queryId,
+    text: aviso,
+    show_alert: !r || r.resultado !== "desfeita",
+  }).catch(() => {});
+
+  if (r?.resultado === "desfeita") {
+    await registrarAtividade({
+      tipo: "exclusao",
+      entidade: "despesa",
+      entidadeId: despesaId,
+      origem: "whatsapp",
+      autorTelefone: toque.de,
+      autorNome,
+      resumo: `Lançamento de ${formatBRL(r.valor ?? 0)} desfeito por ${autorNome} (botão do aviso)`,
+    }).catch(() => {});
+    if (toque.texto) {
+      await telegramCall("editMessageText", {
+        chat_id: toque.chatId,
+        message_id: toque.messageId,
+        text: `${toque.texto}\n\n↩️ Desfeito por ${autorNome}`,
+        ...(toque.entidades.length > 0 ? { entities: toque.entidades } : {}),
+        reply_markup: { inline_keyboard: [] },
+      }).catch(() => removerBotoesDeAcao(toque));
+    } else {
+      await removerBotoesDeAcao(toque);
+    }
+  } else if (r?.resultado === "expirou") {
+    // segue valendo Corrigir/Comprovante; so o Desfazer perde o sentido
+    const restante = toque.teclado
+      .map((linha) => linha.filter((b) => b.callback_data !== toque.data))
+      .filter((linha) => linha.length > 0);
+    await telegramCall("editMessageReplyMarkup", {
+      chat_id: toque.chatId,
+      message_id: toque.messageId,
+      reply_markup: { inline_keyboard: restante },
+    }).catch(() => {});
+  }
+}
+
+/** Botoes "Corrigir" / "Comprovante": continuam a conversa no chat privado com o bot. */
+async function abrirAcaoDoAviso(toque: Toque) {
+  const acao = toque.data.startsWith("cr:") ? "corrigir" : "anexar";
+  const despesaId = toque.data.slice(3);
+  await telegramCall("answerCallbackQuery", {
+    callback_query_id: toque.queryId,
+    text: String(toque.chatId) === chatIdDe(toque.de) ? undefined : "Continue no chat privado com o bot.",
+  }).catch(() => {});
+  try {
+    await comTimeoutDeAviso(toque.de, abrirAcaoDeDespesa(toque.de, acao, despesaId));
+  } catch (error) {
+    console.error("Erro ao abrir ação do aviso de lançamento:", error);
+    Sentry.captureException(error);
+  }
+}
+
 export async function GET(request: NextRequest) {
   if (!segredoValido(request.headers.get("x-telegram-bot-api-secret-token"))) {
     return new NextResponse("Forbidden", { status: 401 });
@@ -161,7 +247,7 @@ export async function POST(request: NextRequest) {
   const { incoming, callback } = parseTelegramUpdate(update);
 
   if (callback) {
-    if (!callback.data.startsWith("cp:")) await confirmarToque(callback);
+    if (!/^(cp|dz|cr|ap):/.test(callback.data)) await confirmarToque(callback);
     if (callback.data.startsWith("pg:")) {
       await navegarPagina(callback);
       return NextResponse.json({ ok: true });
@@ -192,6 +278,16 @@ export async function POST(request: NextRequest) {
 
   if (callback?.data.startsWith("cp:")) {
     await pagarConta(callback);
+    return NextResponse.json({ ok: true });
+  }
+
+  if (callback?.data.startsWith("dz:")) {
+    await desfazerLancamento(callback);
+    return NextResponse.json({ ok: true });
+  }
+
+  if (callback && /^(cr|ap):/.test(callback.data)) {
+    await abrirAcaoDoAviso(callback);
     return NextResponse.json({ ok: true });
   }
 
