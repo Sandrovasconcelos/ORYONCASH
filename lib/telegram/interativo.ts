@@ -1,39 +1,10 @@
 import { MENU_IDS } from "@/lib/conversation/states";
 
-export type Botao = { text: string; callback_data?: string; url?: string };
+export type Botao = { text: string; callback_data?: string; url?: string; web_app?: { url: string } };
 export type Teclado = Botao[][];
 export type Entidade = { type: string; offset: number; length: number; [k: string]: unknown };
 
-// ---------- Teclado fixo (aparece embaixo do chat) ----------
-
 export const URL_DASHBOARD = "https://oryoncash.vercel.app/dashboard";
-
-const ATALHOS: { rotulo: string; replyId?: string; texto?: string }[] = [
-  { rotulo: "💸 Registrar despesa", replyId: MENU_IDS.REGISTRAR_DESPESA },
-  { rotulo: "📅 Conta a pagar", replyId: MENU_IDS.CONTA_A_PAGAR },
-  { rotulo: "📊 Ver resumo", replyId: MENU_IDS.VER_RESUMO },
-  { rotulo: "📄 Relatório", replyId: MENU_IDS.RELATORIO },
-  { rotulo: "✏️ Corrigir", replyId: MENU_IDS.CORRIGIR_LANCAMENTO },
-  { rotulo: "🏠 Menu", texto: "menu" },
-];
-
-export const TECLADO_FIXO = {
-  keyboard: [
-    [{ text: ATALHOS[0].rotulo }, { text: ATALHOS[1].rotulo }],
-    [{ text: ATALHOS[2].rotulo }, { text: ATALHOS[3].rotulo }],
-    [{ text: ATALHOS[4].rotulo }, { text: ATALHOS[5].rotulo }],
-    [{ text: "🌐 Abrir dashboard", web_app: { url: URL_DASHBOARD } }],
-  ],
-  resize_keyboard: true,
-  is_persistent: true,
-  input_field_placeholder: "Toque num atalho ou digite",
-};
-
-/** Texto de um atalho do teclado fixo -> o que o motor entende. */
-export function atalhoDoTeclado(texto: string): { replyId: string | null; texto: string | null } | null {
-  const a = ATALHOS.find((x) => x.rotulo === texto.trim());
-  return a ? { replyId: a.replyId ?? null, texto: a.texto ?? null } : null;
-}
 
 // ---------- Listas numeradas viram botoes ----------
 

@@ -1,6 +1,6 @@
 import type { IncomingMessage } from "@/lib/whatsapp/parse";
 import { destinoTelegram } from "./ids";
-import { atalhoDoTeclado, type Entidade, type Teclado } from "./interativo";
+import type { Entidade, Teclado } from "./interativo";
 
 type TgFoto = { file_id: string; width: number; height: number; file_size?: number };
 type TgMensagem = {
@@ -92,10 +92,6 @@ export function parseTelegramUpdate(update: TgUpdate): ResultadoParse {
   const base = { id, from, text: null, replyId: null, media: null };
 
   if (msg.text) {
-    const atalho = atalhoDoTeclado(msg.text);
-    if (atalho) {
-      return { incoming: { ...base, replyId: atalho.replyId, text: atalho.texto }, callback: null };
-    }
     return { incoming: { ...base, text: normalizarTexto(msg.text) }, callback: null };
   }
 

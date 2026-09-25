@@ -1,7 +1,7 @@
 import { telegramCall, telegramUpload } from "./api";
 import { chatIdDe } from "./ids";
 import type { ListSection } from "@/lib/whatsapp/messages";
-import { extrairItensNumerados, tecladoDaPagina, type Teclado } from "./interativo";
+import { URL_DASHBOARD, extrairItensNumerados, tecladoDaPagina, type Botao, type Teclado } from "./interativo";
 
 const LIMITE_MENSAGEM = 4000; // teto do Telegram e 4096
 const LIMITE_CALLBACK_BYTES = 64;
@@ -79,14 +79,29 @@ export async function sendTelegramList(
   to: string,
   opts: { headerText?: string; bodyText: string; sections: ListSection[] }
 ) {
-  const texto = opts.headerText ? `*${opts.headerText}*\n${opts.bodyText}` : opts.bodyText;
+  const texto = opts.headerText ? `*${opts.headerText}*
+${opts.bodyText}` : opts.bodyText;
+  const linhas = opts.sections.flatMap((secao) => secao.rows);
+
+  // Menu principal: so o titulo (a descricao cortava o texto do botao), em 2
+  // colunas, com o dashboard na ultima linha.
+  if (opts.headerText?.includes("Menu Principal")) {
+    const botoes = linhas
+      .map((l) => botao(l.id, l.title))
+      .filter((b): b is { text: string; callback_data: string } => b !== null);
+    const teclado: Teclado = [];
+    for (let i = 0; i < botoes.length; i += 2) teclado.push(botoes.slice(i, i + 2));
+    const dashboard: Botao = { text: "🌐 Abrir dashboard", web_app: { url: URL_DASHBOARD } };
+    teclado.push([dashboard]);
+    await enviarMensagem(chatIdDe(to), texto, teclado);
+    return;
+  }
+
   const teclado: Teclado = [];
-  for (const secao of opts.sections) {
-    for (const linha of secao.rows) {
-      const rotulo = linha.description ? `${linha.title} — ${linha.description}` : linha.title;
-      const b = botao(linha.id, rotulo);
-      if (b) teclado.push([b]);
-    }
+  for (const linha of linhas) {
+    const rotulo = linha.description ? `${linha.title} — ${linha.description}` : linha.title;
+    const b = botao(linha.id, rotulo);
+    if (b) teclado.push([b]);
   }
   await enviarMensagem(chatIdDe(to), texto, teclado.slice(0, 100));
 }

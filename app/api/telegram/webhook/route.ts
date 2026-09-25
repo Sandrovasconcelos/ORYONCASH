@@ -15,7 +15,6 @@ import { chatIdDe } from "@/lib/telegram/ids";
 import { marcarContaAPagarComoPaga } from "@/lib/contasAPagar/queries";
 import { getNomePorTelefone } from "@/lib/atividades";
 import {
-  TECLADO_FIXO,
   extrairItensNumerados,
   mensagemComEscolha,
   rotuloDoBotao,
@@ -197,15 +196,6 @@ export async function POST(request: NextRequest) {
   }
 
   if (callback) await registrarEscolha(callback);
-
-  // /start: deixa os atalhos fixos embaixo do chat.
-  if (update.message?.text?.trim().toLowerCase().startsWith("/start")) {
-    await telegramCall("sendMessage", {
-      chat_id: chatIdDe(incoming.from),
-      text: "⌨️ Deixei os atalhos fixos aqui embaixo — é só tocar. Você também pode digitar ou mandar foto, PDF ou áudio.",
-      reply_markup: TECLADO_FIXO,
-    }).catch((error) => console.error("Falha ao enviar teclado fixo:", error));
-  }
 
   try {
     await comTimeoutDeAviso(incoming.from, handleIncomingMessage(incoming));

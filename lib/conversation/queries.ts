@@ -1,6 +1,7 @@
 import * as Sentry from "@sentry/nextjs";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { encontrarContaBancariaCorrespondente } from "@/lib/dashboard/queries";
+import { after } from "next/server";
 import { notificarLancamento } from "@/lib/alertas/notificar";
 import type { Database } from "@/lib/database.types";
 
@@ -690,7 +691,7 @@ export async function createDespesa(input: {
 
   if (result.error) throw result.error;
 
-  notificarLancamento({
+  const aviso = notificarLancamento({
     valor: input.valor,
     categoriaId: input.categoriaId,
     obraId: input.obraId,
@@ -700,9 +701,17 @@ export async function createDespesa(input: {
     autorNome: input.criadoPorNome ?? null,
     documentoAnexado: input.documentoAnexado ?? null,
   }).catch((error) => {
-    console.error("Falha ao notificar lançamento por WhatsApp:", error);
+    console.error("Falha ao notificar lançamento:", error);
     Sentry.captureException(error);
   });
+  // Sem garantia, a Vercel congela a funcao assim que a resposta sai e o aviso
+  // pode nunca chegar. after() mantem ela viva ate o aviso terminar (fora de
+  // uma requisicao - scripts/testes - segue solto como antes).
+  try {
+    after(aviso);
+  } catch {
+    // sem contexto de requisicao
+  }
 
   return result.data;
 }
