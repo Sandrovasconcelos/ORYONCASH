@@ -6,7 +6,11 @@ import { downloadWhatsAppMedia } from "@/lib/whatsapp/media";
 import { agendarLeituraPendente, type ComprovanteSalvo } from "@/lib/gemini/leiturasPendentes";
 import { extractInvoiceData, type InvoiceItem, type InvoiceData } from "@/lib/gemini/extractInvoice";
 import { extractOrcamentoData, type OrcamentoEtapa } from "@/lib/gemini/extractOrcamento";
-import { extractDespesaDeAudio } from "@/lib/gemini/extractDespesaAudio";
+import {
+  extractDespesaDeAudio,
+  extractDespesaDeTexto,
+  type DespesaDeAudio,
+} from "@/lib/gemini/extractDespesaAudio";
 import { extractSpreadsheetAsText } from "@/lib/orcamento/parseSpreadsheet";
 import { formatBRL, parseValorBR } from "./format";
 import { ESTADOS, MENU_IDS, CAMPO_IDS, TIPO_REMOVER_IDS, COMANDOS_CANCELAR, RECORRENCIA_IDS } from "./states";
@@ -34,6 +38,9 @@ import {
   findCategoriaPorTexto,
   findEtapaById,
   findEtapaPorTexto,
+  findObraPorPista,
+  findCategoriaPorPista,
+  findEtapaPorPista,
   findFornecedorPorTexto,
   findMaterialPorTexto,
   listObrasAtivas,
@@ -432,7 +439,27 @@ async function handleMenu(from: string, message: IncomingMessage) {
       await iniciarRelatorio(from);
       return;
     default:
+      if (await tentarLancamentoRapido(from, message.text)) return;
       await sendMenuPrincipal(from);
+  }
+}
+
+/**
+ * Lancamento rapido por texto livre ("cimento 350 costa 02"): so tenta quando
+ * o usuario esta no menu e a mensagem parece ter valor + descricao. Se a IA
+ * nao entender (ou estiver fora do ar), cai no menu como sempre.
+ */
+async function tentarLancamentoRapido(from: string, texto: string | null): Promise<boolean> {
+  const t = texto?.trim();
+  if (!t || t.length < 5 || !/\d/.test(t) || !/[a-zA-ZÀ-ú]{3,}/.test(t)) return false;
+  try {
+    const extraido = await extractDespesaDeTexto(t);
+    if (!extraido?.valor || !extraido.descricao) return false;
+    await iniciarDespesaDeIA(from, extraido);
+    return true;
+  } catch (error) {
+    console.error("Erro no lançamento rápido por texto:", error);
+    return false;
   }
 }
 
@@ -1353,15 +1380,50 @@ async function continuarProcessamentoNota(
 async function handleAudioRecebido(from: string, media: IncomingMedia) {
   await sendText(from, "🎙️ Recebi seu áudio, entendendo...");
 
-  let extraido;
+  let arquivo: Awaited<ReturnType<typeof downloadWhatsAppMedia>> | null = null;
+  let extraido: DespesaDeAudio | null = null;
+  let falhaDoProvedor = false;
   try {
-    const { buffer, mimeType } = await downloadWhatsAppMedia(media.id, media.mimeType);
-    extraido = await extractDespesaDeAudio(buffer, mimeType);
-   } catch (error) {
+    arquivo = await downloadWhatsAppMedia(media.id, media.mimeType);
+    extraido = await extractDespesaDeAudio(arquivo.buffer, arquivo.mimeType);
+  } catch (error) {
+    falhaDoProvedor = Boolean(arquivo);
     console.error("Erro ao processar áudio:", error);
-    extraido = null;
+    Sentry.captureException(error, { tags: { fluxo: "audio_recebido" } });
   }
 
+  // Gemini fora do ar: guarda o audio e le de novo em segundo plano.
+  if (falhaDoProvedor && arquivo) {
+    try {
+      const tipoBase = arquivo.mimeType.split(";")[0].trim();
+      const salvo = await uploadComprovanteWhatsApp({
+        telefone: from,
+        mediaId: media.id,
+        buffer: arquivo.buffer,
+        mimeType: tipoBase,
+      });
+      const agendado = await agendarLeituraPendente({
+        telefone: from,
+        comprovante: { ...(salvo as unknown as ComprovanteSalvo), tipo: "audio" },
+        forcarNovaDespesa: false,
+      });
+      if (agendado) {
+        await sendText(
+          from,
+          "⏳ O leitor automático está sobrecarregado agora. Guardei seu áudio e vou tentar de novo sozinho nos próximos minutos — te aviso aqui assim que entender.\n\nSe preferir não esperar, é só usar o menu → Registrar Despesa."
+        );
+        return;
+      }
+    } catch (error) {
+      console.error("Não consegui guardar o áudio na fila:", error);
+    }
+  }
+
+  await processarAudioLido(from, extraido);
+}
+
+/** Tudo que acontece depois de o audio ser entendido (ou de a leitura falhar de vez). */
+export async function processarAudioLido(from: string, extraido: DespesaDeAudio | null) {
   if (!extraido || !extraido.valor || !extraido.descricao) {
     await iniciarFallbackManual(
       from,
@@ -1369,23 +1431,49 @@ async function handleAudioRecebido(from: string, media: IncomingMedia) {
     );
     return;
   }
+  await iniciarDespesaDeIA(from, extraido);
+}
 
+/** Chamada pela fila quando finalmente entende o audio; so retoma se o usuario estiver no menu. */
+export async function retomarAudioLido(
+  from: string,
+  extraido: DespesaDeAudio | null
+): Promise<"retomado" | "ocupado"> {
+  const session = await getSession(from);
+  if (session.estado_atual !== ESTADOS.MENU) {
+    const resumo = extraido?.valor
+      ? ` (${formatBRL(extraido.valor)}${extraido.descricao ? ` — ${extraido.descricao}` : ""})`
+      : "";
+    await sendText(
+      from,
+      `✅ Consegui entender o áudio que você tinha enviado${resumo}.\n\nComo você está no meio de outra operação, não interrompi. Quando terminar, envie o áudio de novo — agora deve ser imediato.`
+    );
+    return "ocupado";
+  }
+  await sendText(from, "✅ Consegui entender o seu áudio. Vamos seguir:");
+  await processarAudioLido(from, extraido);
+  return "retomado";
+}
+
+/** Casa fornecedor citado e entra no fluxo guiado, pre-preenchendo o que a IA achou. */
+async function iniciarDespesaDeIA(from: string, extraido: DespesaDeAudio) {
   let fornecedorId: string | undefined;
   let fornecedorNome: string | undefined;
   if (extraido.fornecedorNome) {
-    const fornecedor = await findOrCreateFornecedorPorNota({
-      nome: extraido.fornecedorNome,
-    });
+    const fornecedor = await findOrCreateFornecedorPorNota({ nome: extraido.fornecedorNome });
     fornecedorId = fornecedor.id;
     fornecedorNome = fornecedor.nome;
   }
 
-  await iniciarDespesaUnicaExtraida(from, {
-    valor: extraido.valor,
-    descricao: extraido.descricao,
-    fornecedorId,
-    fornecedorNome,
-  });
+  await iniciarDespesaUnicaExtraida(
+    from,
+    { valor: extraido.valor!, descricao: extraido.descricao!, fornecedorId, fornecedorNome },
+    {
+      obra: extraido.obraMencionada ?? null,
+      categoria: extraido.categoriaMencionada ?? null,
+      etapa: extraido.etapaMencionada ?? null,
+    }
+  );
 }
 
 /**
@@ -1404,6 +1492,11 @@ async function iniciarDespesaUnicaExtraida(
     fornecedorId?: string;
     fornecedorNome?: string;
     comprovante?: Dados["comprovante"];
+  },
+  pistas: { obra: string | null; categoria: string | null; etapa: string | null } = {
+    obra: null,
+    categoria: null,
+    etapa: null,
   }
 ) {
   const obras = await listObrasAtivas();
@@ -1427,15 +1520,51 @@ async function iniciarDespesaUnicaExtraida(
     comprovante: extraido.comprovante,
   };
 
-  await saveSession(from, ESTADOS.DESPESA_OBRA, dados);
-  await sendText(
-    from,
+  const resumo =
     `✅ *Identifiquei uma nova despesa*\n` +
-      `💰 *Valor:* ${formatBRL(extraido.valor)}\n` +
-      `📝 *Descrição:* ${extraido.descricao}\n\n` +
-      `🏗️ Em qual obra isso deve ser lançado?`
-  );
-  await sendListObras(from);
+    `💰 *Valor:* ${formatBRL(extraido.valor)}\n` +
+    `📝 *Descrição:* ${extraido.descricao}`;
+
+  // Pistas ditas/digitadas ("costa 02", "material"): o que casar com um unico
+  // cadastro ja vem preenchido e o fluxo so pergunta o que faltar.
+  const obra = pistas.obra ? await findObraPorPista(pistas.obra) : null;
+  if (!obra) {
+    await saveSession(from, ESTADOS.DESPESA_OBRA, dados);
+    await sendText(from, `${resumo}\n\n🏗️ Em qual obra isso deve ser lançado?`);
+    await sendListObras(from);
+    return;
+  }
+  dados.obraId = obra.id;
+  dados.obraNome = obra.nome;
+
+  const categoria = pistas.categoria ? await findCategoriaPorPista(pistas.categoria) : null;
+  if (!categoria) {
+    await saveSession(from, ESTADOS.DESPESA_CATEGORIA, dados);
+    await sendText(from, `${resumo}\n🏗️ *Obra:* ${obra.nome}\n\n📁 Qual a categoria?`);
+    await sendListCategorias(from);
+    return;
+  }
+  dados.categoriaId = categoria.id;
+  dados.categoriaNome = categoria.nome;
+  const linhasSabidas = `${resumo}\n🏗️ *Obra:* ${obra.nome}\n📁 *Categoria:* ${categoria.nome}`;
+
+  if (categoria.usa_etapa === false) {
+    await sendText(from, linhasSabidas);
+    await continuarAposEtapa(from, dados);
+    return;
+  }
+
+  const etapa = pistas.etapa ? await findEtapaPorPista(obra.id, pistas.etapa) : null;
+  if (!etapa) {
+    await saveSession(from, ESTADOS.DESPESA_ETAPA, dados);
+    await sendText(from, `${linhasSabidas}\n\n📐 Qual a etapa?`);
+    await sendListEtapas(from, obra.id);
+    return;
+  }
+  dados.etapaId = etapa.id;
+  dados.etapaNome = etapa.nome;
+  await sendText(from, `${linhasSabidas}\n📐 *Etapa:* ${etapa.nome}`);
+  await continuarAposEtapa(from, dados);
 }
 
 async function iniciarFallbackManual(

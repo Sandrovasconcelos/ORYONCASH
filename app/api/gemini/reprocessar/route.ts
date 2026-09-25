@@ -9,7 +9,8 @@ import {
   marcarLeitura,
   reservarTentativa,
 } from "@/lib/gemini/leiturasPendentes";
-import { retomarDocumentoLido } from "@/lib/conversation/engine";
+import { retomarAudioLido, retomarDocumentoLido } from "@/lib/conversation/engine";
+import { extractDespesaDeAudio, type DespesaDeAudio } from "@/lib/gemini/extractDespesaAudio";
 import { sendText } from "@/lib/whatsapp/messages";
 
 // espera (ate 20s) + leitura (28s) + retomada da conversa cabem nos 60s.
@@ -27,6 +28,9 @@ async function executarTentativa(id: string, esperaMs: number) {
   const tentativa = leitura.tentativas + 1;
   const comprovante = leitura.comprovante as unknown as Comprovante;
 
+  const ehAudio = (leitura.comprovante as { tipo?: string }).tipo === "audio";
+  let audio: DespesaDeAudio | null = null;
+  let audioLido = false;
   let invoice: Awaited<ReturnType<typeof extractInvoiceData>> = null;
   let motivo = "Gemini nao devolveu dados legiveis";
   try {
@@ -38,15 +42,31 @@ async function executarTentativa(id: string, esperaMs: number) {
       .download(comprovante.path);
     if (error || !blob) throw new Error(`Arquivo nao encontrado no Storage: ${error?.message ?? ""}`);
 
-    invoice = await extractInvoiceData(Buffer.from(await blob.arrayBuffer()), comprovante.mimeType, {
-      orcamentoMs: ORCAMENTO_LEITURA_MS,
-    });
+    const buffer = Buffer.from(await blob.arrayBuffer());
+    if (ehAudio) {
+      // Sem excecao = o Gemini respondeu (mesmo que nao tenha entendido nada).
+      audio = await extractDespesaDeAudio(buffer, comprovante.mimeType);
+      audioLido = true;
+    } else {
+      invoice = await extractInvoiceData(buffer, comprovante.mimeType, { orcamentoMs: ORCAMENTO_LEITURA_MS });
+    }
   } catch (error) {
     motivo = error instanceof Error ? error.message : String(error);
     console.error(`Tentativa ${tentativa} de leitura pendente ${id} falhou:`, error);
   }
 
-  const leu = invoice && (invoice.itens.length > 0 || Boolean(invoice.valorTotalNota));
+  if (ehAudio && audioLido) {
+    await marcarLeitura(id, { status: "concluida", tentativas: tentativa, ultimo_erro: null });
+    try {
+      await retomarAudioLido(leitura.telefone, audio);
+    } catch (error) {
+      console.error(`Audio ${id} lido, mas falhou ao retomar a conversa:`, error);
+      Sentry.captureException(error, { tags: { fluxo: "leitura_pendente", etapa: "retomar_audio" } });
+    }
+    return;
+  }
+
+  const leu = !ehAudio && invoice && (invoice.itens.length > 0 || Boolean(invoice.valorTotalNota));
   if (leu && invoice) {
     await marcarLeitura(id, { status: "concluida", tentativas: tentativa, ultimo_erro: null });
     try {
@@ -63,7 +83,9 @@ async function executarTentativa(id: string, esperaMs: number) {
     Sentry.captureMessage(`Leitura pendente ${id} desistiu apos ${tentativa} tentativas: ${motivo}`, "error");
     await sendText(
       leitura.telefone,
-      "😕 Não consegui ler o documento que você enviou, mesmo depois de várias tentativas. Ele ficou guardado. Use o menu → Registrar Despesa pra lançar manualmente, ou envie o arquivo de novo mais tarde."
+      ehAudio
+        ? "😕 Não consegui entender o áudio que você enviou, mesmo depois de várias tentativas. Use o menu → Registrar Despesa pra lançar manualmente, ou mande o áudio de novo mais tarde."
+        : "😕 Não consegui ler o documento que você enviou, mesmo depois de várias tentativas. Ele ficou guardado. Use o menu → Registrar Despesa pra lançar manualmente, ou envie o arquivo de novo mais tarde."
     ).catch((error) => console.error("Falha ao avisar desistencia da leitura:", error));
     return;
   }

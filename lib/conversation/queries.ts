@@ -422,6 +422,38 @@ export function resolverPorNumeroOuNome<T extends { nome: string }>(itens: T[], 
   return encontrarUnicoPorNome(itens, texto);
 }
 
+/**
+ * Casa uma pista dita/digitada em linguagem natural ("costa 02", "alvenaria")
+ * com um cadastro: todas as palavras da pista precisam aparecer no nome, e so
+ * vale se sobrar exatamente um candidato (nunca adivinha). Diferente de
+ * resolverPorNumeroOuNome, um numero solto nao vira posicao na lista.
+ */
+export function encontrarPorPista<T extends { nome: string }>(itens: T[], pista: string): T | null {
+  const palavras = normalizarTextoBusca(pista)
+    .split(/[^a-z0-9]+/)
+    .filter(Boolean);
+  if (palavras.length === 0) return null;
+  const exato = itens.find((i) => normalizarTextoBusca(i.nome) === normalizarTextoBusca(pista));
+  if (exato) return exato;
+  const candidatos = itens.filter((i) => {
+    const nome = normalizarTextoBusca(i.nome);
+    return palavras.every((p) => nome.includes(p));
+  });
+  return candidatos.length === 1 ? candidatos[0] : null;
+}
+
+export async function findObraPorPista(pista: string) {
+  return encontrarPorPista(await listObrasAtivas(), pista);
+}
+
+export async function findCategoriaPorPista(pista: string) {
+  return encontrarPorPista(await listCategorias(), pista);
+}
+
+export async function findEtapaPorPista(obraId: string, pista: string) {
+  return encontrarPorPista(await listEtapasParaObra(obraId), pista);
+}
+
 export async function findEtapaPorTexto(obraId: string, texto: string) {
   const etapas = await listEtapasParaObra(obraId);
   return resolverPorNumeroOuNome(etapas, texto);
