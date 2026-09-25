@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import {
+  botoesDeListaNumerada,
   extrairItensNumerados,
   mensagemComEscolha,
   POR_PAGINA,
@@ -113,5 +114,36 @@ describe("tecladoLancamento", () => {
     for (const b of tecladoLancamento(id, { comComprovante: false }).flat()) {
       expect(Buffer.byteLength(b.callback_data ?? "")).toBeLessThanOrEqual(64);
     }
+  });
+});
+
+describe("botoesDeListaNumerada (WhatsApp)", () => {
+  const lista = (linhas: string[]) => ["🏗️ *Selecione a obra*", "", ...linhas, "", "Responda com o número ou digite o nome."].join("\n");
+
+  it("lista curta com nomes pequenos vira botoes com id n:<numero>", () => {
+    const r = botoesDeListaNumerada(lista(["1. 02 Costa Amalfitana", "2. Oryon Constutora", "3. 01 COSTA AMALFITANA"]));
+    expect(r?.corpo).toBe("🏗️ *Selecione a obra*");
+    expect(r?.botoes).toEqual([
+      { id: "n:1", title: "02 Costa Amalfitana" },
+      { id: "n:2", title: "Oryon Constutora" },
+      { id: "n:3", title: "01 COSTA AMALFITANA" },
+    ]);
+  });
+
+  it("mais de 3 opcoes continua texto", () => {
+    expect(botoesDeListaNumerada(lista(["1. A", "2. B", "3. C", "4. D"]))).toBeNull();
+  });
+
+  it("nome maior que 20 caracteres continua texto", () => {
+    expect(botoesDeListaNumerada(lista(["1. Fornecedor com nome bem comprido", "2. B"]))).toBeNull();
+  });
+
+  it("texto sem o rodape de resposta nao vira botao", () => {
+    expect(botoesDeListaNumerada("Passos:\n1. Um\n2. Dois")).toBeNull();
+  });
+
+  it("opcao 0 tambem entra (ex: Todas as obras)", () => {
+    const r = botoesDeListaNumerada(lista(["0. Todas", "1. Obra A"]));
+    expect(r?.botoes.map((b) => b.id)).toEqual(["n:0", "n:1"]);
   });
 });

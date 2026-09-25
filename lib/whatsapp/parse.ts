@@ -69,6 +69,11 @@ export function parseIncomingMessage(payload: unknown): IncomingMessage | null {
       };
     }
     if (interactive?.type === "button_reply") {
+      // Botao de lista numerada curta (n:<numero>) = a pessoa digitou o numero.
+      const idDoBotao = interactive.button_reply?.id ?? null;
+      if (idDoBotao?.startsWith("n:")) {
+        return { id, from, text: idDoBotao.slice(2), replyId: null, media: null };
+      }
       return {
         id,
         from,

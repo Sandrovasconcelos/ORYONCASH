@@ -37,6 +37,30 @@ export function extrairItensNumerados(texto: string): ItemNumerado[] {
   return itens.length >= 2 ? itens : [];
 }
 
+const MAX_BOTOES_WHATSAPP = 3;
+const MAX_TITULO_BOTAO_WHATSAPP = 20;
+
+/**
+ * No WhatsApp, lista numerada CURTA (2 a 3 opcoes, cada uma cabendo no titulo
+ * de 20 caracteres do botao) vira botoes de resposta; lista maior ou com nome
+ * comprido continua texto numerado. O id do botao e n:<numero> - o parser
+ * trata como se a pessoa tivesse digitado o numero, entao vale pra qualquer
+ * lista do motor sem mexer nos fluxos.
+ */
+export function botoesDeListaNumerada(texto: string): { corpo: string; botoes: { id: string; title: string }[] } | null {
+  const itens = extrairItensNumerados(texto);
+  if (itens.length < 2 || itens.length > MAX_BOTOES_WHATSAPP) return null;
+  if (itens.some((i) => [...i.rotulo].length > MAX_TITULO_BOTAO_WHATSAPP)) return null;
+
+  const linhas = texto.split("\n");
+  const primeira = linhas.findIndex((l) => LINHA_NUMERADA.test(l.trim()));
+  const cabecalho = linhas.slice(0, Math.max(primeira, 0)).join("\n").trim();
+  return {
+    corpo: cabecalho || "Escolha uma opção:",
+    botoes: itens.map((i) => ({ id: `n:${i.numero}`, title: i.rotulo })),
+  };
+}
+
 export function tecladoDaPagina(itens: ItemNumerado[], pagina: number): Teclado {
   const totalPaginas = Math.max(1, Math.ceil(itens.length / POR_PAGINA));
   const atual = Math.min(Math.max(pagina, 0), totalPaginas - 1);

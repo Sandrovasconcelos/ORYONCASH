@@ -1,5 +1,6 @@
 import { sendWhatsAppMessage } from "./graph";
 import { ehTelegram } from "@/lib/telegram/ids";
+import { botoesDeListaNumerada } from "@/lib/telegram/interativo";
 import {
   sendTelegramText,
   sendTelegramDocument,
@@ -16,6 +17,11 @@ export type ListSection = { title?: string; rows: ListRow[] };
 
 export async function sendText(to: string, body: string) {
   if (ehTelegram(to)) return sendTelegramText(to, body);
+
+  // Lista numerada curta (2-3 opcoes pequenas) vira botoes; o resto segue como texto.
+  const curta = botoesDeListaNumerada(body);
+  if (curta) return sendButtons(to, curta.corpo, curta.botoes);
+
   return sendWhatsAppMessage({
     to,
     type: "text",
