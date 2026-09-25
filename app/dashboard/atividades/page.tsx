@@ -320,7 +320,7 @@ export default async function AtividadesPage({
                       </span>
                     </div>
                     <p className="mt-1 text-xs text-brand-gray-500">
-                      {TIPO_LABEL[a.tipo]} · {ENTIDADE_LABEL[a.entidade]} · {ORIGEM_LABEL[a.origem]}
+                      {TIPO_LABEL[a.tipo]} · {ENTIDADE_LABEL[a.entidade]} · {a.autor_telefone?.startsWith("tg_") ? "Telegram" : ORIGEM_LABEL[a.origem]}
                       {autorResolvido ? ` · por ${autorResolvido}` : ""}
                     </p>
                   </div>

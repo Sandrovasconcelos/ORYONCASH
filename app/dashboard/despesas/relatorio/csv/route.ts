@@ -1,5 +1,6 @@
 import { NextRequest } from "next/server";
 import { createAdminClient } from "@/lib/supabase/admin";
+import { rotuloOrigem } from "@/lib/origem";
 
 export const dynamic = "force-dynamic";
 
@@ -15,7 +16,7 @@ export async function GET(request: NextRequest) {
   let query = supabase
     .from("despesas")
     .select(
-      "id, valor, quantidade, valor_unitario, descricao, data, origem, created_at, obras(nome), categorias(nome), etapas(nome), materiais(nome), fornecedores(nome)"
+      "id, valor, quantidade, valor_unitario, descricao, data, origem, criado_por_telefone, created_at, obras(nome), categorias(nome), etapas(nome), materiais(nome), fornecedores(nome)"
     )
     .is("deleted_at", null)
     .order("data", { ascending: false })
@@ -108,7 +109,7 @@ export async function GET(request: NextRequest) {
       d.quantidade ?? "",
       d.valor_unitario ?? "",
       d.valor,
-      d.origem,
+      rotuloOrigem(d.origem, d.criado_por_telefone),
       d.created_at,
       documentos?.nota ?? "",
       documentos?.comprovante ?? "",

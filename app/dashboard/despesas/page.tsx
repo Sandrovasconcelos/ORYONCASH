@@ -1,6 +1,7 @@
 import Link from "next/link";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { formatBRL } from "@/lib/conversation/format";
+import { rotuloOrigem } from "@/lib/origem";
 import { formatDataHoraBrasil } from "@/lib/format-date";
 import {
   createDespesaAction,
@@ -816,12 +817,14 @@ export default async function DespesasPage({
                             </span>
                             <span
                               className={
-                                d.origem === "whatsapp"
-                                  ? "inline-flex w-fit rounded-full bg-[#e9f8f0] px-2 py-0.5 text-[10px] font-bold capitalize text-status-success"
-                                  : "inline-flex w-fit rounded-full bg-brand-gray-100 px-2 py-0.5 text-[10px] font-bold capitalize text-brand-gray-700"
+                                d.criado_por_telefone?.startsWith("tg_")
+                                  ? "inline-flex w-fit rounded-full bg-status-info/10 px-2 py-0.5 text-[10px] font-bold text-status-info"
+                                  : d.origem === "whatsapp"
+                                    ? "inline-flex w-fit rounded-full bg-[#e9f8f0] px-2 py-0.5 text-[10px] font-bold text-status-success"
+                                    : "inline-flex w-fit rounded-full bg-brand-gray-100 px-2 py-0.5 text-[10px] font-bold text-brand-gray-700"
                               }
                             >
-                              {d.origem}
+                              {rotuloOrigem(d.origem, d.criado_por_telefone)}
                             </span>
                             {grupoNota && (
                               <span
@@ -911,7 +914,7 @@ export default async function DespesasPage({
                               </div>
                               <div>
                                 <p className="text-xs font-bold uppercase tracking-[0.12em] text-brand-gray-400">Origem</p>
-                                <p className="mt-1 font-semibold capitalize text-brand-black">{d.origem}</p>
+                                <p className="mt-1 font-semibold text-brand-black">{rotuloOrigem(d.origem, d.criado_por_telefone)}</p>
                               </div>
                               <div>
                                 <p className="text-xs font-bold uppercase tracking-[0.12em] text-brand-gray-400">Registrado em</p>
