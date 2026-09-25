@@ -727,6 +727,11 @@ export async function createDespesa(input: {
 
   const aviso = notificarLancamento({
     despesaId: result.data.id,
+    etapaId: input.etapaId,
+    fornecedorId: input.fornecedorId ?? null,
+    quantidade: input.quantidade ?? null,
+    valorUnitario: input.valorUnitario ?? null,
+    data: comAutoria.data,
     valor: input.valor,
     categoriaId: input.categoriaId,
     obraId: input.obraId,

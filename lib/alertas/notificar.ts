@@ -9,6 +9,7 @@ import {
   formatarResumoSemanal,
 } from "@/lib/whatsapp/notificacoes";
 import { sendText } from "@/lib/whatsapp/messages";
+import { rotuloOrigem } from "@/lib/origem";
 import { sendTelegramTextComBotoes } from "@/lib/telegram/messages";
 import { TECLADO_RESUMO, botaoDashboard, tecladoLancamento, type Teclado } from "@/lib/telegram/interativo";
 import { destinoTelegram, ehTelegram, idsTelegramParaAvisos } from "@/lib/telegram/ids";
@@ -190,6 +191,11 @@ export async function enviarResumoSemanal(): Promise<{ enviado: boolean; motivo?
  */
 export async function notificarLancamento(input: {
   despesaId?: string;
+  etapaId?: string | null;
+  fornecedorId?: string | null;
+  quantidade?: number | null;
+  valorUnitario?: number | null;
+  data?: string;
   valor: number;
   categoriaId: string;
   obraId: string | null;
@@ -206,20 +212,40 @@ export async function notificarLancamento(input: {
   if (!avisarDono && !temGrupo) return;
 
   const supabase = createAdminClient();
-  const [{ data: categoria }, { data: obra }, { data: material }] = await Promise.all([
+  const [{ data: categoria }, { data: obra }, { data: material }, { data: etapa }, { data: fornecedor }, gastoObra] = await Promise.all([
     supabase.from("categorias").select("nome").eq("id", input.categoriaId).maybeSingle(),
     input.obraId
-      ? supabase.from("obras").select("nome").eq("id", input.obraId).maybeSingle()
+      ? supabase.from("obras").select("nome, orcamento_total").eq("id", input.obraId).maybeSingle()
       : Promise.resolve({ data: null }),
     input.materialId
       ? supabase.from("materiais").select("nome").eq("id", input.materialId).maybeSingle()
       : Promise.resolve({ data: null }),
+    input.etapaId
+      ? supabase.from("etapas").select("nome").eq("id", input.etapaId).maybeSingle()
+      : Promise.resolve({ data: null }),
+    input.fornecedorId
+      ? supabase.from("fornecedores").select("nome").eq("id", input.fornecedorId).maybeSingle()
+      : Promise.resolve({ data: null }),
+    input.obraId
+      ? supabase.from("despesas").select("valor").eq("obra_id", input.obraId).is("deleted_at", null).limit(20000)
+      : Promise.resolve({ data: null }),
   ]);
+
+  const gastoTotalObra = gastoObra.data ? gastoObra.data.reduce((soma, d) => soma + d.valor, 0) : null;
 
   const mensagem = formatarNotificacaoLancamento({
     valor: input.valor,
     categoriaNome: categoria?.nome ?? "Sem categoria",
     obraNome: obra?.nome ?? null,
+    obraOrcamento: (obra as { orcamento_total?: number } | null)?.orcamento_total ?? null,
+    obraGasto: gastoTotalObra,
+    etapaNome: etapa?.nome ?? null,
+    fornecedorNome: fornecedor?.nome ?? null,
+    quantidade: input.quantidade ?? null,
+    valorUnitario: input.valorUnitario ?? null,
+    data: input.data ?? null,
+    origemRotulo: rotuloOrigem("whatsapp", input.autorTelefone),
+    horario: new Date().toISOString(),
     autorNome: input.autorNome,
     descricao: input.descricao,
     materialNome: material?.nome ?? null,

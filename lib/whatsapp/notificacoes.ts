@@ -112,17 +112,54 @@ export function formatarNotificacaoLancamento(input: {
   descricao: string | null;
   materialNome: string | null;
   documentoAnexado: "documento_cobranca" | "comprovante_pagamento" | null;
+  obraOrcamento?: number | null;
+  obraGasto?: number | null;
+  etapaNome?: string | null;
+  fornecedorNome?: string | null;
+  quantidade?: number | null;
+  valorUnitario?: number | null;
+  /** Data do gasto (AAAA-MM-DD). */
+  data?: string | null;
+  /** Onde foi lancado: "Telegram" ou "WhatsApp". */
+  origemRotulo?: string | null;
+  /** Instante do lancamento (ISO), mostrado como hora do Brasil. */
+  horario?: string | null;
 }): string {
-  const partes = [`💸 Novo lançamento — ${formatBRL(input.valor)} em ${input.categoriaNome}`];
-  if (input.obraNome) partes.push(`Obra: ${input.obraNome}`);
+  const partes = [`💸 *Novo lançamento — ${formatBRL(input.valor)}*`];
+
+  const onde = [input.obraNome ? `🏗️ ${input.obraNome}` : null, `📁 ${input.categoriaNome}`, input.etapaNome ? `📐 ${input.etapaNome}` : null];
+  partes.push(onde.filter(Boolean).join("  ·  "));
+
   const item = input.descricao || input.materialNome;
-  if (item) partes.push(`📝 Item: ${item}`);
-  if (input.autorNome) partes.push(`Por: ${input.autorNome}`);
+  if (item) partes.push(`📝 ${item}`);
+  if (input.materialNome && input.materialNome !== item) partes.push(`📦 Material: ${input.materialNome}`);
+  if (input.fornecedorNome) partes.push(`🏢 Fornecedor: ${input.fornecedorNome}`);
+  if (input.quantidade && input.valorUnitario) {
+    partes.push(`🔢 ${input.quantidade.toLocaleString("pt-BR")} × ${formatBRL(input.valorUnitario)}`);
+  }
+  if (input.data) partes.push(`📅 Data do gasto: ${formatarDataBRCurta(input.data)}`);
+
+  // Quem lancou, por onde e quando.
+  const quando = input.horario
+    ? new Date(input.horario).toLocaleTimeString("pt-BR", {
+        timeZone: "America/Fortaleza",
+        hour: "2-digit",
+        minute: "2-digit",
+      })
+    : null;
+  const quem = [input.autorNome, input.origemRotulo ? `pelo ${input.origemRotulo}` : null, quando ? `às ${quando}` : null];
+  if (quem.some(Boolean)) partes.push(`👤 Lançado por: ${quem.filter(Boolean).join(" ")}`);
 
   const notaAnexada = input.documentoAnexado === "documento_cobranca";
   const comprovanteAnexado = input.documentoAnexado === "comprovante_pagamento";
+  partes.push("");
   partes.push(`📄 Nota/conta: ${notaAnexada ? "anexada" : "não anexada"}`);
   partes.push(`💳 Comprovante de pagamento: ${comprovanteAnexado ? "anexado" : "ainda não anexado"}`);
+
+  if (input.obraOrcamento && input.obraOrcamento > 0 && input.obraGasto !== null && input.obraGasto !== undefined) {
+    const pct = Math.round((input.obraGasto / input.obraOrcamento) * 100);
+    partes.push("", `📊 Obra: ${formatBRL(input.obraGasto)} de ${formatBRL(input.obraOrcamento)} (${pct}%)`);
+  }
 
   return partes.join("\n");
 }

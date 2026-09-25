@@ -8,6 +8,8 @@ function normalizarTelefone(telefone: string): string {
 }
 
 function variantesTelefone(telefone: string): string[] {
+  // Telegram: o id (tg_123) e a propria chave - nao tem DDD nem variantes.
+  if (telefone.startsWith("tg_")) return [telefone];
   const numero = normalizarTelefone(telefone);
   const variantes = new Set([numero]);
 
@@ -34,7 +36,7 @@ export async function getNomePorTelefone(telefone: string): Promise<string> {
     .eq("ativo", true)
     .limit(1);
 
-  return data?.[0]?.nome ?? normalizarTelefone(telefone);
+  return data?.[0]?.nome ?? (telefone.startsWith("tg_") ? "Usuário do Telegram" : normalizarTelefone(telefone));
 }
 
 export async function registrarAtividade(input: {
