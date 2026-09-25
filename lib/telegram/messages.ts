@@ -1,6 +1,7 @@
 import { telegramCall, telegramUpload } from "./api";
 import { chatIdDe } from "./ids";
 import type { ListSection } from "@/lib/whatsapp/messages";
+import { extrairItensNumerados, tecladoDaPagina, type Teclado } from "./interativo";
 
 const LIMITE_MENSAGEM = 4000; // teto do Telegram e 4096
 const LIMITE_CALLBACK_BYTES = 64;
@@ -35,8 +36,6 @@ function dividirEmPartes(texto: string): string[] {
   return partes;
 }
 
-type Teclado = { text: string; callback_data: string }[][];
-
 async function enviarMensagem(chatId: string, texto: string, teclado?: Teclado) {
   const partes = dividirEmPartes(texto);
   for (let i = 0; i < partes.length; i++) {
@@ -70,7 +69,10 @@ function botao(id: string, rotulo: string) {
 }
 
 export async function sendTelegramText(to: string, body: string) {
-  await enviarMensagem(chatIdDe(to), body);
+  // Lista numerada do motor ("... Responda com o numero") vira botoes
+  // paginados; tocar num botao equivale a digitar o numero.
+  const itens = extrairItensNumerados(body);
+  await enviarMensagem(chatIdDe(to), body, itens.length > 0 ? tecladoDaPagina(itens, 0) : undefined);
 }
 
 export async function sendTelegramList(

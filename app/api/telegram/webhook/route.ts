@@ -8,10 +8,17 @@ import {
   comTimeoutDeAviso,
   jaProcessadaOuMarcarComoProcessada,
 } from "@/lib/whatsapp/processar";
-import { parseTelegramUpdate, type TgUpdate } from "@/lib/telegram/parse";
+import { parseTelegramUpdate, type TgUpdate, type Toque } from "@/lib/telegram/parse";
 import { telegramCall } from "@/lib/telegram/api";
 import { sendTelegramText } from "@/lib/telegram/messages";
 import { chatIdDe } from "@/lib/telegram/ids";
+import {
+  TECLADO_FIXO,
+  extrairItensNumerados,
+  mensagemComEscolha,
+  rotuloDoBotao,
+  tecladoDaPagina,
+} from "@/lib/telegram/interativo";
 
 // Mesmo teto do webhook do WhatsApp: baixar midia + Gemini passa dos 10s.
 export const maxDuration = 60;
@@ -24,21 +31,59 @@ function segredoValido(recebido: string | null): boolean {
   return a.length === b.length && timingSafeEqual(a, b);
 }
 
-/** Toque em botao: avisa o Telegram que foi recebido e tira o teclado da mensagem (evita toque em opcao velha). */
-async function responderToque(callback: { queryId: string; chatId: number; messageId: number }) {
-  await telegramCall("answerCallbackQuery", { callback_query_id: callback.queryId }).catch(() => {});
+const semTeclado = { inline_keyboard: [] };
+
+/** Avisa o Telegram que o toque foi recebido (senao o botao fica com relogio girando). */
+async function confirmarToque(toque: Toque) {
+  await telegramCall("answerCallbackQuery", { callback_query_id: toque.queryId }).catch(() => {});
+}
+
+/** Troca de pagina numa lista longa - resolvido aqui, o motor nem fica sabendo. */
+async function navegarPagina(toque: Toque) {
+  if (toque.data === "pg:x") return;
+  const pagina = Number(toque.data.slice(3));
+  const itens = extrairItensNumerados(toque.texto);
+  if (!Number.isFinite(pagina) || itens.length === 0) return;
   await telegramCall("editMessageReplyMarkup", {
-    chat_id: callback.chatId,
-    message_id: callback.messageId,
-    reply_markup: { inline_keyboard: [] },
+    chat_id: toque.chatId,
+    message_id: toque.messageId,
+    reply_markup: { inline_keyboard: tecladoDaPagina(itens, pagina) },
   }).catch(() => {});
 }
 
 /**
- * Checagem de saude (protegida pelo mesmo segredo do webhook): confirma que
- * o token configurado NESTE ambiente e aceito pelo Telegram, sem precisar
- * ler logs. Nunca devolve o token.
+ * Depois do toque, a mensagem vira o registro da escolha (sem o teclado) em
+ * vez de ficar cheia de botoes velhos e de o chat virar uma fila de perguntas.
  */
+async function registrarEscolha(toque: Toque) {
+  let rotulo: string | null = null;
+  if (toque.data.startsWith("n:")) {
+    const numero = Number(toque.data.slice(2));
+    const item = extrairItensNumerados(toque.texto).find((i) => i.numero === numero);
+    rotulo = item ? `${item.numero}. ${item.rotulo}` : `${numero}`;
+  } else {
+    rotulo = rotuloDoBotao(toque.teclado, toque.data);
+  }
+
+  try {
+    if (!rotulo || !toque.texto) throw new Error("sem texto pra editar");
+    const nova = mensagemComEscolha(toque.texto, toque.entidades, rotulo);
+    await telegramCall("editMessageText", {
+      chat_id: toque.chatId,
+      message_id: toque.messageId,
+      text: nova.texto,
+      ...(nova.entidades.length > 0 ? { entities: nova.entidades } : {}),
+      reply_markup: semTeclado,
+    });
+  } catch {
+    await telegramCall("editMessageReplyMarkup", {
+      chat_id: toque.chatId,
+      message_id: toque.messageId,
+      reply_markup: semTeclado,
+    }).catch(() => {});
+  }
+}
+
 export async function GET(request: NextRequest) {
   if (!segredoValido(request.headers.get("x-telegram-bot-api-secret-token"))) {
     return new NextResponse("Forbidden", { status: 401 });
@@ -63,8 +108,30 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ ok: true });
   }
 
+  // Grupo: o bot nao conversa la, mas /id devolve o id do grupo (pra
+  // configurar TELEGRAM_GRUPO_ID e receber o feed de lancamentos).
+  const grupo = update.message;
+  if (
+    grupo &&
+    (grupo.chat.type === "group" || grupo.chat.type === "supergroup") &&
+    grupo.text?.trim().toLowerCase().startsWith("/id")
+  ) {
+    await telegramCall("sendMessage", {
+      chat_id: grupo.chat.id,
+      text: `ID deste grupo: ${grupo.chat.id}`,
+    }).catch(() => {});
+    return NextResponse.json({ ok: true });
+  }
+
   const { incoming, callback } = parseTelegramUpdate(update);
-  if (callback) await responderToque(callback);
+
+  if (callback) {
+    await confirmarToque(callback);
+    if (callback.data.startsWith("pg:")) {
+      await navegarPagina(callback);
+      return NextResponse.json({ ok: true });
+    }
+  }
   if (!incoming) return NextResponse.json({ ok: true });
 
   if (await jaProcessadaOuMarcarComoProcessada(incoming.id)) {
@@ -86,6 +153,17 @@ export async function POST(request: NextRequest) {
   if (await excedeuLimiteDeTaxa(incoming.from)) {
     console.error(`Rate limit excedido pro usuario ${chatIdDe(incoming.from)} (Telegram)`);
     return NextResponse.json({ ok: true });
+  }
+
+  if (callback) await registrarEscolha(callback);
+
+  // /start: deixa os atalhos fixos embaixo do chat.
+  if (update.message?.text?.trim().toLowerCase().startsWith("/start")) {
+    await telegramCall("sendMessage", {
+      chat_id: chatIdDe(incoming.from),
+      text: "⌨️ Deixei os atalhos fixos aqui embaixo — é só tocar. Você também pode digitar ou mandar foto, PDF ou áudio.",
+      reply_markup: TECLADO_FIXO,
+    }).catch((error) => console.error("Falha ao enviar teclado fixo:", error));
   }
 
   try {

@@ -1,5 +1,6 @@
 import type { IncomingMessage } from "@/lib/whatsapp/parse";
 import { destinoTelegram } from "./ids";
+import { atalhoDoTeclado, type Entidade, type Teclado } from "./interativo";
 
 type TgFoto = { file_id: string; width: number; height: number; file_size?: number };
 type TgMensagem = {
@@ -7,6 +8,8 @@ type TgMensagem = {
   from?: { id: number; is_bot?: boolean };
   chat: { id: number; type: string };
   text?: string;
+  entities?: Entidade[];
+  reply_markup?: { inline_keyboard?: Teclado };
   photo?: TgFoto[];
   document?: { file_id: string; mime_type?: string };
   voice?: { file_id: string; mime_type?: string };
@@ -19,14 +22,25 @@ export type TgUpdate = {
     id: string;
     from: { id: number };
     data?: string;
-    message?: { message_id: number; chat: { id: number; type: string } };
+    message?: TgMensagem;
   };
+};
+
+export type Toque = {
+  queryId: string;
+  chatId: number;
+  messageId: number;
+  data: string;
+  /** Mensagem onde o botao estava (texto, formatacao e teclado) - usada pra editar e paginar. */
+  texto: string;
+  entidades: Entidade[];
+  teclado: Teclado;
 };
 
 export type ResultadoParse = {
   incoming: IncomingMessage | null;
   /** Presente quando o usuario tocou num botao - precisa ser "respondido" pro Telegram parar o relogio. */
-  callback: { queryId: string; chatId: number; messageId: number } | null;
+  callback: Toque | null;
 };
 
 /** Comandos do Telegram (/start, /menu) viram a palavra "menu" que o motor ja entende. */
@@ -44,16 +58,27 @@ export function parseTelegramUpdate(update: TgUpdate): ResultadoParse {
   const cb = update.callback_query;
   if (cb) {
     if (cb.message?.chat.type !== "private") return { incoming: null, callback: null };
-    return {
-      incoming: {
-        id,
-        from: destinoTelegram(cb.from.id),
-        text: null,
-        replyId: cb.data ?? null,
-        media: null,
-      },
-      callback: { queryId: cb.id, chatId: cb.message.chat.id, messageId: cb.message.message_id },
+    const data = cb.data ?? "";
+    const toque: Toque = {
+      queryId: cb.id,
+      chatId: cb.message.chat.id,
+      messageId: cb.message.message_id,
+      data,
+      texto: cb.message.text ?? "",
+      entidades: cb.message.entities ?? [],
+      teclado: cb.message.reply_markup?.inline_keyboard ?? [],
     };
+    const from = destinoTelegram(cb.from.id);
+    // Navegacao entre paginas de uma lista: nao chega no motor.
+    if (data.startsWith("pg:")) return { incoming: null, callback: toque };
+    // Botao de lista numerada = a pessoa digitou o numero.
+    if (data.startsWith("n:")) {
+      return {
+        incoming: { id, from, text: data.slice(2), replyId: null, media: null },
+        callback: toque,
+      };
+    }
+    return { incoming: { id, from, text: null, replyId: data || null, media: null }, callback: toque };
   }
 
   const msg = update.message;
@@ -63,7 +88,13 @@ export function parseTelegramUpdate(update: TgUpdate): ResultadoParse {
   const from = destinoTelegram(msg.from.id);
   const base = { id, from, text: null, replyId: null, media: null };
 
-  if (msg.text) return { incoming: { ...base, text: normalizarTexto(msg.text) }, callback: null };
+  if (msg.text) {
+    const atalho = atalhoDoTeclado(msg.text);
+    if (atalho) {
+      return { incoming: { ...base, replyId: atalho.replyId, text: atalho.texto }, callback: null };
+    }
+    return { incoming: { ...base, text: normalizarTexto(msg.text) }, callback: null };
+  }
 
   if (msg.photo && msg.photo.length > 0) {
     const maior = [...msg.photo].sort(
