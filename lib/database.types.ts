@@ -444,6 +444,24 @@ export interface Database {
         >;
         Relationships: [];
       };
+      saude_canais: {
+        Row: {
+          canal: string;
+          ok: boolean;
+          detalhe: string | null;
+          mudou_em: string;
+          ultimo_aviso_em: string | null;
+        };
+        Insert: {
+          canal: string;
+          ok: boolean;
+          detalhe?: string | null;
+          mudou_em?: string;
+          ultimo_aviso_em?: string | null;
+        };
+        Update: Partial<Database["public"]["Tables"]["saude_canais"]["Insert"]>;
+        Relationships: [];
+      };
       leituras_pendentes: {
         Row: {
           id: string;

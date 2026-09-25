@@ -1,0 +1,18 @@
+name: Monitor de saude
+
+# A Vercel Hobby so permite cron diario; o GitHub Actions chama o monitor
+# a cada 30 min. Precisa do secret CRON_SECRET (mesmo valor da Vercel).
+on:
+  schedule:
+    - cron: "*/30 * * * *"
+  workflow_dispatch:
+
+jobs:
+  checar:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Chamar /api/cron/saude
+        run: |
+          curl --fail --silent --show-error --max-time 90 \
+            -H "Authorization: Bearer ${{ secrets.CRON_SECRET }}" \
+            https://oryoncash.vercel.app/api/cron/saude
