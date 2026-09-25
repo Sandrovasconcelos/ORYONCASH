@@ -34,6 +34,23 @@ async function responderToque(callback: { queryId: string; chatId: number; messa
   }).catch(() => {});
 }
 
+/**
+ * Checagem de saude (protegida pelo mesmo segredo do webhook): confirma que
+ * o token configurado NESTE ambiente e aceito pelo Telegram, sem precisar
+ * ler logs. Nunca devolve o token.
+ */
+export async function GET(request: NextRequest) {
+  if (!segredoValido(request.headers.get("x-telegram-bot-api-secret-token"))) {
+    return new NextResponse("Forbidden", { status: 401 });
+  }
+  try {
+    const bot = await telegramCall<{ username?: string }>("getMe", {});
+    return NextResponse.json({ ok: true, bot: bot.username ?? null });
+  } catch (error) {
+    return NextResponse.json({ ok: false, erro: error instanceof Error ? error.message : String(error) });
+  }
+}
+
 export async function POST(request: NextRequest) {
   if (!segredoValido(request.headers.get("x-telegram-bot-api-secret-token"))) {
     return new NextResponse("Forbidden", { status: 401 });
