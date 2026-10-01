@@ -212,6 +212,10 @@ export async function vincularComprovanteDespesa(input: {
     contaOrigemNumero?: string | null;
     metodoPagamento?: string | null;
     numeroDocumento?: string | null;
+    /** Diferenca entre a soma dos itens e o total final da nota (desconto/frete ja rateado). */
+    valorDesconto?: number | null;
+    /** Soma dos itens antes do rateio, pra mostrar "de X por Y" na tela. */
+    valorItensOriginal?: number | null;
   };
 }) {
   const supabase = createAdminClient();
@@ -230,6 +234,8 @@ export async function vincularComprovanteDespesa(input: {
     conta_origem_numero: input.comprovante.contaOrigemNumero ?? null,
     metodo_pagamento: input.comprovante.metodoPagamento ?? null,
     numero_documento: input.comprovante.numeroDocumento ?? null,
+    valor_desconto: input.comprovante.valorDesconto ?? null,
+    valor_itens_original: input.comprovante.valorItensOriginal ?? null,
     origem: "whatsapp" as const,
   };
 

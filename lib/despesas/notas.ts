@@ -14,6 +14,10 @@ export type GrupoNota = {
   total: number;
   /** Data do item mais antigo do grupo. */
   data: string;
+  /** Desconto/acrescimo identificado (soma dos itens - total final), quando a leitura achou um. */
+  valorDesconto: number | null;
+  /** Soma dos itens antes do rateio do desconto (so quando valorDesconto existe). */
+  valorItensOriginal: number | null;
 };
 
 const LOTE = 120;
@@ -29,6 +33,8 @@ type LinhaComprovante = {
   tipo_documento: string;
   storage_bucket: string;
   storage_path: string;
+  valor_desconto: number | null;
+  valor_itens_original: number | null;
 };
 
 /**
@@ -42,10 +48,11 @@ export async function carregarNotas(despesaIds: string[]): Promise<Map<string, G
 
   // 1) arquivo de cada despesa: a nota (cobranca) vale mais que o comprovante de pagamento.
   const doMeuArquivo = new Map<string, string>();
+  const descontoPorChave = new Map<string, { valorDesconto: number; valorItensOriginal: number }>();
   for (const lote of emLotes(despesaIds)) {
     const { data, error } = await supabase
       .from("despesa_comprovantes")
-      .select("despesa_id, tipo_documento, storage_bucket, storage_path")
+      .select("despesa_id, tipo_documento, storage_bucket, storage_path, valor_desconto, valor_itens_original")
       .in("despesa_id", lote);
     if (error) return resultado;
     const porDespesa = new Map<string, LinhaComprovante[]>();
@@ -57,7 +64,15 @@ export async function carregarNotas(despesaIds: string[]): Promise<Map<string, G
       const escolhida =
         linhas.find((l) => l.tipo_documento === "documento_cobranca") ??
         linhas.find((l) => l.tipo_documento === "comprovante_pagamento");
-      if (escolhida) doMeuArquivo.set(id, `${escolhida.storage_bucket}/${escolhida.storage_path}`);
+      if (!escolhida) continue;
+      const chave = `${escolhida.storage_bucket}/${escolhida.storage_path}`;
+      doMeuArquivo.set(id, chave);
+      if (escolhida.valor_desconto != null && escolhida.valor_itens_original != null) {
+        descontoPorChave.set(chave, {
+          valorDesconto: escolhida.valor_desconto,
+          valorItensOriginal: escolhida.valor_itens_original,
+        });
+      }
     }
   }
   if (doMeuArquivo.size === 0) return resultado;
@@ -93,7 +108,15 @@ export async function carregarNotas(despesaIds: string[]): Promise<Map<string, G
     if (membros.length < 2) continue;
     const total = Math.round(membros.reduce((s, id) => s + despesas.get(id)!.valor, 0) * 100) / 100;
     const data = membros.map((id) => despesas.get(id)!.data).sort()[0];
-    grupos.set(chave, { chave, membros, total, data });
+    const desconto = descontoPorChave.get(chave) ?? null;
+    grupos.set(chave, {
+      chave,
+      membros,
+      total,
+      data,
+      valorDesconto: desconto?.valorDesconto ?? null,
+      valorItensOriginal: desconto?.valorItensOriginal ?? null,
+    });
   }
 
   for (const [id, chave] of doMeuArquivo) {

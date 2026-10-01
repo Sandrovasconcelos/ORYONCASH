@@ -730,7 +730,9 @@ export default async function DespesasPage({
         <div className="rounded-card border border-brand-gray-300/60 bg-white px-4 py-3 text-xs text-brand-gray-600 shadow-card">
           <strong className="text-brand-black">🧾 Como ler as notas com vários itens:</strong> cada produto da nota é
           um lançamento, mas o pagamento (PIX/boleto) é um só, com o valor da nota inteira. Itens da mesma nota
-          têm a mesma barra colorida na esquerda, e o mesmo comprovante aparece em todos eles.
+          têm a mesma barra colorida na esquerda, e o mesmo comprovante aparece em todos eles. Quando o fornecedor
+          dá desconto (ou cobra frete à parte), o selo <span className="font-bold text-status-success">📉 Desconto</span>{" "}
+          aparece nos itens da nota, e o valor de cada um já sai ajustado — nunca o preço de tabela.
         </div>
       )}
 
@@ -851,6 +853,20 @@ export default async function DespesasPage({
                                 {notaCompleta ? ` · total ${formatBRL(notaCompleta.total)}` : ""}
                               </span>
                             )}
+                            {notaCompleta?.valorDesconto != null && (
+                              <span
+                                className={`inline-flex w-fit items-center gap-1 rounded-full px-2 py-0.5 text-[10px] font-extrabold ${
+                                  notaCompleta.valorDesconto > 0
+                                    ? "bg-status-success/10 text-status-success"
+                                    : "bg-status-warning/10 text-status-warning"
+                                }`}
+                                title={`A nota saiu de ${formatBRL(notaCompleta.valorItensOriginal ?? 0)} para ${formatBRL(notaCompleta.total)}. A diferença foi dividida entre os itens.`}
+                              >
+                                {notaCompleta.valorDesconto > 0
+                                  ? `📉 Desconto de ${formatBRL(notaCompleta.valorDesconto)}`
+                                  : `📈 Acréscimo de ${formatBRL(Math.abs(notaCompleta.valorDesconto))}`}
+                              </span>
+                            )}
                           </div>
                         </div>
                       </div>
@@ -915,6 +931,10 @@ export default async function DespesasPage({
                     {notaCompleta && comprovantesPagamento[0]?.url && (
                       <p className="mt-1.5 text-[10px] leading-snug text-brand-gray-500 md:max-w-[190px]">
                         O comprovante cobre a nota inteira ({formatBRL(notaCompleta.total)}), não só este item.
+                        {notaCompleta.valorDesconto != null &&
+                          (notaCompleta.valorDesconto > 0
+                            ? ` A nota original era de ${formatBRL(notaCompleta.valorItensOriginal ?? 0)}; o fornecedor deu ${formatBRL(notaCompleta.valorDesconto)} de desconto, já dividido entre os itens.`
+                            : ` A nota original era de ${formatBRL(notaCompleta.valorItensOriginal ?? 0)}; houve um acréscimo de ${formatBRL(Math.abs(notaCompleta.valorDesconto))} (ex: frete), já dividido entre os itens.`)}
                       </p>
                     )}
                   </td>

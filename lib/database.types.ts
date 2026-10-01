@@ -359,6 +359,8 @@ export interface Database {
           conta_origem_numero: string | null;
           metodo_pagamento: string | null;
           numero_documento: string | null;
+          valor_desconto: number | null;
+          valor_itens_original: number | null;
           origem: "whatsapp" | "dashboard";
           created_at: string;
         };
@@ -378,6 +380,8 @@ export interface Database {
           conta_origem_agencia?: string | null;
           conta_origem_numero?: string | null;
           metodo_pagamento?: string | null;
+          valor_desconto?: number | null;
+          valor_itens_original?: number | null;
           origem?: "whatsapp" | "dashboard";
           created_at?: string;
         };

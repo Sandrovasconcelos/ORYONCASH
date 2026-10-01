@@ -151,6 +151,8 @@ type Dados = {
     contaOrigemNumero?: string | null;
     metodoPagamento?: string | null;
     numeroDocumento?: string | null;
+    valorDesconto?: number | null;
+    valorItensOriginal?: number | null;
   };
 
   despesaId?: string;
@@ -1450,6 +1452,12 @@ async function continuarProcessamentoNota(
   const avisoDesconto = ajusteDesconto
     ? `\n\n${ajusteDesconto.diferenca > 0 ? "📉" : "📈"} *${ajusteDesconto.diferenca > 0 ? "Desconto" : "Acréscimo"} identificado:* ${formatBRL(Math.abs(ajusteDesconto.diferenca))} (nota de ${formatBRL(ajusteDesconto.valorItens)} → total de ${formatBRL(ajusteDesconto.valorFinal)}). Rateado proporcionalmente entre os itens abaixo.`
     : "";
+  // Marca o comprovante com o desconto pra ficar visivel tambem em
+  // Lançamentos (não só na mensagem de confirmação e em Atividades).
+  const comprovanteComDesconto =
+    comprovante && ajusteDesconto
+      ? { ...comprovante, valorDesconto: ajusteDesconto.diferenca, valorItensOriginal: ajusteDesconto.valorItens }
+      : comprovante;
 
   if (itensAjustados.length === 1) {
     await iniciarDespesaUnicaExtraida(
@@ -1461,7 +1469,7 @@ async function continuarProcessamentoNota(
         valorUnitario: itensAjustados[0].valorUnitario,
         fornecedorId: fornecedor.id,
         fornecedorNome: fornecedor.nome,
-        comprovante,
+        comprovante: comprovanteComDesconto,
       },
       { obra: null, categoria: null, etapa: null },
       {
@@ -1479,7 +1487,7 @@ async function continuarProcessamentoNota(
     notaItens: itensAjustados,
     notaValorTotal: invoice.valorTotalNota,
     notaAvisoDesconto: avisoDesconto || undefined,
-    comprovante,
+    comprovante: comprovanteComDesconto,
   };
 
   await saveSession(from, ESTADOS.NOTA_AGUARDANDO_OBRA, dados);
