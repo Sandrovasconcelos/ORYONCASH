@@ -1,5 +1,9 @@
-import type { FiltrosRelatorio } from "@/lib/relatorio/dados";
-import { interpretarPerguntaRelatorio, type TipoFiltroRelatorio } from "@/lib/gemini/interpretarPerguntaRelatorio";
+import { buscarDadosRelatorio, type DespesaRelatorio, type FiltrosRelatorio } from "@/lib/relatorio/dados";
+import {
+  interpretarPerguntaRelatorio,
+  type PeriodoRelativo,
+  type TipoFiltroRelatorio,
+} from "@/lib/gemini/interpretarPerguntaRelatorio";
 import { sendText } from "@/lib/whatsapp/messages";
 import { gerarEEnviarRelatorioPorPergunta } from "./relatorio";
 import {
@@ -15,8 +19,60 @@ import {
 // Ve se vale a pena chamar o Gemini (que custa tempo/dinheiro) antes de
 // qualquer coisa - so passa quem tem cara de pergunta de gasto. O Gemini
 // ainda confirma de verdade (ehPerguntaDeGasto) pra nao disparar em falso.
-const PARECE_PERGUNTA_DE_GASTO =
-  /quanto.{0,20}gast|gast\w*.{0,20}quanto|^gastos? (com|em|de|no|na)|total (de )?gastos? (com|em|de|no|na)/;
+const PARECE_PERGUNTA_DE_GASTO = /gast\w*/;
+const TEM_PALAVRA_DE_PERGUNTA = /\b(quanto|quanta|quantos|quantas|qual|quais|quem|total)\b/;
+
+/**
+ * Resolve um periodo relativo ("semana_atual", "mes_passado"...) pra datas
+ * reais - em codigo, nao pedindo pro Gemini calcular dia da semana/mes (IA
+ * erra conta de data com frequencia maior do que o aceitavel aqui).
+ */
+function resolverPeriodo(
+  periodo: PeriodoRelativo | null,
+  personalizada: { dataInicio: string | null; dataFim: string | null }
+): { dataInicio?: string; dataFim?: string } {
+  if (!periodo) return {};
+  if (periodo === "personalizado") {
+    return { dataInicio: personalizada.dataInicio ?? undefined, dataFim: personalizada.dataFim ?? undefined };
+  }
+
+  const hoje = hojeNoBrasil();
+  const [ano, mes, dia] = hoje.split("-").map(Number);
+  const pad = (n: number) => String(n).padStart(2, "0");
+  const paraIso = (d: Date) => d.toISOString().slice(0, 10);
+
+  if (periodo === "hoje") return { dataInicio: hoje, dataFim: hoje };
+
+  if (periodo === "ontem") {
+    const ontem = paraIso(new Date(Date.UTC(ano, mes - 1, dia - 1)));
+    return { dataInicio: ontem, dataFim: ontem };
+  }
+
+  if (periodo === "semana_atual") {
+    const dataAtual = new Date(Date.UTC(ano, mes - 1, dia));
+    const diaDaSemana = dataAtual.getUTCDay(); // 0 = domingo
+    const diasDesdeSegunda = diaDaSemana === 0 ? 6 : diaDaSemana - 1;
+    const segunda = new Date(dataAtual);
+    segunda.setUTCDate(dataAtual.getUTCDate() - diasDesdeSegunda);
+    return { dataInicio: paraIso(segunda), dataFim: hoje };
+  }
+
+  if (periodo === "mes_atual") return { dataInicio: `${ano}-${pad(mes)}-01`, dataFim: hoje };
+
+  if (periodo === "mes_passado") {
+    const mesAnterior = mes === 1 ? 12 : mes - 1;
+    const anoDoMesAnterior = mes === 1 ? ano - 1 : ano;
+    const ultimoDia = new Date(Date.UTC(anoDoMesAnterior, mesAnterior, 0)).getUTCDate();
+    return {
+      dataInicio: `${anoDoMesAnterior}-${pad(mesAnterior)}-01`,
+      dataFim: `${anoDoMesAnterior}-${pad(mesAnterior)}-${pad(ultimoDia)}`,
+    };
+  }
+
+  if (periodo === "ano_atual") return { dataInicio: `${ano}-01-01`, dataFim: hoje };
+
+  return {};
+}
 
 async function tentarDimensao(
   tipo: TipoFiltroRelatorio,
@@ -69,25 +125,99 @@ async function resolverDimensao(
   return null;
 }
 
+function nomeParaRanking(despesa: DespesaRelatorio, tipo: TipoFiltroRelatorio): string {
+  switch (tipo) {
+    case "categoria":
+      return despesa.categoriaNome;
+    case "material":
+      return despesa.materialNome;
+    case "fornecedor":
+      return despesa.fornecedorNome;
+    case "etapa":
+      return despesa.etapaNome;
+    case "obra":
+      return despesa.obraNome;
+    default:
+      return "-";
+  }
+}
+
+/**
+ * "Qual fornecedor mais gastou", "quem mais recebeu esse mês" etc: busca
+ * TODAS as despesas do periodo (sem filtrar por nome, que e justamente o
+ * que queremos descobrir), agrupa pelo campo da dimensao pedida e pega o
+ * maior - depois resolve esse nome vencedor pra um id de verdade, pra poder
+ * gerar o PDF filtrado so com ele.
+ */
+async function resolverRanking(
+  tipo: TipoFiltroRelatorio,
+  periodo: { dataInicio?: string; dataFim?: string }
+): Promise<{ filtro: Partial<FiltrosRelatorio>; contexto: string; ranking: { nome: string; total: number }[] } | null> {
+  const dados = await buscarDadosRelatorio(periodo);
+  if (dados.despesas.length === 0) return null;
+
+  const totais = new Map<string, number>();
+  for (const despesa of dados.despesas) {
+    const nome = nomeParaRanking(despesa, tipo);
+    // "Sem classificação" e so o rotulo de quando o campo esta vazio - nao
+    // existe como cadastro de verdade, entao nao da pra resolver pra um
+    // filtro depois (nem faz sentido no ranking).
+    if (nome === "Sem classificação") continue;
+    totais.set(nome, (totais.get(nome) ?? 0) + despesa.valor);
+  }
+  const ranking = [...totais.entries()]
+    .map(([nome, total]) => ({ nome, total }))
+    .sort((a, b) => b.total - a.total);
+  if (ranking.length === 0) return null;
+
+  const vencedor = ranking[0];
+  const resolvido = await tentarDimensao(tipo, vencedor.nome);
+  if (!resolvido) return null;
+
+  return { filtro: resolvido.filtro, contexto: vencedor.nome, ranking };
+}
+
 /**
  * Tenta tratar uma mensagem livre como pergunta de gasto ("quanto gastei
- * com cimento?", "quanto já gastei com a mão de obra do Alex?") e, se for,
- * manda o relatório em PDF já filtrado. So chamada quando o usuario esta no
- * menu (texto livre sem fluxo em andamento) - ver handleMenu em engine.ts.
+ * com cimento?", "qual fornecedor mais gastou essa semana?") e, se for,
+ * manda um resumo em texto seguido do relatório em PDF já filtrado. So
+ * chamada quando o usuario esta no menu (texto livre sem fluxo em
+ * andamento) - ver handleMenu em engine.ts.
  */
 export async function tentarRelatorioPorPergunta(from: string, texto: string | null): Promise<boolean> {
   const t = texto?.trim();
-  if (!t || t.length < 6 || !PARECE_PERGUNTA_DE_GASTO.test(t.toLowerCase())) return false;
+  if (!t || t.length < 6) return false;
+  const minusculo = t.toLowerCase();
+  if (!PARECE_PERGUNTA_DE_GASTO.test(minusculo) || !TEM_PALAVRA_DE_PERGUNTA.test(minusculo)) return false;
 
   try {
     const interpretacao = await interpretarPerguntaRelatorio(t, hojeNoBrasil());
     if (!interpretacao?.ehPerguntaDeGasto) return false;
 
-    const periodo = { dataInicio: interpretacao.dataInicio ?? undefined, dataFim: interpretacao.dataFim ?? undefined };
+    const periodo = resolverPeriodo(interpretacao.periodo, {
+      dataInicio: interpretacao.dataInicioPersonalizada,
+      dataFim: interpretacao.dataFimPersonalizada,
+    });
 
     if (interpretacao.tipo === "geral" || !interpretacao.tipo) {
       await sendText(from, "⏳ Gerando o relatório, só um instante...");
       await gerarEEnviarRelatorioPorPergunta(from, periodo, "todos os lançamentos");
+      return true;
+    }
+
+    if (interpretacao.ranking) {
+      const resolvido = await resolverRanking(interpretacao.tipo, periodo);
+      if (!resolvido) {
+        await sendText(from, "📭 Não encontrei lançamentos para montar esse ranking nesse período.");
+        return true;
+      }
+      await sendText(from, "⏳ Gerando o relatório, só um instante...");
+      await gerarEEnviarRelatorioPorPergunta(
+        from,
+        { ...resolvido.filtro, ...periodo },
+        resolvido.contexto,
+        resolvido.ranking
+      );
       return true;
     }
 

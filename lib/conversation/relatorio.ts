@@ -60,13 +60,18 @@ async function buscarGerarEEnviar(
   to: string,
   filtros: FiltrosRelatorio,
   mensagemVazio: string,
-  legenda: (dados: DadosRelatorio) => string
+  legenda: (dados: DadosRelatorio) => string,
+  resumoTexto?: (dados: DadosRelatorio) => string
 ): Promise<void> {
   const dados = await buscarDadosRelatorio(filtros);
 
   if (dados.despesas.length === 0) {
     await sendText(to, mensagemVazio);
     return;
+  }
+
+  if (resumoTexto) {
+    await sendText(to, resumoTexto(dados));
   }
 
   const geradoEm = formatDataHoraBrasil(new Date().toISOString());
@@ -110,17 +115,31 @@ export async function gerarEEnviarRelatorio(
 /**
  * Relatorio filtrado a partir de uma pergunta livre ("quanto gastei com
  * cimento?") ja interpretada e casada com um cadastro - ver
- * lib/conversation/perguntaRelatorio.ts.
+ * lib/conversation/perguntaRelatorio.ts. Quando "ranking" vem preenchido
+ * (pergunta tipo "qual fornecedor mais gastou"), o resumo em texto mostra o
+ * top 5 antes do PDF (que sai filtrado so pro primeiro colocado).
  */
 export async function gerarEEnviarRelatorioPorPergunta(
   to: string,
   filtros: FiltrosRelatorio,
-  contexto: string
+  contexto: string,
+  ranking?: { nome: string; total: number }[]
 ): Promise<void> {
   await buscarGerarEEnviar(
     to,
     filtros,
     `📭 Não encontrei nenhum lançamento de ${contexto}.`,
-    (dados) => `📄 Gastos com ${contexto} — ${formatBRL(dados.totalGasto)} em ${dados.quantidade} lançamento(s)`
+    () => `📄 Relatório detalhado de ${contexto} em anexo.`,
+    (dados) => {
+      let texto = `📊 *${ranking ? `Maior gasto: ${contexto}` : contexto}*\n${formatBRL(dados.totalGasto)} em ${dados.quantidade} lançamento(s)`;
+      if (dados.periodo !== "-") texto += ` · período ${dados.periodo}`;
+      if (ranking && ranking.length > 1) {
+        texto += `\n\n🏆 Ranking:\n${ranking
+          .slice(0, 5)
+          .map((item, indice) => `${indice + 1}. ${item.nome} — ${formatBRL(item.total)}`)
+          .join("\n")}`;
+      }
+      return texto;
+    }
   );
 }
