@@ -268,6 +268,87 @@ textarea:focus-visible {
   }
 }
 
+/*
+ * Abaixo de 768px, uma tabela .oc-table vira uma lista de cartoes (um por
+ * linha) em vez de rolar pro lado - cada <td> ganha um rotulo (do atributo
+ * data-th, definido no JSX da pagina) no lugar do cabecalho da coluna, que
+ * some. `!important` porque cada pagina tambem define um min-width/overflow
+ * via classe Tailwind (ex: min-w-[860px]) direto no elemento, que senao
+ * continuaria forcando a rolagem horizontal mesmo com display:block aqui.
+ *
+ * .oc-table-matrix (ex: distribuicao mensal por etapa) fica de fora - e uma
+ * grade de verdade (etapa x mes), comparar colunas lado a lado so funciona
+ * com a rolagem horizontal nativa, cartao empilhado destruiria a leitura.
+ */
+@media (max-width: 767px) {
+  .oc-table-wrap > .overflow-x-auto {
+    overflow-x: visible !important;
+  }
+
+  .oc-table:not(.oc-table-matrix) {
+    display: block !important;
+    width: 100% !important;
+    min-width: 0 !important;
+  }
+
+  .oc-table:not(.oc-table-matrix) thead {
+    display: none !important;
+  }
+
+  .oc-table:not(.oc-table-matrix) tbody,
+  .oc-table:not(.oc-table-matrix) tr {
+    display: block !important;
+    width: 100% !important;
+  }
+
+  .oc-table:not(.oc-table-matrix) tbody tr {
+    margin-bottom: 12px;
+    border: 1px solid rgba(230, 232, 236, 0.78);
+    border-radius: var(--radius-card);
+    box-shadow: var(--shadow-card);
+    padding: 14px;
+  }
+
+  .oc-table:not(.oc-table-matrix) tbody tr:last-child {
+    margin-bottom: 0;
+  }
+
+  .oc-table:not(.oc-table-matrix) td {
+    display: block !important;
+    width: 100% !important;
+    border-top: 0;
+    padding: 5px 0;
+    text-align: left !important;
+  }
+
+  .oc-table:not(.oc-table-matrix) td[data-th]::before {
+    content: attr(data-th) ": ";
+    display: inline;
+    margin-right: 4px;
+    font-size: 10px;
+    font-weight: 800;
+    letter-spacing: 0.06em;
+    text-transform: uppercase;
+    color: var(--brand-gray-500);
+  }
+
+  .oc-table:not(.oc-table-matrix) td[data-th-bloco]::before {
+    display: block;
+    margin-bottom: 2px;
+  }
+
+  .oc-table:not(.oc-table-matrix) td.oc-td-acoes {
+    margin-top: 6px;
+    padding-top: 10px;
+    border-top: 1px solid rgba(230, 232, 236, 0.78);
+    text-align: right !important;
+  }
+
+  .oc-empty {
+    padding: 28px 16px;
+  }
+}
+
 .oc-table thead {
   background: linear-gradient(180deg, #f4f5f7, #eceef2);
   color: var(--brand-gray-500);

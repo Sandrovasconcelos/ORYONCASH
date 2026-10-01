@@ -84,7 +84,7 @@ export default async function ContasBancariasPage() {
               Nome (apelido)
               <input name="nome" required placeholder="Ex: Caixa - Oryon" className="oc-input" />
             </label>
-            <div className="grid grid-cols-2 gap-3">
+            <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
               <label className="flex flex-col gap-1 text-sm text-brand-gray-700">
                 Banco
                 <input name="banco" placeholder="Ex: Caixa Econômica Federal" className="oc-input" />
@@ -142,27 +142,28 @@ export default async function ContasBancariasPage() {
                 const saldoAtual = Number(conta.saldo_inicial) - pago;
                 return (
                   <tr key={conta.id}>
-                    <td className="font-semibold text-brand-black">{conta.nome}</td>
-                    <td className="text-brand-gray-700">{conta.banco || "—"}</td>
-                    <td className="text-brand-gray-700">
+                    <td data-th="Conta" className="font-semibold text-brand-black">{conta.nome}</td>
+                    <td data-th="Banco" className="text-brand-gray-700">{conta.banco || "—"}</td>
+                    <td data-th="Titular" className="text-brand-gray-700">
                       <p>{contaInfo.titular || "—"}</p>
                       {contaInfo.documento && (
                         <p className="text-[11px] text-brand-gray-500">{contaInfo.documento}</p>
                       )}
                     </td>
-                    <td className="text-brand-gray-700">
+                    <td data-th="Agência / Número" className="text-brand-gray-700">
                       {conta.agencia || "—"} / {conta.numero || "—"}
                     </td>
-                    <td className="text-right text-brand-gray-700">
+                    <td data-th="Saldo inicial" className="text-right text-brand-gray-700">
                       {formatBRL(Number(conta.saldo_inicial))}
                     </td>
-                    <td className="text-right text-brand-gray-700">{formatBRL(pago)}</td>
+                    <td data-th="Pago" className="text-right text-brand-gray-700">{formatBRL(pago)}</td>
                     <td
+                      data-th="Saldo atual"
                       className={`text-right font-extrabold ${saldoAtual < 0 ? "text-status-danger" : "text-brand-black"}`}
                     >
                       {formatBRL(saldoAtual)}
                     </td>
-                    <td>
+                    <td className="oc-td-acoes">
                       <div className="flex items-center justify-end gap-2">
                         <CadastroModal
                           titulo="Editar conta bancária"
@@ -177,7 +178,7 @@ export default async function ContasBancariasPage() {
                               Nome (apelido)
                               <input name="nome" defaultValue={conta.nome} required className="oc-input" />
                             </label>
-                            <div className="grid grid-cols-2 gap-3">
+                            <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
                               <label className="flex flex-col gap-1 text-sm text-brand-gray-700">
                                 Banco
                                 <input name="banco" defaultValue={conta.banco ?? ""} className="oc-input" />

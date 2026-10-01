@@ -314,9 +314,9 @@ export default async function LixeiraPage() {
           </p>
         </div>
 
-        <div className="overflow-x-auto">
-          <table className="w-full min-w-[980px] text-left text-sm">
-            <thead className="bg-brand-gray-100 text-[11px] uppercase tracking-[0.12em] text-brand-gray-500">
+        <div className="md:overflow-x-auto">
+          <table className="block w-full text-left text-sm md:table md:min-w-[980px]">
+            <thead className="hidden bg-brand-gray-100 text-[11px] uppercase tracking-[0.12em] text-brand-gray-500 md:table-header-group">
               <tr>
                 <th className="px-5 py-3 font-extrabold">Tipo</th>
                 <th className="px-5 py-3 font-extrabold">Item</th>
@@ -327,28 +327,37 @@ export default async function LixeiraPage() {
                 <th className="px-5 py-3 text-right font-extrabold">Ações</th>
               </tr>
             </thead>
-            <tbody className="divide-y divide-brand-gray-300/40">
+            <tbody className="block divide-y-0 md:table-row-group md:divide-y md:divide-brand-gray-300/40">
               {itens.map((item) => (
-                <tr key={`${item.tipo}-${item.id}`} className="align-middle hover:bg-brand-gray-100/55">
-                  <td className="px-5 py-4">
+                <tr
+                  key={`${item.tipo}-${item.id}`}
+                  className="mb-3 block rounded-card border border-brand-gray-300/60 bg-white p-4 shadow-card last:mb-0 md:mb-0 md:table-row md:rounded-none md:border-0 md:bg-transparent md:p-0 md:shadow-none md:align-middle md:hover:bg-brand-gray-100/55"
+                >
+                  <td className="mb-2 block w-full md:mb-0 md:table-cell md:px-5 md:py-4">
                     <TipoBadge tipo={item.tipo} />
                   </td>
-                  <td className="px-5 py-4">
+                  <td className="mb-1.5 block w-full md:mb-0 md:table-cell md:px-5 md:py-4">
                     <p className="font-semibold text-brand-black">{item.nome}</p>
                   </td>
-                  <td className="max-w-[320px] px-5 py-4 text-brand-gray-700">
-                    <span className="line-clamp-2">{item.detalhe || "—"}</span>
+                  <td className="mb-2 block w-full text-brand-gray-700 md:mb-0 md:max-w-[320px] md:table-cell md:px-5 md:py-4">
+                    <span className="md:line-clamp-2">{item.detalhe || "—"}</span>
                   </td>
-                  <td className="px-5 py-4 text-brand-gray-500">
+                  <td className="mb-1 block w-full text-xs text-brand-gray-500 md:mb-0 md:table-cell md:px-5 md:py-4 md:text-sm">
+                    <span className="mr-1.5 text-[10px] font-bold uppercase tracking-[0.06em] text-brand-gray-400 md:hidden">
+                      Removido em:
+                    </span>
                     {item.removidoEm ? formatDataHoraBrasil(item.removidoEm) : "—"}
                   </td>
-                  <td className="px-5 py-4 text-brand-gray-500">
+                  <td className="mb-1 block w-full text-xs text-brand-gray-500 md:mb-0 md:table-cell md:px-5 md:py-4 md:text-sm">
+                    <span className="mr-1.5 text-[10px] font-bold uppercase tracking-[0.06em] text-brand-gray-400 md:hidden">
+                      Removido por:
+                    </span>
                     {item.removidoPor || "—"}
                   </td>
-                  <td className="max-w-[240px] px-5 py-4 text-brand-gray-500">
-                    <span className="line-clamp-2">{item.motivo || "Sem motivo informado"}</span>
+                  <td className="mb-3 block w-full text-brand-gray-500 md:mb-0 md:max-w-[240px] md:table-cell md:px-5 md:py-4">
+                    <span className="md:line-clamp-2">{item.motivo || "Sem motivo informado"}</span>
                   </td>
-                  <td className="px-5 py-4 text-right">
+                  <td className="block w-full border-t border-brand-gray-300/60 pt-3 text-right md:table-cell md:border-0 md:px-5 md:py-4">
                     <div className="flex items-center justify-end gap-2">
                       <RestoreTrashButton id={item.id} tipo={item.tipo} nome={item.nome} />
                       <PermanentDeleteTrashButton id={item.id} tipo={item.tipo} nome={item.nome} />
@@ -358,8 +367,8 @@ export default async function LixeiraPage() {
               ))}
 
               {itens.length === 0 && (
-                <tr>
-                  <td colSpan={7} className="px-5 py-12 text-center text-brand-gray-500">
+                <tr className="block md:table-row">
+                  <td colSpan={7} className="block px-5 py-12 text-center text-brand-gray-500 md:table-cell">
                     A lixeira está vazia.
                   </td>
                 </tr>

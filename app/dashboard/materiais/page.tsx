@@ -149,9 +149,9 @@ export default async function MateriaisPage() {
             </p>
           </div>
 
-          <div className="overflow-x-auto">
-            <table className="w-full min-w-[900px] text-left text-sm">
-              <thead className="bg-brand-gray-100 text-[11px] uppercase tracking-[0.12em] text-brand-gray-500">
+          <div className="md:overflow-x-auto">
+            <table className="block w-full text-left text-sm md:table md:min-w-[900px]">
+              <thead className="hidden bg-brand-gray-100 text-[11px] uppercase tracking-[0.12em] text-brand-gray-500 md:table-header-group">
                 <tr>
                   <th className="px-5 py-3 font-extrabold">Tipo</th>
                   <th className="px-5 py-3 font-extrabold">Material</th>
@@ -161,15 +161,18 @@ export default async function MateriaisPage() {
                   <th className="px-5 py-3 text-right font-extrabold">Ação</th>
                 </tr>
               </thead>
-              <tbody className="divide-y divide-brand-gray-300/40">
+              <tbody className="block divide-y-0 md:table-row-group md:divide-y md:divide-brand-gray-300/40">
                 {lista.map((material) => (
-                  <tr key={material.id} className="align-middle hover:bg-brand-gray-100/55">
-                    <td className="px-5 py-4">
+                  <tr
+                    key={material.id}
+                    className="mb-3 block rounded-card border border-brand-gray-300/60 bg-white p-4 shadow-card last:mb-0 md:mb-0 md:table-row md:rounded-none md:border-0 md:bg-transparent md:p-0 md:shadow-none md:align-middle md:hover:bg-brand-gray-100/55"
+                  >
+                    <td className="mb-2 block w-full md:mb-0 md:table-cell md:px-5 md:py-4">
                       <span className="inline-flex rounded-full bg-brand-red/10 px-3 py-1 text-xs font-bold text-brand-red">
                         {inferirTipo(material.nome)}
                       </span>
                     </td>
-                    <td className="px-5 py-4">
+                    <td className="mb-2 block w-full md:mb-0 md:table-cell md:px-5 md:py-4">
                       <Link
                         href={`/dashboard/despesas?material=${material.id}`}
                         className="font-semibold text-brand-black hover:text-brand-red hover:underline"
@@ -178,19 +181,28 @@ export default async function MateriaisPage() {
                         {material.nome}
                       </Link>
                     </td>
-                    <td className="px-5 py-4">
+                    <td className="mb-2 block w-full md:mb-0 md:table-cell md:px-5 md:py-4">
+                      <span className="mr-1.5 text-[10px] font-bold uppercase tracking-[0.06em] text-brand-gray-400 md:hidden">
+                        Categoria:
+                      </span>
                       <span className="text-brand-gray-700">
                         {(material.categorias as unknown as { nome: string } | null)?.nome ??
                           "Sem categoria"}
                       </span>
                     </td>
-                    <td className="px-5 py-4">
+                    <td className="mb-2 block w-full md:mb-0 md:table-cell md:px-5 md:py-4">
+                      <span className="mr-1.5 text-[10px] font-bold uppercase tracking-[0.06em] text-brand-gray-400 md:hidden">
+                        Uso:
+                      </span>
                       <Badge>{usoPorMaterial.get(material.id) ?? 0}</Badge>
                     </td>
-                    <td className="px-5 py-4 text-brand-gray-500">
+                    <td className="mb-3 block w-full text-xs text-brand-gray-500 md:mb-0 md:table-cell md:px-5 md:py-4 md:text-sm">
+                      <span className="mr-1.5 text-[10px] font-bold uppercase tracking-[0.06em] text-brand-gray-400 md:hidden">
+                        Criado em:
+                      </span>
                       {new Date(material.created_at).toLocaleDateString("pt-BR")}
                     </td>
-                  <td className="px-5 py-4 text-right">
+                  <td className="block w-full border-t border-brand-gray-300/60 pt-3 text-right md:table-cell md:border-0 md:px-5 md:py-4">
                       <div className="flex items-center justify-end gap-2">
                         {(() => {
                           const precos = precosPorMaterial.get(material.id) ?? [];
@@ -223,9 +235,9 @@ export default async function MateriaisPage() {
                                     fornecedorNome: p.fornecedorNome,
                                   }))}
                                 />
-                                <div className="overflow-x-auto rounded-card border border-brand-gray-300/70">
-                                  <table className="w-full min-w-[480px] text-left text-sm">
-                                    <thead className="bg-brand-gray-100 text-[11px] uppercase tracking-[0.12em] text-brand-gray-500">
+                                <div className="flex flex-col gap-2 sm:overflow-x-auto sm:rounded-card sm:border sm:border-brand-gray-300/70 sm:gap-0">
+                                  <table className="block w-full text-left text-sm sm:table sm:min-w-[480px]">
+                                    <thead className="hidden bg-brand-gray-100 text-[11px] uppercase tracking-[0.12em] text-brand-gray-500 sm:table-header-group">
                                       <tr>
                                         <th className="px-4 py-2 font-extrabold">Data</th>
                                         <th className="px-4 py-2 font-extrabold">Fornecedor</th>
@@ -233,13 +245,22 @@ export default async function MateriaisPage() {
                                         <th className="px-4 py-2 text-right font-extrabold">Valor unitário</th>
                                       </tr>
                                     </thead>
-                                    <tbody className="divide-y divide-brand-gray-300/40">
+                                    <tbody className="block divide-y-0 sm:table-row-group sm:divide-y sm:divide-brand-gray-300/40">
                                       {[...precos].reverse().map((p, indice) => (
-                                        <tr key={indice}>
-                                          <td className="px-4 py-2 text-brand-gray-700">{formatDataCurta(p.data)}</td>
-                                          <td className="px-4 py-2 text-brand-gray-700">{p.fornecedorNome}</td>
-                                          <td className="px-4 py-2 text-right text-brand-gray-700">{p.quantidade ?? "-"}</td>
-                                          <td className="px-4 py-2 text-right font-semibold text-brand-black">
+                                        <tr
+                                          key={indice}
+                                          className="mb-2 flex flex-wrap items-center justify-between gap-x-3 gap-y-1 rounded-brand-sm border border-brand-gray-300/60 px-3 py-2 last:mb-0 sm:mb-0 sm:table-row sm:flex-none sm:rounded-none sm:border-0 sm:px-0 sm:py-0"
+                                        >
+                                          <td className="order-1 block text-brand-gray-700 sm:table-cell sm:px-4 sm:py-2">
+                                            {formatDataCurta(p.data)}
+                                          </td>
+                                          <td className="order-3 block w-full text-xs text-brand-gray-500 sm:order-none sm:w-auto sm:table-cell sm:px-4 sm:py-2 sm:text-sm sm:text-brand-gray-700">
+                                            {p.fornecedorNome}
+                                          </td>
+                                          <td className="order-2 block text-right text-brand-gray-700 sm:table-cell sm:px-4 sm:py-2">
+                                            {p.quantidade ?? "-"}
+                                          </td>
+                                          <td className="order-2 block text-right font-semibold text-brand-black sm:table-cell sm:px-4 sm:py-2">
                                             {formatBRL(p.valorUnitario)}
                                           </td>
                                         </tr>
@@ -303,8 +324,8 @@ export default async function MateriaisPage() {
                 ))}
 
                 {lista.length === 0 && (
-                  <tr>
-                    <td colSpan={6} className="px-5 py-10 text-center text-brand-gray-500">
+                  <tr className="block md:table-row">
+                    <td colSpan={6} className="block px-5 py-10 text-center text-brand-gray-500 md:table-cell">
                       Nenhum material cadastrado ainda.
                     </td>
                   </tr>

@@ -123,7 +123,7 @@ export default async function FornecedoresPage() {
                 className="rounded-brand-sm border border-brand-gray-300 bg-white px-3 py-2 text-sm outline-none focus:border-brand-red"
               />
             </label>
-            <div className="grid grid-cols-2 gap-4">
+            <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
               <label className="flex flex-col gap-1 text-sm text-brand-gray-700">
                 CNPJ
                 <input
@@ -164,9 +164,9 @@ export default async function FornecedoresPage() {
           </p>
         </div>
 
-        <div className="overflow-x-auto">
-          <table className="w-full min-w-[860px] text-left text-sm">
-            <thead className="bg-brand-gray-100 text-[11px] uppercase tracking-[0.12em] text-brand-gray-500">
+        <div className="md:overflow-x-auto">
+          <table className="block w-full text-left text-sm md:table md:min-w-[860px]">
+            <thead className="hidden bg-brand-gray-100 text-[11px] uppercase tracking-[0.12em] text-brand-gray-500 md:table-header-group">
               <tr>
                 <th className="px-5 py-3 font-extrabold">Fornecedor</th>
                 <th className="px-5 py-3 font-extrabold">Contato</th>
@@ -176,12 +176,15 @@ export default async function FornecedoresPage() {
                 <th className="px-5 py-3 text-right font-extrabold">Ação</th>
               </tr>
             </thead>
-            <tbody className="divide-y divide-brand-gray-300/40">
+            <tbody className="block divide-y-0 md:table-row-group md:divide-y md:divide-brand-gray-300/40">
               {lista.map((fornecedor) => {
                 const uso = usoPorFornecedor.get(fornecedor.id);
                 return (
-                  <tr key={fornecedor.id} className="align-middle hover:bg-brand-gray-100/55">
-                    <td className="px-5 py-4">
+                  <tr
+                    key={fornecedor.id}
+                    className="mb-3 block rounded-card border border-brand-gray-300/60 bg-white p-4 shadow-card last:mb-0 md:mb-0 md:table-row md:rounded-none md:border-0 md:bg-transparent md:p-0 md:shadow-none md:align-middle md:hover:bg-brand-gray-100/55"
+                  >
+                    <td className="mb-1.5 block w-full md:mb-0 md:table-cell md:px-5 md:py-4">
                       <Link
                         href={`/dashboard/despesas?fornecedor=${fornecedor.id}`}
                         className="font-semibold text-brand-black hover:text-brand-red hover:underline"
@@ -190,19 +193,28 @@ export default async function FornecedoresPage() {
                         {fornecedor.nome}
                       </Link>
                     </td>
-                    <td className="px-5 py-4 text-brand-gray-700">
+                    <td className="mb-1 block w-full text-xs text-brand-gray-700 md:mb-0 md:table-cell md:px-5 md:py-4 md:text-sm">
                       {fornecedor.contato || "—"}
                     </td>
-                    <td className="px-5 py-4 text-brand-gray-700">
+                    <td className="mb-2 block w-full text-xs text-brand-gray-700 md:mb-0 md:table-cell md:px-5 md:py-4 md:text-sm">
+                      <span className="mr-1.5 text-[10px] font-bold uppercase tracking-[0.06em] text-brand-gray-400 md:hidden">
+                        CNPJ:
+                      </span>
                       {fornecedor.cnpj || "—"}
                     </td>
-                    <td className="px-5 py-4">
+                    <td className="mb-2 block w-full md:mb-0 md:table-cell md:px-5 md:py-4">
+                      <span className="mr-1.5 text-[10px] font-bold uppercase tracking-[0.06em] text-brand-gray-400 md:hidden">
+                        Uso:
+                      </span>
                       <Badge>{uso?.lancamentos ?? 0}</Badge>
                     </td>
-                    <td className="px-5 py-4 text-brand-gray-500">
+                    <td className="mb-3 block w-full text-xs text-brand-gray-500 md:mb-0 md:table-cell md:px-5 md:py-4 md:text-sm">
+                      <span className="mr-1.5 text-[10px] font-bold uppercase tracking-[0.06em] text-brand-gray-400 md:hidden">
+                        Cadastrado:
+                      </span>
                       {new Date(fornecedor.created_at).toLocaleDateString("pt-BR")}
                     </td>
-                    <td className="px-5 py-4 text-right">
+                    <td className="block w-full border-t border-brand-gray-300/60 pt-3 text-right md:table-cell md:border-0 md:px-5 md:py-4">
                       <div className="flex items-center justify-end gap-2">
                         <CadastroModal
                           titulo="Editar fornecedor"
@@ -230,7 +242,7 @@ export default async function FornecedoresPage() {
                                 className="rounded-brand-sm border border-brand-gray-300 bg-white px-3 py-2 text-sm outline-none focus:border-brand-red"
                               />
                             </label>
-                            <div className="grid grid-cols-2 gap-4">
+                            <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
                               <label className="flex flex-col gap-1 text-sm text-brand-gray-700">
                                 CNPJ
                                 <input
@@ -256,7 +268,7 @@ export default async function FornecedoresPage() {
                                 className="rounded-brand-sm border border-brand-gray-300 bg-white px-3 py-2 text-sm outline-none focus:border-brand-red"
                               />
                             </label>
-                            <div className="grid grid-cols-3 gap-4">
+                            <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
                               <label className="flex flex-col gap-1 text-sm text-brand-gray-700">
                                 Banco
                                 <input
@@ -302,8 +314,8 @@ export default async function FornecedoresPage() {
               })}
 
               {lista.length === 0 && (
-                <tr>
-                  <td colSpan={6} className="px-5 py-10 text-center text-brand-gray-500">
+                <tr className="block md:table-row">
+                  <td colSpan={6} className="block px-5 py-10 text-center text-brand-gray-500 md:table-cell">
                     Nenhum fornecedor cadastrado ainda.
                   </td>
                 </tr>

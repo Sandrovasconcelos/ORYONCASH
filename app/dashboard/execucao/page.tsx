@@ -231,8 +231,8 @@ export default async function ExecucaoPage({
 
                 return (
                   <tr key={etapa.id}>
-                    <td className="font-semibold text-brand-black">{etapa.nome}</td>
-                    <td className="text-brand-gray-700">
+                    <td data-th="Etapa" className="font-semibold text-brand-black">{etapa.nome}</td>
+                    <td data-th="Fornecedor" className="text-brand-gray-700">
                       <p>{etapa.fornecedor_id ? nomesFornecedor.get(etapa.fornecedor_id) ?? "—" : "—"}</p>
                       {contrato && (
                         <p className="mt-1 text-[11px] font-bold text-brand-red">
@@ -240,7 +240,7 @@ export default async function ExecucaoPage({
                         </p>
                       )}
                     </td>
-                    <td className="text-brand-gray-700">
+                    <td data-th="Progresso" className="text-brand-gray-700">
                       <div className="flex items-center gap-2">
                         <div className="h-2 w-16 overflow-hidden rounded-full bg-brand-gray-100">
                           <div
@@ -256,8 +256,8 @@ export default async function ExecucaoPage({
                         </p>
                       )}
                     </td>
-                    <td className="text-right font-extrabold text-brand-black">{formatBRL(pago)}</td>
-                    <td>
+                    <td data-th="Pago" className="text-right font-extrabold text-brand-black">{formatBRL(pago)}</td>
+                    <td className="oc-td-acoes">
                       <div className="flex items-center justify-end">
                         <CadastroModal
                           titulo={etapa.nome}

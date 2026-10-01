@@ -139,8 +139,8 @@ export default async function ConciliacaoPage() {
               const statusInfo = STATUS_LABEL[extrato.status] ?? STATUS_LABEL.processando;
               const conta = (extrato as { contas_bancarias?: { nome: string } | null }).contas_bancarias;
               return (
-                <li key={extrato.id} className="flex items-center justify-between gap-3 px-5 py-3">
-                  <Link href={`/dashboard/conciliacao/${extrato.id}`} className="min-w-0 flex-1">
+                <li key={extrato.id} className="flex flex-wrap items-center justify-between gap-x-3 gap-y-2 px-5 py-3 sm:flex-nowrap">
+                  <Link href={`/dashboard/conciliacao/${extrato.id}`} className="min-w-0 basis-full flex-1 sm:basis-auto">
                     <p className="truncate text-sm font-bold text-brand-black">
                       {conta?.nome ?? "Conta não informada"}
                       {extrato.periodo_inicio && extrato.periodo_fim && (

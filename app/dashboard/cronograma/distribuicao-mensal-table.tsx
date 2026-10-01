@@ -113,7 +113,7 @@ export function DistribuicaoMensalTable({
 
       <div className="oc-table-wrap">
         <div className="overflow-x-auto">
-          <table className="oc-table w-full text-sm">
+          <table className="oc-table oc-table-matrix w-full text-sm">
             <thead>
               <tr>
                 <th className="sticky left-0 z-10 min-w-[200px] bg-brand-gray-100">Etapa da obra</th>

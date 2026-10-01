@@ -104,9 +104,9 @@ export default async function CategoriasPage() {
           </p>
         </div>
 
-        <div className="overflow-x-auto">
-          <table className="w-full min-w-[760px] text-left text-sm">
-            <thead className="bg-brand-gray-100 text-[11px] uppercase tracking-[0.12em] text-brand-gray-500">
+        <div className="md:overflow-x-auto">
+          <table className="block w-full text-left text-sm md:table md:min-w-[760px]">
+            <thead className="hidden bg-brand-gray-100 text-[11px] uppercase tracking-[0.12em] text-brand-gray-500 md:table-header-group">
               <tr>
                 <th className="px-5 py-3 font-extrabold">Categoria</th>
                 <th className="px-5 py-3 font-extrabold">Pede etapa?</th>
@@ -116,10 +116,13 @@ export default async function CategoriasPage() {
                 <th className="px-5 py-3 text-right font-extrabold">Ação</th>
               </tr>
             </thead>
-            <tbody className="divide-y divide-brand-gray-300/40">
+            <tbody className="block divide-y-0 md:table-row-group md:divide-y md:divide-brand-gray-300/40">
               {lista.map((categoria) => (
-                <tr key={categoria.id} className="align-middle hover:bg-brand-gray-100/55">
-                  <td className="px-5 py-4">
+                <tr
+                  key={categoria.id}
+                  className="mb-3 block rounded-card border border-brand-gray-300/60 bg-white p-4 shadow-card last:mb-0 md:mb-0 md:table-row md:rounded-none md:border-0 md:bg-transparent md:p-0 md:shadow-none md:align-middle md:hover:bg-brand-gray-100/55"
+                >
+                  <td className="block w-full pb-2 md:table-cell md:px-5 md:py-4 md:pb-4">
                     <Link
                       href={`/dashboard/despesas?categoria=${categoria.id}`}
                       className="font-semibold text-brand-black hover:text-brand-red hover:underline"
@@ -128,7 +131,10 @@ export default async function CategoriasPage() {
                       {categoria.nome}
                     </Link>
                   </td>
-                  <td className="px-5 py-4">
+                  <td className="mb-2 block w-full md:mb-0 md:table-cell md:px-5 md:py-4">
+                    <span className="mr-1.5 text-[10px] font-bold uppercase tracking-[0.06em] text-brand-gray-400 md:hidden">
+                      Pede etapa?
+                    </span>
                     {categoria.usa_etapa ? (
                       <span className="inline-flex rounded-full bg-[#e9f8f0] px-3 py-1 text-xs font-bold text-status-success">
                         Sim
@@ -139,16 +145,30 @@ export default async function CategoriasPage() {
                       </span>
                     )}
                   </td>
-                  <td className="px-5 py-4">
-                    <Badge>{materiaisPorCategoria.get(categoria.id) ?? 0}</Badge>
+                  <td className="mb-2 flex w-full items-center gap-3 md:mb-0 md:table-cell md:px-5 md:py-4">
+                    <span className="flex items-center gap-1.5 text-xs text-brand-gray-500 md:block">
+                      <span className="text-[10px] font-bold uppercase tracking-[0.06em] text-brand-gray-400 md:hidden">
+                        Materiais
+                      </span>
+                      <Badge>{materiaisPorCategoria.get(categoria.id) ?? 0}</Badge>
+                    </span>
+                    <span className="flex items-center gap-1.5 text-xs text-brand-gray-500 md:hidden">
+                      <span className="text-[10px] font-bold uppercase tracking-[0.06em] text-brand-gray-400">
+                        Lançamentos
+                      </span>
+                      <Badge>{lancamentosPorCategoria.get(categoria.id) ?? 0}</Badge>
+                    </span>
                   </td>
-                  <td className="px-5 py-4">
+                  <td className="hidden md:table-cell md:px-5 md:py-4">
                     <Badge>{lancamentosPorCategoria.get(categoria.id) ?? 0}</Badge>
                   </td>
-                  <td className="px-5 py-4 text-brand-gray-500">
+                  <td className="mb-3 block w-full text-xs text-brand-gray-500 md:mb-0 md:table-cell md:px-5 md:py-4 md:text-sm">
+                    <span className="mr-1.5 text-[10px] font-bold uppercase tracking-[0.06em] text-brand-gray-400 md:hidden">
+                      Criada em
+                    </span>
                     {new Date(categoria.created_at).toLocaleDateString("pt-BR")}
                   </td>
-                  <td className="px-5 py-4 text-right">
+                  <td className="block w-full border-t border-brand-gray-300/60 pt-3 text-right md:table-cell md:border-0 md:px-5 md:py-4">
                     <div className="flex items-center justify-end gap-2">
                       <CadastroModal
                         titulo="Editar categoria"
@@ -205,8 +225,8 @@ export default async function CategoriasPage() {
               ))}
 
               {lista.length === 0 && (
-                <tr>
-                  <td colSpan={6} className="px-5 py-10 text-center text-brand-gray-500">
+                <tr className="block md:table-row">
+                  <td colSpan={6} className="block px-5 py-10 text-center text-brand-gray-500 md:table-cell">
                     Nenhuma categoria cadastrada ainda.
                   </td>
                 </tr>

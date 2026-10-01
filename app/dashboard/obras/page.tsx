@@ -189,9 +189,9 @@ export default async function ObrasPage() {
             </p>
           </div>
 
-          <div className="overflow-x-auto">
-            <table className="w-full min-w-[860px] text-left text-sm">
-              <thead className="bg-brand-gray-100 text-[11px] uppercase tracking-[0.12em] text-brand-gray-500">
+          <div className="md:overflow-x-auto">
+            <table className="block w-full text-left text-sm md:table md:min-w-[860px]">
+              <thead className="hidden bg-brand-gray-100 text-[11px] uppercase tracking-[0.12em] text-brand-gray-500 md:table-header-group">
                 <tr>
                   <th className="px-5 py-3 font-extrabold">Obra</th>
                   <th className="px-5 py-3 font-extrabold">Orçamento</th>
@@ -201,7 +201,7 @@ export default async function ObrasPage() {
                   <th className="px-5 py-3 text-right font-extrabold">Ações</th>
                 </tr>
               </thead>
-              <tbody className="divide-y divide-brand-gray-300/40">
+              <tbody className="block divide-y-0 md:table-row-group md:divide-y md:divide-brand-gray-300/40">
                 {lista.map((obra) => {
                   const gasto = gastoPorObra.get(obra.id) ?? 0;
                   const percentual =
@@ -210,8 +210,11 @@ export default async function ObrasPage() {
                       : 0;
 
                   return (
-                    <tr key={obra.id} className="align-middle hover:bg-brand-gray-100/55">
-                      <td className="px-5 py-4">
+                    <tr
+                      key={obra.id}
+                      className="mb-3 block rounded-card border border-brand-gray-300/60 bg-white p-4 shadow-card last:mb-0 md:mb-0 md:table-row md:rounded-none md:border-0 md:bg-transparent md:p-0 md:shadow-none md:align-middle md:hover:bg-brand-gray-100/55"
+                    >
+                      <td className="mb-2 block w-full md:mb-0 md:table-cell md:px-5 md:py-4">
                         <Link
                           href={`/dashboard/despesas?obra=${obra.id}`}
                           className="group inline-block"
@@ -225,11 +228,17 @@ export default async function ObrasPage() {
                           </p>
                         </Link>
                       </td>
-                      <td className="px-5 py-4 text-brand-gray-700">
+                      <td className="mb-2 block w-full text-sm text-brand-gray-700 md:mb-0 md:table-cell md:px-5 md:py-4">
+                        <span className="mr-1.5 text-[10px] font-bold uppercase tracking-[0.06em] text-brand-gray-400 md:hidden">
+                          Orçamento:
+                        </span>
                         {formatBRL(obra.orcamento_total)}
                       </td>
-                      <td className="px-5 py-4">
-                        <p className="font-semibold text-brand-black">{formatBRL(gasto)}</p>
+                      <td className="mb-2 block w-full md:mb-0 md:table-cell md:px-5 md:py-4">
+                        <span className="mr-1.5 text-[10px] font-bold uppercase tracking-[0.06em] text-brand-gray-400 md:hidden">
+                          Gasto:
+                        </span>
+                        <p className="inline font-semibold text-brand-black md:block">{formatBRL(gasto)}</p>
                         <div className="mt-2 h-1.5 overflow-hidden rounded-full bg-brand-gray-300">
                           <span
                             className="block h-full rounded-full bg-brand-red"
@@ -237,17 +246,20 @@ export default async function ObrasPage() {
                           />
                         </div>
                       </td>
-                      <td className="px-5 py-4">
+                      <td className="mb-2 flex w-full items-center gap-1.5 md:mb-0 md:table-cell md:px-5 md:py-4">
+                        <span className="text-[10px] font-bold uppercase tracking-[0.06em] text-brand-gray-400 md:hidden">
+                          Etapas:
+                        </span>
                         <span className="inline-flex min-w-10 justify-center rounded-full bg-brand-gray-100 px-3 py-1 text-xs font-bold text-brand-gray-700">
                           {etapasPorObra.get(obra.id) ?? 0}
                         </span>
                       </td>
-                      <td className="px-5 py-4">
+                      <td className="mb-3 block w-full md:mb-0 md:table-cell md:px-5 md:py-4">
                         <span className="rounded-full bg-brand-gray-100 px-3 py-1 text-xs font-semibold capitalize text-brand-gray-700">
                           {obra.status}
                         </span>
                       </td>
-                      <td className="px-5 py-4 text-right">
+                      <td className="block w-full border-t border-brand-gray-300/60 pt-3 text-right md:table-cell md:border-0 md:px-5 md:py-4">
                         <div className="flex items-center justify-end gap-2 whitespace-nowrap">
                           <CadastroModal
                             titulo="Editar obra"
@@ -358,15 +370,15 @@ export default async function ObrasPage() {
                                       .filter((etapa) => etapa.obra_id === obra.id)
                                       .map((etapa) => (
                                         <tr key={etapa.id}>
-                                          <td className="text-brand-gray-500">{etapa.ordem}</td>
-                                          <td>
+                                          <td data-th="Ordem" className="text-brand-gray-500">{etapa.ordem}</td>
+                                          <td data-th="Etapa">
                                             <p className="font-semibold text-brand-black">{etapa.nome}</p>
                                           </td>
-                                          <td>{formatBRL(Number(etapa.valor_orcado ?? 0))}</td>
-                                          <td>
+                                          <td data-th="Orçado">{formatBRL(Number(etapa.valor_orcado ?? 0))}</td>
+                                          <td data-th="Uso">
                                             <span className="oc-badge">{usoPorEtapa.get(etapa.id) ?? 0}</span>
                                           </td>
-                                          <td>
+                                          <td className="oc-td-acoes">
                                             <div className="flex items-center justify-end gap-2">
                                               <CadastroModal
                                                 titulo="Editar etapa"
@@ -468,8 +480,8 @@ export default async function ObrasPage() {
                   );
                 })}
                 {lista.length === 0 && (
-                  <tr>
-                    <td colSpan={6} className="px-5 py-10 text-center text-brand-gray-500">
+                  <tr className="block md:table-row">
+                    <td colSpan={6} className="block px-5 py-10 text-center text-brand-gray-500 md:table-cell">
                       Nenhuma obra cadastrada ainda.
                     </td>
                   </tr>
@@ -517,14 +529,14 @@ export default async function ObrasPage() {
             <tbody>
               {lixeira.map((obra) => (
                 <tr key={obra.id}>
-                  <td>
+                  <td data-th="Obra">
                     <p className="font-semibold text-brand-black">{obra.nome}</p>
                     <p className="mt-1 text-xs text-brand-gray-500">
                       Por {obra.deleted_by ?? "usuário do dashboard"}
                     </p>
                   </td>
-                  <td>{formatBRL(Number(obra.orcamento_total ?? 0))}</td>
-                  <td className="text-brand-gray-500">
+                  <td data-th="Orçamento">{formatBRL(Number(obra.orcamento_total ?? 0))}</td>
+                  <td data-th="Apagada em" className="text-brand-gray-500">
                     {obra.deleted_at
                       ? new Date(obra.deleted_at).toLocaleString("pt-BR", {
                           day: "2-digit",
@@ -535,10 +547,10 @@ export default async function ObrasPage() {
                         })
                       : "-"}
                   </td>
-                  <td className="max-w-[260px] truncate text-brand-gray-500">
+                  <td data-th="Motivo" className="break-words text-brand-gray-500 md:max-w-[260px] md:truncate">
                     {obra.deleted_reason ?? "Sem motivo informado"}
                   </td>
-                  <td>
+                  <td className="oc-td-acoes">
                     <div className="flex items-center justify-end gap-2 whitespace-nowrap">
                       <RestoreObraButton id={obra.id} action={restoreObraFromTrashAction} />
                       <PermanentlyDeleteObraButton

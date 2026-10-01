@@ -96,7 +96,7 @@ export function CalendarioGrid({
         ))}
       </div>
 
-      <div className="mt-1.5 grid grid-cols-7 gap-1.5">
+      <div className="mt-1.5 grid grid-cols-7 gap-1 sm:gap-1.5">
         {celulas.map((celula, index) => {
           if (!celula) return <div key={`vazio-${index}`} />;
 
@@ -115,32 +115,37 @@ export function CalendarioGrid({
                 type="button"
                 onClick={() => temGasto && setDiaSelecionado(celula.dataISO)}
                 disabled={!temGasto}
-                className={`flex aspect-square w-full flex-col justify-between rounded-brand-sm border p-2 text-left transition hover:brightness-95 disabled:cursor-default ${
+                aria-label={
+                  temGasto
+                    ? `${celula.dia}: ${formatBRL(totalDia)} em ${lancamentosDia.length} lançamento(s)`
+                    : `${celula.dia}: sem gastos`
+                }
+                className={`flex aspect-square w-full flex-col justify-between overflow-hidden rounded-brand-sm border p-1 text-left transition hover:brightness-95 disabled:cursor-default sm:p-2 ${
                   isHoje ? "border-brand-black" : "border-black/5"
                 }`}
                 style={temGasto ? { backgroundColor: corIntensidade(intensidade) } : undefined}
               >
-                <span className="flex items-center justify-between">
+                <span className="flex items-center justify-between gap-0.5">
                   <span
-                    className={`text-xs font-bold ${temGasto ? "text-white drop-shadow-sm" : "text-brand-gray-600"}`}
+                    className={`text-[10px] font-bold sm:text-xs ${temGasto ? "text-white drop-shadow-sm" : "text-brand-gray-600"}`}
                   >
                     {celula.dia}
                   </span>
                   {lancamentosDia.length > 1 && (
-                    <span className="rounded-full bg-black/20 px-1.5 py-0.5 text-[9px] font-extrabold text-white">
+                    <span className="hidden shrink-0 rounded-full bg-black/20 px-1.5 py-0.5 text-[9px] font-extrabold text-white sm:inline-block">
                       {lancamentosDia.length}
                     </span>
                   )}
                 </span>
                 {temGasto && (
-                  <span className="text-right text-[10px] font-extrabold leading-tight text-white drop-shadow-sm">
+                  <span className="hidden truncate text-right text-[10px] font-extrabold leading-tight text-white drop-shadow-sm sm:block">
                     {formatBRL(totalDia)}
                   </span>
                 )}
               </button>
 
               {temGasto && (
-                <div className="pointer-events-none absolute left-1/2 top-full z-20 mt-1.5 w-56 -translate-x-1/2 rounded-brand-sm border border-brand-gray-300/60 bg-white p-3 text-left opacity-0 shadow-brand-md transition-opacity duration-150 group-hover:opacity-100">
+                <div className="pointer-events-none absolute left-1/2 top-full z-20 mt-1.5 hidden w-56 -translate-x-1/2 rounded-brand-sm border border-brand-gray-300/60 bg-white p-3 text-left opacity-0 shadow-brand-md transition-opacity duration-150 group-hover:opacity-100 sm:block">
                   <p className="text-[10px] font-extrabold uppercase tracking-[0.06em] text-brand-gray-500">
                     {formatDataBR(celula.dataISO)} · {formatBRL(totalDia)}
                   </p>

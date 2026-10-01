@@ -174,9 +174,9 @@ export default async function ConciliacaoDetalhePage({
       )}
 
       {transacoesVisiveis.length > 0 && (
-        <div className="overflow-hidden rounded-card border border-black/5 bg-white shadow-card">
-          <table className="w-full text-sm">
-            <thead className="bg-brand-gray-100 text-left text-[11px] font-bold uppercase tracking-wide text-brand-gray-500">
+        <div className="md:overflow-hidden rounded-card border border-black/5 bg-white shadow-card">
+          <table className="block w-full text-sm md:table">
+            <thead className="hidden bg-brand-gray-100 text-left text-[11px] font-bold uppercase tracking-wide text-brand-gray-500 md:table-header-group">
               <tr>
                 <th className="px-4 py-3">Data</th>
                 <th className="px-4 py-3">Descrição</th>
@@ -186,7 +186,7 @@ export default async function ConciliacaoDetalhePage({
                 <th className="px-4 py-3 text-right">Ações</th>
               </tr>
             </thead>
-            <tbody className="divide-y divide-black/5">
+            <tbody className="block divide-y-0 md:table-row-group md:divide-y md:divide-black/5">
               {transacoesVisiveis.map((t) => {
                 const statusInfo = STATUS_LABEL[t.status] ?? STATUS_LABEL.pendente;
                 const despesa = (
@@ -203,22 +203,29 @@ export default async function ConciliacaoDetalhePage({
                 ).despesas;
 
                 return (
-                  <tr key={t.id} className="align-top">
-                    <td className="whitespace-nowrap px-4 py-3 text-brand-gray-600">{formatDataBrasil(t.data)}</td>
-                    <td className="px-4 py-3 text-brand-black">{t.descricao ?? "—"}</td>
+                  <tr
+                    key={t.id}
+                    className="mb-3 block rounded-card border border-black/5 p-4 shadow-sm last:mb-0 md:mb-0 md:table-row md:rounded-none md:border-0 md:p-0 md:shadow-none md:align-top"
+                  >
+                    <td className="mb-1 block w-full text-xs text-brand-gray-600 md:mb-0 md:table-cell md:whitespace-nowrap md:px-4 md:py-3 md:text-sm">
+                      {formatDataBrasil(t.data)}
+                    </td>
+                    <td className="mb-1 block w-full text-brand-black md:mb-0 md:table-cell md:px-4 md:py-3">
+                      {t.descricao ?? "—"}
+                    </td>
                     <td
-                      className={`whitespace-nowrap px-4 py-3 text-right font-bold ${
+                      className={`mb-2 block w-full font-bold md:mb-0 md:table-cell md:whitespace-nowrap md:px-4 md:py-3 md:text-right ${
                         t.tipo === "credito" ? "text-status-success" : "text-brand-black"
                       }`}
                     >
                       {t.tipo === "credito" ? "+" : "-"} {formatBRL(t.valor)}
                     </td>
-                    <td className="whitespace-nowrap px-4 py-3">
+                    <td className="mb-2 block w-full md:mb-0 md:table-cell md:whitespace-nowrap md:px-4 md:py-3">
                       <span className={`rounded-full px-2.5 py-1 text-[11px] font-bold ${statusInfo.classe}`}>
                         {statusInfo.texto}
                       </span>
                     </td>
-                    <td className="px-4 py-3 text-xs text-brand-gray-600">
+                    <td className="mb-2 block w-full border-t border-black/5 pt-2 text-xs text-brand-gray-600 md:mb-0 md:border-0 md:pt-0 md:table-cell md:px-4 md:py-3">
                       {despesa ? (
                         <>
                           <p className="font-semibold text-brand-black">
@@ -241,7 +248,7 @@ export default async function ConciliacaoDetalhePage({
                             {vinculosPorValor.get(t.id)!.despesaData.split("-").reverse().join("/")} · {formatBRL(vinculosPorValor.get(t.id)!.despesaValor)}{vinculosPorValor.get(t.id)!.itens > 1 ? ` · nota com ${vinculosPorValor.get(t.id)!.itens} itens` : ""}
                             {vinculosPorValor.get(t.id)!.despesaDescricao ? ` · ${vinculosPorValor.get(t.id)!.despesaDescricao}` : ""}
                           </p>
-                          <div className="flex gap-3">
+                          <div className="flex flex-wrap gap-x-3 gap-y-1">
                             {["sim", "nao"].map((ajustar) => (
                               <form key={ajustar} action={aceitarVinculoAction}>
                                 <input type="hidden" name="transacao_id" value={t.id} />
@@ -259,7 +266,7 @@ export default async function ConciliacaoDetalhePage({
                         "—"
                       )}
                     </td>
-                    <td className="whitespace-nowrap px-4 py-3 text-right">
+                    <td className="block w-full border-t border-black/5 pt-2 text-right md:table-cell md:whitespace-nowrap md:border-0 md:px-4 md:py-3 md:pt-0">
                       {t.status === "conciliado" ? (
                         <form action={desvincularTransacaoAction}>
                           <input type="hidden" name="transacao_id" value={t.id} />

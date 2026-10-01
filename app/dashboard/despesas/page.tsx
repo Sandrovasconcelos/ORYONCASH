@@ -474,7 +474,7 @@ export default async function DespesasPage({
               Visualize, filtre, edite e gere relatório das despesas registradas.
             </p>
           </div>
-          <div className="flex items-center gap-3">
+          <div className="flex flex-wrap items-center gap-2 sm:flex-nowrap sm:gap-3">
             <div className="rounded-brand-sm bg-brand-gray-100 px-4 py-2 text-right">
               <p className="text-[10px] font-extrabold uppercase tracking-[0.12em] text-brand-gray-500">
                 Total filtrado
@@ -734,9 +734,9 @@ export default async function DespesasPage({
         </div>
       )}
 
-      <div className="overflow-hidden overflow-x-auto rounded-card border border-brand-gray-300/60 bg-white shadow-card">
-        <table className="w-full min-w-[760px] text-left text-sm">
-          <thead className="bg-brand-gray-100 text-[11px] uppercase tracking-[0.12em] text-brand-gray-500">
+      <div className="md:overflow-hidden md:overflow-x-auto md:rounded-card md:border md:border-brand-gray-300/60 md:bg-white md:shadow-card">
+        <table className="block w-full text-left text-sm md:table md:min-w-[760px]">
+          <thead className="hidden bg-brand-gray-100 text-[11px] uppercase tracking-[0.12em] text-brand-gray-500 md:table-header-group">
             <tr>
               <th className="w-10 px-5 py-3">
                 <SelecionarTodosCheckbox ids={despesasPagina.map((d) => d.id)} />
@@ -748,7 +748,7 @@ export default async function DespesasPage({
               <th className="px-5 py-3 text-right font-extrabold">Ações</th>
             </tr>
           </thead>
-          <tbody className="divide-y divide-brand-gray-300/40">
+          <tbody className="block md:table-row-group md:divide-y md:divide-brand-gray-300/40">
             {despesasPagina.map((d) => {
               const obraNome = (d.obras as unknown as { nome: string } | null)?.nome ?? "-";
               const categoriaNome =
@@ -776,17 +776,21 @@ export default async function DespesasPage({
               const notaCompleta = notasCompletas.get(d.id);
 
               return (
-                <tr key={d.id} className="align-top hover:bg-brand-gray-100/60">
-                  <td className="px-5 py-4">
+                <tr
+                  key={d.id}
+                  className="relative mb-3 flex flex-wrap items-start gap-y-2 rounded-card border border-brand-gray-300/60 bg-white p-4 shadow-card last:mb-0 md:mb-0 md:table-row md:flex-none md:gap-0 md:rounded-none md:border-0 md:bg-transparent md:p-0 md:shadow-none md:align-top md:hover:bg-brand-gray-100/60"
+                  style={grupoNota ? { borderLeft: `4px solid ${grupoNota.cor}` } : undefined}
+                >
+                  <td className="absolute right-4 top-4 z-10 md:static md:table-cell md:w-10 md:px-5 md:py-4">
                     <DespesaCheckbox id={d.id} />
                   </td>
                   <td
-                    className="whitespace-nowrap px-5 py-4 font-semibold text-brand-black"
+                    className="order-2 block w-1/2 whitespace-nowrap pr-2 text-xs font-bold text-brand-gray-500 md:table-cell md:w-auto md:px-5 md:py-4 md:text-sm md:font-semibold md:text-brand-black"
                     style={grupoNota ? { boxShadow: `inset 4px 0 0 0 ${grupoNota.cor}` } : undefined}
                   >
                     {formatDataBR(d.data)}
                   </td>
-                  <td className="px-5 py-4">
+                  <td className="order-1 block w-full pb-3 pr-10 md:table-cell md:w-auto md:px-5 md:py-4 md:pr-5">
                     <OpenDespesaModalButton despesaId={d.id}>
                       <div className="flex items-start gap-3">
                         <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-brand-sm bg-brand-red/10 text-2xl leading-none">
@@ -809,11 +813,11 @@ export default async function DespesasPage({
                               <span className="text-[11px] text-brand-gray-500">{etapaNome}</span>
                             )}
                           </div>
-                          <p className="mt-1 max-w-[340px] truncate text-xs text-brand-gray-500">
+                          <p className="mt-1 break-words text-xs text-brand-gray-500 md:max-w-[340px] md:truncate">
                             {d.descricao ?? "Sem descrição"}
                           </p>
                           {(materialNome !== "-" || fornecedorNome !== "-") && (
-                            <p className="mt-1 max-w-[340px] truncate text-[11px] text-brand-gray-400">
+                            <p className="mt-1 break-words text-[11px] text-brand-gray-400 md:max-w-[340px] md:truncate">
                               {[materialNome, fornecedorNome].filter((v) => v !== "-").join(" · ")}
                             </p>
                           )}
@@ -852,12 +856,12 @@ export default async function DespesasPage({
                       </div>
                     </OpenDespesaModalButton>
                   </td>
-                  <td className="px-5 py-4 text-right">
-                    <p className="font-display text-lg font-bold text-brand-black">
+                  <td className="order-2 block w-1/2 text-right md:table-cell md:w-auto md:px-5 md:py-4">
+                    <p className="font-display text-base font-bold text-brand-black md:text-lg">
                       {formatBRL(d.valor)}
                     </p>
                   </td>
-                  <td className="px-5 py-4">
+                  <td className="order-3 block w-full pt-1 md:table-cell md:w-auto md:px-5 md:py-4">
                     <div className="flex flex-wrap items-center gap-2">
                       {documentosCobranca[0]?.url ? (
                         <Link
@@ -909,12 +913,12 @@ export default async function DespesasPage({
                       )}
                     </div>
                     {notaCompleta && comprovantesPagamento[0]?.url && (
-                      <p className="mt-1.5 max-w-[190px] text-[10px] leading-snug text-brand-gray-500">
+                      <p className="mt-1.5 text-[10px] leading-snug text-brand-gray-500 md:max-w-[190px]">
                         O comprovante cobre a nota inteira ({formatBRL(notaCompleta.total)}), não só este item.
                       </p>
                     )}
                   </td>
-                  <td className="px-5 py-4 text-right">
+                  <td className="order-4 block w-full border-t border-brand-gray-300/60 pt-3 text-right md:table-cell md:w-auto md:border-0 md:px-5 md:py-4">
                     <div className="flex items-center justify-end gap-2 whitespace-nowrap">
                       <CadastroModal
                         titulo="Editar lançamento"
@@ -1320,8 +1324,8 @@ export default async function DespesasPage({
             })}
 
             {despesas.length === 0 && (
-              <tr>
-                <td colSpan={11} className="px-5 py-10 text-center text-sm text-brand-gray-500">
+              <tr className="block md:table-row">
+                <td colSpan={11} className="block px-5 py-10 text-center text-sm text-brand-gray-500 md:table-cell">
                   Nenhum lançamento encontrado para os filtros atuais.
                 </td>
               </tr>

@@ -414,10 +414,10 @@ export default async function CronogramaPage({
                 const estourou = pago > contrato.valor_contrato;
                 return (
                   <tr key={contrato.id}>
-                    <td className="font-semibold text-brand-black">
+                    <td data-th="Fornecedor" className="font-semibold text-brand-black">
                       {nomesFornecedor.get(contrato.fornecedor_id) ?? "—"}
                     </td>
-                    <td className="text-brand-gray-700">
+                    <td data-th="Etapa" className="text-brand-gray-700">
                       {contrato.etapa_id ? (
                         nomesEtapa.get(contrato.etapa_id) ?? "—"
                       ) : (
@@ -426,11 +426,11 @@ export default async function CronogramaPage({
                         </span>
                       )}
                     </td>
-                    <td className="text-brand-gray-700">
+                    <td data-th="Categoria" className="text-brand-gray-700">
                       {contrato.categoria_id ? nomesCategoria.get(contrato.categoria_id) ?? "—" : "—"}
                     </td>
-                    <td className="text-brand-gray-700">{contrato.descricao || "—"}</td>
-                    <td>
+                    <td data-th="Descrição" className="text-brand-gray-700">{contrato.descricao || "—"}</td>
+                    <td data-th="Arquivo">
                       {contrato.arquivo_url ? (
                         <Link
                           href={contrato.arquivo_url}
@@ -448,12 +448,12 @@ export default async function CronogramaPage({
                         </span>
                       )}
                     </td>
-                    <td className="text-right text-brand-gray-700">{formatBRL(contrato.valor_contrato)}</td>
-                    <td className="text-right text-brand-gray-700">{formatBRL(pago)}</td>
-                    <td className={`text-right ${estourou ? "font-bold text-status-danger" : "text-brand-gray-700"}`}>
+                    <td data-th="Contrato" className="text-right text-brand-gray-700">{formatBRL(contrato.valor_contrato)}</td>
+                    <td data-th="Pago" className="text-right text-brand-gray-700">{formatBRL(pago)}</td>
+                    <td data-th="Saldo" className={`text-right ${estourou ? "font-bold text-status-danger" : "text-brand-gray-700"}`}>
                       {formatBRL(saldo)}
                     </td>
-                    <td>
+                    <td data-th="%">
                       <div className="flex items-center gap-2">
                         <div className="h-2 w-16 overflow-hidden rounded-full bg-brand-gray-100">
                           <div
@@ -464,7 +464,7 @@ export default async function CronogramaPage({
                         <span className="text-xs font-bold text-brand-gray-700">{percentual}%</span>
                       </div>
                     </td>
-                    <td>
+                    <td className="oc-td-acoes">
                       <div className="flex items-center justify-end gap-2">
                         <CadastroModal
                           titulo="Editar contrato"

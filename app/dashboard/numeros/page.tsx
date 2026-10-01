@@ -92,12 +92,12 @@ export default async function NumerosPage() {
             <tbody>
               {lista.map((u) => (
                 <tr key={u.telefone}>
-                  <td>
+                  <td data-th="Usuário">
                     <p className="font-semibold text-brand-black">{u.nome}</p>
                     <p className="mt-1 text-xs text-brand-gray-500">Acesso ao módulo central</p>
                   </td>
-                  <td className="font-medium text-brand-gray-700">{u.telefone}</td>
-                  <td>
+                  <td data-th="Telefone" className="font-medium text-brand-gray-700">{u.telefone}</td>
+                  <td data-th="Status">
                     <span
                       className={
                         u.ativo
@@ -108,10 +108,10 @@ export default async function NumerosPage() {
                       {u.ativo ? "Ativo" : "Inativo"}
                     </span>
                   </td>
-                  <td className="text-brand-gray-500">
+                  <td data-th="Cadastrado" className="text-brand-gray-500">
                     {new Date(u.created_at).toLocaleDateString("pt-BR")}
                   </td>
-                  <td>
+                  <td className="oc-td-acoes">
                     <div className="flex items-center justify-end gap-2 whitespace-nowrap">
                       <CadastroModal
                         titulo="Editar número"

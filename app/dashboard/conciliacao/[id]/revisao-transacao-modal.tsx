@@ -154,7 +154,7 @@ export function RevisaoTransacaoModal({
                   : " — ainda sem lançamentos anteriores, escolha obra e categoria."}
               </p>
             )}
-            <div className="grid grid-cols-2 gap-3">
+            <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
               <label className="flex flex-col gap-1 text-xs font-bold text-brand-gray-600">
                 Obra
                 <select

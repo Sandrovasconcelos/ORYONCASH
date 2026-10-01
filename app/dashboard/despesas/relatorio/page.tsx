@@ -480,14 +480,14 @@ export default async function RelatorioDespesasPage({
                   const documentos = documentosPorDespesa.get(d.id);
                   return (
                     <tr key={d.id}>
-                      <td className="whitespace-nowrap">{formatDataBrasil(d.data)}</td>
-                      <td className="print:truncate">{nomeDe(d.obras)}</td>
-                      <td className="print:truncate">{nomeDe(d.categorias)}</td>
-                      <td className="print:truncate">{nomeDe(d.etapas)}</td>
-                      <td className="print:truncate">{nomeDe(d.materiais)}</td>
-                      <td className="print:truncate">{nomeDe(d.fornecedores)}</td>
-                      <td className="max-w-[220px] truncate">{d.descricao ?? "-"}</td>
-                      <td className="whitespace-nowrap text-xs text-brand-gray-600">
+                      <td data-th="Data" className="whitespace-nowrap">{formatDataBrasil(d.data)}</td>
+                      <td data-th="Obra" className="print:truncate">{nomeDe(d.obras)}</td>
+                      <td data-th="Categoria" className="print:truncate">{nomeDe(d.categorias)}</td>
+                      <td data-th="Etapa" className="print:truncate">{nomeDe(d.etapas)}</td>
+                      <td data-th="Material" className="print:truncate">{nomeDe(d.materiais)}</td>
+                      <td data-th="Fornecedor" className="print:truncate">{nomeDe(d.fornecedores)}</td>
+                      <td data-th="Descrição" className="break-words md:max-w-[220px] md:truncate">{d.descricao ?? "-"}</td>
+                      <td data-th="Qtd" className="whitespace-nowrap text-xs text-brand-gray-600">
                         {d.quantidade != null ? (
                           <>
                             {d.quantidade}
@@ -497,8 +497,8 @@ export default async function RelatorioDespesasPage({
                           "-"
                         )}
                       </td>
-                      <td className="text-right font-semibold">{formatBRL(d.valor)}</td>
-                      <td>
+                      <td data-th="Valor" className="text-right font-semibold">{formatBRL(d.valor)}</td>
+                      <td data-th="Documentos">
                         <div className="flex flex-col gap-1 whitespace-nowrap text-xs font-semibold">
                           {documentos?.nota && (
                             <a
