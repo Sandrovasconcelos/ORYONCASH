@@ -32,6 +32,20 @@ function formatDataBR(dataISO: string): string {
   return `${dia}/${mes}`;
 }
 
+/**
+ * Versao curta do valor pra caber no quadradinho do dia no celular (uns 40px
+ * de largura) - "R$ 39.822,58" nao cabe, "39,8k" cabe. Acima de sm o
+ * quadradinho e maior e mostra o valor completo (formatBRL).
+ */
+function formatCompactoBRL(valor: number): string {
+  if (valor >= 1000) {
+    const milhar = valor / 1000;
+    const casas = milhar >= 100 ? 0 : 1;
+    return `${milhar.toFixed(casas).replace(".", ",")}k`;
+  }
+  return Math.round(valor).toLocaleString("pt-BR");
+}
+
 export function CalendarioGrid({
   celulas,
   totalPorDia,
@@ -138,8 +152,12 @@ export function CalendarioGrid({
                   )}
                 </span>
                 {temGasto && (
-                  <span className="hidden truncate text-right text-[10px] font-extrabold leading-tight text-white drop-shadow-sm sm:block">
-                    {formatBRL(totalDia)}
+                  <span
+                    className="truncate text-right font-extrabold leading-none text-white drop-shadow-sm text-[8.5px] sm:text-[10px] sm:leading-tight"
+                    title={formatBRL(totalDia)}
+                  >
+                    <span className="sm:hidden">{formatCompactoBRL(totalDia)}</span>
+                    <span className="hidden sm:inline">{formatBRL(totalDia)}</span>
                   </span>
                 )}
               </button>
