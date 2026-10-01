@@ -1,5 +1,5 @@
 import { createAdminClient } from "@/lib/supabase/admin";
-import { buscarDadosRelatorio } from "@/lib/relatorio/dados";
+import { buscarDadosRelatorio, type FiltrosRelatorio, type DadosRelatorio } from "@/lib/relatorio/dados";
 import { gerarRelatorioPdfBuffer } from "@/lib/relatorio/pdf";
 import { sendDocument, sendList, sendText } from "@/lib/whatsapp/messages";
 import { formatDataHoraBrasil } from "@/lib/format-date";
@@ -49,21 +49,23 @@ function calcularPeriodo(chave: string): { dataInicio?: string; dataFim?: string
 }
 
 /**
- * Gera o PDF do relatorio e manda pra quem pediu, pelo proprio WhatsApp -
+ * Busca os dados, gera o PDF e manda pra quem pediu, pelo proprio WhatsApp -
  * mesma logica de app/dashboard/actions.ts (enviarRelatorioPdfWhatsAppAction),
  * so que o destinatario e quem esta conversando, nao o numero fixo de
- * notificacoes configurado no dashboard.
+ * notificacoes configurado no dashboard. Usada tanto pelo fluxo de menu
+ * (gerarEEnviarRelatorio) quanto pela pergunta livre
+ * (gerarEEnviarRelatorioPorPergunta).
  */
-export async function gerarEEnviarRelatorio(
+async function buscarGerarEEnviar(
   to: string,
-  obraId: string | null,
-  periodoChave: string
+  filtros: FiltrosRelatorio,
+  mensagemVazio: string,
+  legenda: (dados: DadosRelatorio) => string
 ): Promise<void> {
-  const { dataInicio, dataFim } = calcularPeriodo(periodoChave);
-  const dados = await buscarDadosRelatorio({ obra: obraId ?? undefined, dataInicio, dataFim });
+  const dados = await buscarDadosRelatorio(filtros);
 
   if (dados.despesas.length === 0) {
-    await sendText(to, "📭 Nenhum lançamento encontrado para esse filtro.");
+    await sendText(to, mensagemVazio);
     return;
   }
 
@@ -88,10 +90,37 @@ export async function gerarEEnviarRelatorio(
     return;
   }
 
-  await sendDocument(
+  await sendDocument(to, signed.signedUrl, "relatorio-oryoncash.pdf", legenda(dados));
+}
+
+export async function gerarEEnviarRelatorio(
+  to: string,
+  obraId: string | null,
+  periodoChave: string
+): Promise<void> {
+  const { dataInicio, dataFim } = calcularPeriodo(periodoChave);
+  await buscarGerarEEnviar(
     to,
-    signed.signedUrl,
-    "relatorio-oryoncash.pdf",
-    `📄 Relatório de despesas — ${formatBRL(dados.totalGasto)} em ${dados.quantidade} lançamento(s)`
+    { obra: obraId ?? undefined, dataInicio, dataFim },
+    "📭 Nenhum lançamento encontrado para esse filtro.",
+    (dados) => `📄 Relatório de despesas — ${formatBRL(dados.totalGasto)} em ${dados.quantidade} lançamento(s)`
+  );
+}
+
+/**
+ * Relatorio filtrado a partir de uma pergunta livre ("quanto gastei com
+ * cimento?") ja interpretada e casada com um cadastro - ver
+ * lib/conversation/perguntaRelatorio.ts.
+ */
+export async function gerarEEnviarRelatorioPorPergunta(
+  to: string,
+  filtros: FiltrosRelatorio,
+  contexto: string
+): Promise<void> {
+  await buscarGerarEEnviar(
+    to,
+    filtros,
+    `📭 Não encontrei nenhum lançamento de ${contexto}.`,
+    (dados) => `📄 Gastos com ${contexto} — ${formatBRL(dados.totalGasto)} em ${dados.quantidade} lançamento(s)`
   );
 }

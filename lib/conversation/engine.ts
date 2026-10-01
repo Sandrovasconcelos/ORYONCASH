@@ -17,6 +17,7 @@ import { dataDePagamentoValida, formatBRL, parseDataCorrecao, parseValorBR } fro
 import { ESTADOS, MENU_IDS, CAMPO_IDS, TIPO_REMOVER_IDS, COMANDOS_CANCELAR, RECORRENCIA_IDS } from "./states";
 import { sendMenuPrincipal } from "./menu";
 import { sendListPeriodoRelatorio, gerarEEnviarRelatorio } from "./relatorio";
+import { tentarRelatorioPorPergunta } from "./perguntaRelatorio";
 import {
   sendListObras,
   sendListCategorias,
@@ -504,6 +505,7 @@ async function handleMenu(from: string, message: IncomingMessage) {
       await iniciarConciliacao(from);
       return;
     default:
+      if (await tentarRelatorioPorPergunta(from, message.text)) return;
       if (await tentarLancamentoRapido(from, message.text)) return;
       await sendMenuPrincipal(from);
   }
