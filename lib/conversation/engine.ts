@@ -5,6 +5,7 @@ import { getSession, saveSession, resetSession, type Session } from "@/lib/whats
 import { downloadWhatsAppMedia } from "@/lib/whatsapp/media";
 import { agendarLeituraPendente, type ComprovanteSalvo } from "@/lib/gemini/leiturasPendentes";
 import { extractInvoiceData, type InvoiceItem, type InvoiceData } from "@/lib/gemini/extractInvoice";
+import { rateiarDescontoNosItens } from "@/lib/gemini/rateioDesconto";
 import { extractOrcamentoData, type OrcamentoEtapa } from "@/lib/gemini/extractOrcamento";
 import {
   extractDespesaDeAudio,
@@ -125,6 +126,8 @@ type Dados = {
   fornecedorNome?: string;
   notaItens?: InvoiceItem[];
   notaValorTotal?: number | null;
+  /** Aviso pronto de desconto/frete identificado na nota, pra mostrar na confirmacao. */
+  notaAvisoDesconto?: string;
   notaItemIndiceAtual?: number;
   notaItensClassificados?: ItemNotaClassificado[];
   itemCategoriaIdTemp?: string;
@@ -1437,16 +1440,35 @@ async function continuarProcessamentoNota(
       ? dataDePagamentoValida(invoice.dataDocumento, hojeNoBrasil())
       : undefined;
 
-  if (invoice.itens.length === 1) {
-    await iniciarDespesaUnicaExtraida(from, {
-      valor: invoice.itens[0].valorTotal,
-      descricao: invoice.itens[0].descricao,
-      quantidade: invoice.itens[0].quantidade,
-      valorUnitario: invoice.itens[0].valorUnitario,
-      fornecedorId: fornecedor.id,
-      fornecedorNome: fornecedor.nome,
-      comprovante,
-    }, { obra: null, categoria: null, etapa: null }, dataDoPagamento ? { dados: { dataDespesa: dataDoPagamento } } : {});
+  // Nota com desconto/frete nao itemizado: soma dos itens != total final da
+  // nota (o que de fato foi pago). Rateia a diferenca pelos itens, senao o
+  // app lancava sempre o preco de tabela e inflava o gasto real da obra.
+  const { itens: itensAjustados, ajuste: ajusteDesconto } = rateiarDescontoNosItens(
+    invoice.itens,
+    invoice.valorTotalNota
+  );
+  const avisoDesconto = ajusteDesconto
+    ? `\n\n${ajusteDesconto.diferenca > 0 ? "📉" : "📈"} *${ajusteDesconto.diferenca > 0 ? "Desconto" : "Acréscimo"} identificado:* ${formatBRL(Math.abs(ajusteDesconto.diferenca))} (nota de ${formatBRL(ajusteDesconto.valorItens)} → total de ${formatBRL(ajusteDesconto.valorFinal)}). Rateado proporcionalmente entre os itens abaixo.`
+    : "";
+
+  if (itensAjustados.length === 1) {
+    await iniciarDespesaUnicaExtraida(
+      from,
+      {
+        valor: itensAjustados[0].valorTotal,
+        descricao: itensAjustados[0].descricao,
+        quantidade: itensAjustados[0].quantidade,
+        valorUnitario: itensAjustados[0].valorUnitario,
+        fornecedorId: fornecedor.id,
+        fornecedorNome: fornecedor.nome,
+        comprovante,
+      },
+      { obra: null, categoria: null, etapa: null },
+      {
+        ...(dataDoPagamento ? { dados: { dataDespesa: dataDoPagamento } } : {}),
+        ...(ajusteDesconto ? { titulo: `✅ *Identifiquei uma nova despesa*${avisoDesconto}` } : {}),
+      }
+    );
     return;
   }
 
@@ -1454,8 +1476,9 @@ async function continuarProcessamentoNota(
     dataDespesa: dataDoPagamento,
     fornecedorId: fornecedor.id,
     fornecedorNome: fornecedor.nome,
-    notaItens: invoice.itens,
+    notaItens: itensAjustados,
     notaValorTotal: invoice.valorTotalNota,
+    notaAvisoDesconto: avisoDesconto || undefined,
     comprovante,
   };
 
@@ -2006,8 +2029,9 @@ async function enviarConfirmacaoNota(from: string, dados: Dados) {
   const texto =
     `*Confirme os dados da nota:*\n` +
     `🏢 Fornecedor: ${dados.fornecedorNome}\n` +
-    `🏗️ Obra: ${dados.obraNome}\n\n` +
-    `*Itens:*\n${linhasItens}\n\n` +
+    `🏗️ Obra: ${dados.obraNome}` +
+    (dados.notaAvisoDesconto ?? "") +
+    `\n\n*Itens:*\n${linhasItens}\n\n` +
     `💰 Total: ${formatBRL(dados.notaValorTotal ?? somaItens)}` +
     (dados.dataDespesa ? `\n📅 Data do pagamento: ${formatDataBR(dados.dataDespesa)}` : "");
 
@@ -2088,7 +2112,7 @@ async function handleNotaConfirmacao(
         origem: "whatsapp",
         autorTelefone: from,
         autorNome,
-        resumo: `Despesa de ${formatBRL(item.valorTotal)} (${item.descricao}, nota fiscal) registrada por ${autorNome}`,
+        resumo: `Despesa de ${formatBRL(item.valorTotal)} (${item.descricao}, nota fiscal) registrada por ${autorNome}${dados.notaAvisoDesconto ? " — valor já rateado com o desconto/acréscimo da nota" : ""}`,
         dadosDepois: item,
       });
     }

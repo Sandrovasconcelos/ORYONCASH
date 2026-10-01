@@ -39,7 +39,14 @@ export type InvoiceData = {
   /** Comprovante de pagamento: dia em que o pagamento foi efetuado. Nota/boleto: emissao. AAAA-MM-DD. */
   dataDocumento?: string | null;
   itens: InvoiceItem[];
+  /** Valor final do documento, ja com desconto/frete aplicados (o que de fato foi/sera pago). */
   valorTotalNota: number | null;
+  /** Soma dos itens antes de desconto/frete, quando o documento discrimina isso separado. Null se nao houver essa quebra. */
+  valorProdutos: number | null;
+  /** Desconto dado pelo fornecedor sobre o total, se o documento mostrar essa linha. Null se nao houver. */
+  valorDesconto: number | null;
+  /** Frete cobrado a mais, se o documento mostrar essa linha. Null se nao houver. */
+  valorFrete: number | null;
 };
 
 const PROMPT = `Você recebeu a imagem/PDF de um documento financeiro de uma obra.
@@ -93,8 +100,21 @@ Regras:
   e valorTotal estiverem claros, calcule valorTotal / quantidade. Use null só
   se não for possível determinar (ex: comprovante de pagamento único sem
   discriminação de item).
-- "valorTotalNota": valor total do documento. Use null se não conseguir
+- "valorTotalNota": valor FINAL do documento - o que de fato foi/será pago,
+  já com desconto e frete aplicados (ex: campo "VALOR TOTAL DA NOTA", "Total
+  a pagar", "Valor da fatura"). NUNCA use aqui a soma bruta dos produtos se o
+  documento mostrar um total final diferente. Use null se não conseguir
   identificar.
+- "valorProdutos": soma dos itens ANTES de desconto/frete, só quando o
+  documento mostrar essa linha separada (ex: "VALOR TOTAL DOS PRODUTOS").
+  Use null se o documento não discriminar isso (nesse caso valorProdutos e
+  valorTotalNota são a mesma coisa).
+- "valorDesconto": valor do desconto dado pelo fornecedor sobre o total
+  (campo "DESCONTO"), se existir essa linha no documento. Use null se não
+  houver desconto ou a linha não aparecer.
+- "valorFrete": valor do frete cobrado a mais (campo "FRETE" ou "VALOR DO
+  FRETE"), se existir e for maior que zero. Use null se não houver frete ou
+  a linha não aparecer/for zero.
 - "dataVencimento": data de vencimento no formato AAAA-MM-DD, quando o
   documento for um boleto/conta/fatura ainda não paga (ex: conta de luz,
   boleto de aluguel). Use null se não houver data de vencimento visível ou
@@ -140,6 +160,9 @@ const RESPONSE_SCHEMA = {
       },
     },
     valorTotalNota: { type: "number", nullable: true },
+    valorProdutos: { type: "number", nullable: true },
+    valorDesconto: { type: "number", nullable: true },
+    valorFrete: { type: "number", nullable: true },
     dataVencimento: { type: "string", nullable: true },
     dataDocumento: { type: "string", nullable: true },
   },
