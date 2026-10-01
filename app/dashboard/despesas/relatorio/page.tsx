@@ -1,12 +1,16 @@
 import Image from "next/image";
 import Link from "next/link";
+import { Fragment } from "react";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { formatBRL } from "@/lib/conversation/format";
 import { formatDataBrasil, formatDataHoraBrasil } from "@/lib/format-date";
+import { carregarNotas } from "@/lib/despesas/notas";
 import { ActionIcon, type ActionIconName } from "../../action-icon";
 import { PrintButton } from "./print-button";
 import { enviarRelatorioPdfWhatsAppAction } from "../../actions";
 import { SubmitButton } from "../../submit-button";
+
+const PALETA_GRUPOS_NOTA = ["#296dd1", "#7c3aed", "#bd7600", "#0f766e", "#c2185b", "#4d7c0f"];
 
 export const dynamic = "force-dynamic";
 
@@ -206,6 +210,36 @@ export default async function RelatorioDespesasPage({
     else atual.nota = c.url;
     documentosPorDespesa.set(c.despesa_id, atual);
   }
+  // Varios itens de uma mesma nota viram varias despesas (uma por item), que
+  // compartilham o mesmo arquivo em despesa_comprovantes - agrupa visualmente
+  // igual na tela de Lançamentos, pra quem está conferindo o PDF conseguir
+  // ver quais linhas vieram da mesma nota.
+  const grupoNotaPorDespesa = new Map<string, { indice: number; total: number; cor: string }>();
+  {
+    const idsPorChave = new Map<string, string[]>();
+    for (const d of despesas) {
+      const comprovantesDaDespesa = (comprovantesData ?? []).filter((c) => c.despesa_id === d.id);
+      const arquivoCompartilhado =
+        comprovantesDaDespesa.find((c) => c.tipo_documento === "documento_cobranca") ??
+        comprovantesDaDespesa.find((c) => c.tipo_documento === "comprovante_pagamento");
+      if (!arquivoCompartilhado) continue;
+      const chave = `${arquivoCompartilhado.storage_bucket}/${arquivoCompartilhado.storage_path}`;
+      const lista = idsPorChave.get(chave) ?? [];
+      lista.push(d.id);
+      idsPorChave.set(chave, lista);
+    }
+    let corIndex = 0;
+    for (const ids of idsPorChave.values()) {
+      if (ids.length < 2) continue;
+      const cor = PALETA_GRUPOS_NOTA[corIndex % PALETA_GRUPOS_NOTA.length];
+      ids.forEach((despesaId, i) => {
+        grupoNotaPorDespesa.set(despesaId, { indice: i + 1, total: ids.length, cor });
+      });
+      corIndex += 1;
+    }
+  }
+  const notasCompletas = await carregarNotas(idsDespesas);
+
   const quantidade = despesas.length;
   const ticketMedio = quantidade > 0 ? totalGasto / quantidade : 0;
 
@@ -458,6 +492,17 @@ export default async function RelatorioDespesasPage({
           </div>
         </div>
 
+        {notasCompletas.size > 0 && (
+          <div className="report-block mt-6 flex items-start gap-2 rounded-brand-sm border border-brand-gray-300/60 bg-brand-gray-100/60 px-4 py-3 text-xs leading-5 text-brand-gray-600 print:bg-white">
+            <span className="text-sm">🧾</span>
+            <p>
+              <strong className="text-brand-black">Lançamentos de uma mesma nota</strong> aparecem com a mesma barra
+              colorida à esquerda e um resumo destacado acima do primeiro item (total da nota, desconto quando houver,
+              e o valor de fato pago).
+            </p>
+          </div>
+        )}
+
         <div className="oc-table-wrap mt-6 print:shadow-none">
           <div className="overflow-x-auto print:overflow-visible">
             <table className="oc-table w-full min-w-[880px] print:min-w-0 print:table-fixed">
@@ -478,54 +523,113 @@ export default async function RelatorioDespesasPage({
               <tbody>
                 {despesas.map((d) => {
                   const documentos = documentosPorDespesa.get(d.id);
+                  const grupoNota = grupoNotaPorDespesa.get(d.id);
+                  const notaCompleta = notasCompletas.get(d.id);
                   return (
-                    <tr key={d.id}>
-                      <td data-th="Data" className="whitespace-nowrap">{formatDataBrasil(d.data)}</td>
-                      <td data-th="Obra" className="print:truncate">{nomeDe(d.obras)}</td>
-                      <td data-th="Categoria" className="print:truncate">{nomeDe(d.categorias)}</td>
-                      <td data-th="Etapa" className="print:truncate">{nomeDe(d.etapas)}</td>
-                      <td data-th="Material" className="print:truncate">{nomeDe(d.materiais)}</td>
-                      <td data-th="Fornecedor" className="print:truncate">{nomeDe(d.fornecedores)}</td>
-                      <td data-th="Descrição" className="break-words md:max-w-[220px] md:truncate">{d.descricao ?? "-"}</td>
-                      <td data-th="Qtd" className="whitespace-nowrap text-xs text-brand-gray-600">
-                        {d.quantidade != null ? (
-                          <>
-                            {d.quantidade}
-                            {d.valor_unitario != null ? ` × ${formatBRL(d.valor_unitario)}` : ""}
-                          </>
-                        ) : (
-                          "-"
-                        )}
-                      </td>
-                      <td data-th="Valor" className="text-right font-semibold">{formatBRL(d.valor)}</td>
-                      <td data-th="Documentos">
-                        <div className="flex flex-col gap-1 whitespace-nowrap text-xs font-semibold">
-                          {documentos?.nota && (
-                            <a
-                              href={documentos.nota}
-                              target="_blank"
-                              rel="noreferrer"
-                              className="text-status-info hover:underline print:text-brand-black print:underline"
+                    <Fragment key={d.id}>
+                      {grupoNota && grupoNota.indice === 1 && notaCompleta && (
+                        <tr style={{ background: `${grupoNota.cor}0f` }}>
+                          <td
+                            colSpan={10}
+                            className="border-b-2 text-xs"
+                            style={{ borderColor: grupoNota.cor }}
+                          >
+                            <div className="flex flex-wrap items-center justify-between gap-x-4 gap-y-1">
+                              <p className="flex items-center gap-1.5 font-extrabold text-brand-black">
+                                <span style={{ color: grupoNota.cor }}>🧾</span>
+                                Nota com {notaCompleta.membros.length} itens · {nomeDe(d.fornecedores)}
+                              </p>
+                              <div className="flex flex-wrap items-center gap-2">
+                                {notaCompleta.valorDesconto != null && (
+                                  <span className="text-brand-gray-400 line-through">
+                                    {formatBRL(notaCompleta.valorItensOriginal ?? 0)}
+                                  </span>
+                                )}
+                                {notaCompleta.valorDesconto != null && notaCompleta.valorDesconto > 0 && (
+                                  <span className="rounded-full bg-status-success/10 px-2 py-0.5 font-extrabold text-status-success">
+                                    📉 -{formatBRL(notaCompleta.valorDesconto)}
+                                  </span>
+                                )}
+                                {notaCompleta.valorDesconto != null && notaCompleta.valorDesconto < 0 && (
+                                  <span className="rounded-full bg-status-warning/10 px-2 py-0.5 font-extrabold text-status-warning">
+                                    📈 +{formatBRL(Math.abs(notaCompleta.valorDesconto))}
+                                  </span>
+                                )}
+                                <span className="font-extrabold text-brand-black">
+                                  {formatBRL(notaCompleta.total)} pago
+                                </span>
+                              </div>
+                            </div>
+                          </td>
+                        </tr>
+                      )}
+                      <tr
+                        style={
+                          grupoNota
+                            ? {
+                                boxShadow: `inset 4px 0 0 0 ${grupoNota.cor}`,
+                                background: `${grupoNota.cor}08`,
+                              }
+                            : undefined
+                        }
+                      >
+                        <td data-th="Data" className="whitespace-nowrap">{formatDataBrasil(d.data)}</td>
+                        <td data-th="Obra" className="print:truncate">{nomeDe(d.obras)}</td>
+                        <td data-th="Categoria" className="print:truncate">{nomeDe(d.categorias)}</td>
+                        <td data-th="Etapa" className="print:truncate">{nomeDe(d.etapas)}</td>
+                        <td data-th="Material" className="print:truncate">{nomeDe(d.materiais)}</td>
+                        <td data-th="Fornecedor" className="print:truncate">
+                          {nomeDe(d.fornecedores)}
+                          {grupoNota && (
+                            <span
+                              className="ml-1.5 inline-flex w-fit items-center rounded-full px-1.5 py-0.5 text-[10px] font-extrabold"
+                              style={{ background: `${grupoNota.cor}1a`, color: grupoNota.cor }}
                             >
-                              📄 Nota
-                            </a>
+                              {grupoNota.indice}/{notaCompleta?.membros.length ?? grupoNota.total}
+                            </span>
                           )}
-                          {documentos?.comprovante && (
-                            <a
-                              href={documentos.comprovante}
-                              target="_blank"
-                              rel="noreferrer"
-                              className="text-status-success hover:underline print:text-brand-black print:underline"
-                            >
-                              💳 Comprovante
-                            </a>
+                        </td>
+                        <td data-th="Descrição" className="break-words md:max-w-[220px] md:truncate">{d.descricao ?? "-"}</td>
+                        <td data-th="Qtd" className="whitespace-nowrap text-xs text-brand-gray-600">
+                          {d.quantidade != null ? (
+                            <>
+                              {d.quantidade}
+                              {d.valor_unitario != null ? ` × ${formatBRL(d.valor_unitario)}` : ""}
+                            </>
+                          ) : (
+                            "-"
                           )}
-                          {!documentos?.nota && !documentos?.comprovante && (
-                            <span className="text-brand-gray-400">-</span>
-                          )}
-                        </div>
-                      </td>
-                    </tr>
+                        </td>
+                        <td data-th="Valor" className="text-right font-semibold">{formatBRL(d.valor)}</td>
+                        <td data-th="Documentos">
+                          <div className="flex flex-col gap-1 whitespace-nowrap text-xs font-semibold">
+                            {documentos?.nota && (
+                              <a
+                                href={documentos.nota}
+                                target="_blank"
+                                rel="noreferrer"
+                                className="text-status-info hover:underline print:text-brand-black print:underline"
+                              >
+                                📄 Nota
+                              </a>
+                            )}
+                            {documentos?.comprovante && (
+                              <a
+                                href={documentos.comprovante}
+                                target="_blank"
+                                rel="noreferrer"
+                                className="text-status-success hover:underline print:text-brand-black print:underline"
+                              >
+                                💳 Comprovante
+                              </a>
+                            )}
+                            {!documentos?.nota && !documentos?.comprovante && (
+                              <span className="text-brand-gray-400">-</span>
+                            )}
+                          </div>
+                        </td>
+                      </tr>
+                    </Fragment>
                   );
                 })}
 
