@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { rateiarDescontoNosItens } from "./rateioDesconto";
+import { detectarAjusteDesconto } from "./rateioDesconto";
 import type { InvoiceItem } from "./extractInvoice";
 
 const item = (descricao: string, quantidade: number, valorUnitario: number): InvoiceItem => ({
@@ -9,55 +9,43 @@ const item = (descricao: string, quantidade: number, valorUnitario: number): Inv
   valorTotal: Math.round(quantidade * valorUnitario * 100) / 100,
 });
 
-describe("rateiarDescontoNosItens", () => {
-  it("sem total da nota (ou igual a soma), nao mexe nos itens", () => {
+describe("detectarAjusteDesconto", () => {
+  it("sem total da nota (ou igual a soma), nao ha ajuste", () => {
     const itens = [item("A", 1, 100), item("B", 1, 200)];
-    expect(rateiarDescontoNosItens(itens, null)).toEqual({ itens, ajuste: null });
-    expect(rateiarDescontoNosItens(itens, 300).ajuste).toBeNull();
+    expect(detectarAjusteDesconto(itens, null)).toBeNull();
+    expect(detectarAjusteDesconto(itens, 300)).toBeNull();
   });
 
-  it("rateia o desconto da nota real do usuario (115 itens, resumido a 2 pra teste)", () => {
+  it("detecta o desconto da nota real do usuario (115 itens, resumido a 2 pra teste)", () => {
     const itens = [item("Martelo", 1, 4912.08), item("Trilho", 4, 228.225)];
     const somaOriginal = itens.reduce((s, i) => s + i.valorTotal, 0);
     expect(somaOriginal).toBeCloseTo(5824.98, 2);
 
-    const { itens: ajustados, ajuste } = rateiarDescontoNosItens(itens, 5277.87);
+    const ajuste = detectarAjusteDesconto(itens, 5277.87);
     expect(ajuste).toEqual({ valorItens: 5824.98, valorFinal: 5277.87, diferenca: 547.11 });
-
-    const somaAjustada = ajustados.reduce((s, i) => s + i.valorTotal, 0);
-    expect(somaAjustada).toBeCloseTo(5277.87, 2);
-    // cada item caiu na mesma proporcao (~90,6%), nao foi tudo tirado de um so
-    for (const [original, ajustadoItem] of itens.map((i, idx) => [i, ajustados[idx]] as const)) {
-      expect(ajustadoItem.valorTotal).toBeLessThan(original.valorTotal);
-      expect(ajustadoItem.valorTotal / original.valorTotal).toBeCloseTo(5277.87 / 5824.98, 2);
-    }
   });
 
-  it("valor unitario tambem cai junto, proporcional ao desconto", () => {
+  it("nao altera os itens recebidos - so informa o ajuste", () => {
     const itens = [item("Cimento", 10, 50)];
-    const { itens: ajustados } = rateiarDescontoNosItens(itens, 450);
-    expect(ajustados[0].valorTotal).toBe(450);
-    expect(ajustados[0].valorUnitario).toBe(45);
+    const copia = JSON.parse(JSON.stringify(itens));
+    detectarAjusteDesconto(itens, 450);
+    expect(itens).toEqual(copia);
   });
 
-  it("frete nao itemizado (total maior que a soma) tambem rateia, pra cima", () => {
+  it("frete nao itemizado (total maior que a soma) tambem e detectado, com diferenca negativa", () => {
     const itens = [item("A", 1, 100), item("B", 1, 100)];
-    const { itens: ajustados, ajuste } = rateiarDescontoNosItens(itens, 220);
-    expect(ajuste?.diferenca).toBe(-20);
-    const soma = ajustados.reduce((s, i) => s + i.valorTotal, 0);
-    expect(soma).toBeCloseTo(220, 2);
+    const ajuste = detectarAjusteDesconto(itens, 220);
+    expect(ajuste).toEqual({ valorItens: 200, valorFinal: 220, diferenca: -20 });
   });
 
-  it("diferenca fora da faixa razoavel (provavel erro de leitura) nao mexe em nada", () => {
+  it("diferenca fora da faixa razoavel (provavel erro de leitura) nao gera ajuste", () => {
     const itens = [item("A", 1, 1000)];
     // total da nota 10x menor que a soma dos itens - mais provavel erro do que desconto de 90%
-    const { itens: ajustados, ajuste } = rateiarDescontoNosItens(itens, 100);
-    expect(ajuste).toBeNull();
-    expect(ajustados).toEqual(itens);
+    expect(detectarAjusteDesconto(itens, 100)).toBeNull();
   });
 
-  it("sem itens ou soma zero, devolve sem alterar", () => {
-    expect(rateiarDescontoNosItens([], 100).ajuste).toBeNull();
-    expect(rateiarDescontoNosItens([item("A", 1, 0)], 100).ajuste).toBeNull();
+  it("sem itens ou soma zero, nao ha ajuste", () => {
+    expect(detectarAjusteDesconto([], 100)).toBeNull();
+    expect(detectarAjusteDesconto([item("A", 1, 0)], 100)).toBeNull();
   });
 });

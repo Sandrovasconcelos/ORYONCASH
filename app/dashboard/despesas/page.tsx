@@ -729,10 +729,11 @@ export default async function DespesasPage({
       {notasCompletas.size > 0 && (
         <div className="rounded-card border border-brand-gray-300/60 bg-white px-4 py-3 text-xs text-brand-gray-600 shadow-card">
           <strong className="text-brand-black">🧾 Como ler as notas com vários itens:</strong> cada produto da nota é
-          um lançamento, mas o pagamento (PIX/boleto) é um só, com o valor da nota inteira. Itens da mesma nota
-          têm a mesma barra colorida na esquerda, e o mesmo comprovante aparece em todos eles. Quando o fornecedor
-          dá desconto (ou cobra frete à parte), o selo <span className="font-bold text-status-success">📉 Desconto</span>{" "}
-          aparece nos itens da nota, e o valor de cada um já sai ajustado — nunca o preço de tabela.
+          um lançamento, com o mesmo valor que está impresso nela (pra bater quando você conferir com a nota em mãos),
+          mas o pagamento (PIX/boleto) é um só, com o valor da nota inteira. Itens da mesma nota têm a mesma barra
+          colorida na esquerda, e o mesmo comprovante aparece em todos eles. Quando o fornecedor dá desconto (ou
+          cobra frete à parte), o selo <span className="font-bold text-status-success">📉 Desconto</span> mostra isso —
+          o valor de cada item continua igual à nota, só o total do grupo é que já sai descontado.
         </div>
       )}
 
@@ -860,11 +861,11 @@ export default async function DespesasPage({
                                     ? "bg-status-success/10 text-status-success"
                                     : "bg-status-warning/10 text-status-warning"
                                 }`}
-                                title={`A nota saiu de ${formatBRL(notaCompleta.valorItensOriginal ?? 0)} para ${formatBRL(notaCompleta.total)}. A diferença foi dividida entre os itens.`}
+                                title={`Os itens desta nota mantêm o preço de tabela (soma ${formatBRL(notaCompleta.valorItensOriginal ?? 0)}). O total mostrado acima (${formatBRL(notaCompleta.total)}) já é o que foi de fato pago.`}
                               >
                                 {notaCompleta.valorDesconto > 0
-                                  ? `📉 Desconto de ${formatBRL(notaCompleta.valorDesconto)}`
-                                  : `📈 Acréscimo de ${formatBRL(Math.abs(notaCompleta.valorDesconto))}`}
+                                  ? `📉 Desconto de ${formatBRL(notaCompleta.valorDesconto)} (no total, não nos itens)`
+                                  : `📈 Acréscimo de ${formatBRL(Math.abs(notaCompleta.valorDesconto))} (no total, não nos itens)`}
                               </span>
                             )}
                           </div>
@@ -931,10 +932,6 @@ export default async function DespesasPage({
                     {notaCompleta && comprovantesPagamento[0]?.url && (
                       <p className="mt-1.5 text-[10px] leading-snug text-brand-gray-500 md:max-w-[190px]">
                         O comprovante cobre a nota inteira ({formatBRL(notaCompleta.total)}), não só este item.
-                        {notaCompleta.valorDesconto != null &&
-                          (notaCompleta.valorDesconto > 0
-                            ? ` A nota original era de ${formatBRL(notaCompleta.valorItensOriginal ?? 0)}; o fornecedor deu ${formatBRL(notaCompleta.valorDesconto)} de desconto, já dividido entre os itens.`
-                            : ` A nota original era de ${formatBRL(notaCompleta.valorItensOriginal ?? 0)}; houve um acréscimo de ${formatBRL(Math.abs(notaCompleta.valorDesconto))} (ex: frete), já dividido entre os itens.`)}
                       </p>
                     )}
                   </td>

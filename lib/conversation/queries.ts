@@ -212,9 +212,7 @@ export async function vincularComprovanteDespesa(input: {
     contaOrigemNumero?: string | null;
     metodoPagamento?: string | null;
     numeroDocumento?: string | null;
-    /** Diferenca entre a soma dos itens e o total final da nota (desconto/frete ja rateado). */
     valorDesconto?: number | null;
-    /** Soma dos itens antes do rateio, pra mostrar "de X por Y" na tela. */
     valorItensOriginal?: number | null;
   };
 }) {

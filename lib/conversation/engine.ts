@@ -5,7 +5,7 @@ import { getSession, saveSession, resetSession, type Session } from "@/lib/whats
 import { downloadWhatsAppMedia } from "@/lib/whatsapp/media";
 import { agendarLeituraPendente, type ComprovanteSalvo } from "@/lib/gemini/leiturasPendentes";
 import { extractInvoiceData, type InvoiceItem, type InvoiceData } from "@/lib/gemini/extractInvoice";
-import { rateiarDescontoNosItens } from "@/lib/gemini/rateioDesconto";
+import { detectarAjusteDesconto } from "@/lib/gemini/rateioDesconto";
 import { extractOrcamentoData, type OrcamentoEtapa } from "@/lib/gemini/extractOrcamento";
 import {
   extractDespesaDeAudio,
@@ -128,6 +128,7 @@ type Dados = {
   notaValorTotal?: number | null;
   /** Aviso pronto de desconto/frete identificado na nota, pra mostrar na confirmacao. */
   notaAvisoDesconto?: string;
+  /** Diferenca entre soma dos itens (preco de tabela) e o total da nota - vira um lancamento a parte apos os itens. */
   notaItemIndiceAtual?: number;
   notaItensClassificados?: ItemNotaClassificado[];
   itemCategoriaIdTemp?: string;
@@ -151,7 +152,9 @@ type Dados = {
     contaOrigemNumero?: string | null;
     metodoPagamento?: string | null;
     numeroDocumento?: string | null;
+    /** Diferenca entre a soma dos itens (preco de tabela) e o total final da nota - positiva = desconto, negativa = acrescimo. */
     valorDesconto?: number | null;
+    /** Soma dos itens antes do ajuste, so quando valorDesconto existe. */
     valorItensOriginal?: number | null;
   };
 
@@ -1443,33 +1446,34 @@ async function continuarProcessamentoNota(
       : undefined;
 
   // Nota com desconto/frete nao itemizado: soma dos itens != total final da
-  // nota (o que de fato foi pago). Rateia a diferenca pelos itens, senao o
-  // app lancava sempre o preco de tabela e inflava o gasto real da obra.
-  const { itens: itensAjustados, ajuste: ajusteDesconto } = rateiarDescontoNosItens(
-    invoice.itens,
-    invoice.valorTotalNota
-  );
+  // nota (o que de fato foi pago). Os itens SEMPRE ficam com o preco de
+  // tabela, igual ao impresso na nota (pra bater numa conferencia manual) -
+  // nenhum item e alterado. O ajuste fica registrado no comprovante (mesmo
+  // arquivo, todos os itens da nota) e o TOTAL DO GRUPO mostrado em
+  // Lançamentos ja desconta isso, sem precisar de um lancamento negativo
+  // (o banco nao aceita despesa com valor <= 0, de proposito).
+  const ajusteDesconto = detectarAjusteDesconto(invoice.itens, invoice.valorTotalNota);
   const avisoDesconto = ajusteDesconto
-    ? `\n\n${ajusteDesconto.diferenca > 0 ? "📉" : "📈"} *${ajusteDesconto.diferenca > 0 ? "Desconto" : "Acréscimo"} identificado:* ${formatBRL(Math.abs(ajusteDesconto.diferenca))} (nota de ${formatBRL(ajusteDesconto.valorItens)} → total de ${formatBRL(ajusteDesconto.valorFinal)}). Rateado proporcionalmente entre os itens abaixo.`
+    ? `\n\n${ajusteDesconto.diferenca > 0 ? "📉" : "📈"} *${ajusteDesconto.diferenca > 0 ? "Desconto" : "Acréscimo"} identificado:* ${formatBRL(Math.abs(ajusteDesconto.diferenca))} (itens somam ${formatBRL(ajusteDesconto.valorItens)}, total da nota é ${formatBRL(ajusteDesconto.valorFinal)}). Os itens abaixo ficam com o valor de tabela, igual na nota — o ajuste só muda o total mostrado da nota, não o valor de cada item.`
     : "";
-  // Marca o comprovante com o desconto pra ficar visivel tambem em
-  // Lançamentos (não só na mensagem de confirmação e em Atividades).
-  const comprovanteComDesconto =
+  // Marca o comprovante com o ajuste pra aparecer em Lançamentos (não só
+  // aqui na confirmação e em Atividades).
+  const comprovanteComAjuste: Dados["comprovante"] =
     comprovante && ajusteDesconto
       ? { ...comprovante, valorDesconto: ajusteDesconto.diferenca, valorItensOriginal: ajusteDesconto.valorItens }
       : comprovante;
 
-  if (itensAjustados.length === 1) {
+  if (invoice.itens.length === 1) {
     await iniciarDespesaUnicaExtraida(
       from,
       {
-        valor: itensAjustados[0].valorTotal,
-        descricao: itensAjustados[0].descricao,
-        quantidade: itensAjustados[0].quantidade,
-        valorUnitario: itensAjustados[0].valorUnitario,
+        valor: invoice.itens[0].valorTotal,
+        descricao: invoice.itens[0].descricao,
+        quantidade: invoice.itens[0].quantidade,
+        valorUnitario: invoice.itens[0].valorUnitario,
         fornecedorId: fornecedor.id,
         fornecedorNome: fornecedor.nome,
-        comprovante: comprovanteComDesconto,
+        comprovante: comprovanteComAjuste,
       },
       { obra: null, categoria: null, etapa: null },
       {
@@ -1484,10 +1488,10 @@ async function continuarProcessamentoNota(
     dataDespesa: dataDoPagamento,
     fornecedorId: fornecedor.id,
     fornecedorNome: fornecedor.nome,
-    notaItens: itensAjustados,
+    notaItens: invoice.itens,
     notaValorTotal: invoice.valorTotalNota,
     notaAvisoDesconto: avisoDesconto || undefined,
-    comprovante: comprovanteComDesconto,
+    comprovante: comprovanteComAjuste,
   };
 
   await saveSession(from, ESTADOS.NOTA_AGUARDANDO_OBRA, dados);
@@ -2120,7 +2124,7 @@ async function handleNotaConfirmacao(
         origem: "whatsapp",
         autorTelefone: from,
         autorNome,
-        resumo: `Despesa de ${formatBRL(item.valorTotal)} (${item.descricao}, nota fiscal) registrada por ${autorNome}${dados.notaAvisoDesconto ? " — valor já rateado com o desconto/acréscimo da nota" : ""}`,
+        resumo: `Despesa de ${formatBRL(item.valorTotal)} (${item.descricao}, nota fiscal) registrada por ${autorNome}`,
         dadosDepois: item,
       });
     }

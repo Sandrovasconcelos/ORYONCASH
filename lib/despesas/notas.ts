@@ -9,14 +9,15 @@ import { createAdminClient } from "@/lib/supabase/admin";
 
 export type GrupoNota = {
   chave: string;
-  /** Todos os itens (despesas ativas) da nota, em ordem estavel. */
+  /** Todos os itens (despesas ativas) da nota, em ordem estavel. Cada um com o preco de tabela, igual na nota impressa. */
   membros: string[];
+  /** Soma dos itens JA DESCONTANDO o ajuste (valorDesconto), quando a nota tem um - e o que de fato foi pago. */
   total: number;
   /** Data do item mais antigo do grupo. */
   data: string;
-  /** Desconto/acrescimo identificado (soma dos itens - total final), quando a leitura achou um. */
+  /** Desconto (positivo) ou acrescimo nao itemizado (negativo) identificado na nota, se houver. */
   valorDesconto: number | null;
-  /** Soma dos itens antes do rateio do desconto (so quando valorDesconto existe). */
+  /** Soma dos itens antes do ajuste (= soma dos membros, preco de tabela) - so quando valorDesconto existe. */
   valorItensOriginal: number | null;
 };
 
@@ -106,9 +107,12 @@ export async function carregarNotas(despesaIds: string[]): Promise<Map<string, G
   for (const [chave, conjunto] of membrosPorChave) {
     const membros = [...conjunto].filter((id) => despesas.has(id)).sort();
     if (membros.length < 2) continue;
-    const total = Math.round(membros.reduce((s, id) => s + despesas.get(id)!.valor, 0) * 100) / 100;
+    const somaMembros = Math.round(membros.reduce((s, id) => s + despesas.get(id)!.valor, 0) * 100) / 100;
     const data = membros.map((id) => despesas.get(id)!.data).sort()[0];
     const desconto = descontoPorChave.get(chave) ?? null;
+    // Itens ficam a preco de tabela; o total do grupo (usado pra conciliar com
+    // o banco) ja desconta o ajuste identificado na nota, se houver.
+    const total = desconto ? Math.round((somaMembros - desconto.valorDesconto) * 100) / 100 : somaMembros;
     grupos.set(chave, {
       chave,
       membros,
