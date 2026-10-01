@@ -6,12 +6,22 @@ import type { DadosRelatorio, DespesaRelatorio } from "./dados";
 
 const PRETO = "#111317";
 const VERMELHO = "#e11b22";
+const VERDE = "#047857";
+const LARANJA = "#b45309";
 const CINZA_700 = "#374151";
 const CINZA_500 = "#6b7280";
+const CINZA_400 = "#9ca3af";
 const CINZA_300 = "#d9dce1";
 const CINZA_100 = "#f4f5f7";
 const CINZA_ZEBRA = "#fafafb";
 const BRANCO = "#ffffff";
+
+function hexParaRgba(hex: string, alpha: number): string {
+  const r = parseInt(hex.slice(1, 3), 16);
+  const g = parseInt(hex.slice(3, 5), 16);
+  const b = parseInt(hex.slice(5, 7), 16);
+  return `rgba(${r}, ${g}, ${b}, ${alpha})`;
+}
 
 const styles = StyleSheet.create({
   page: { paddingTop: 30, paddingBottom: 42, paddingHorizontal: 30, fontSize: 9, color: PRETO, fontFamily: "Helvetica" },
@@ -95,7 +105,25 @@ const styles = StyleSheet.create({
   tableHeadRow: { flexDirection: "row", backgroundColor: PRETO, paddingVertical: 6 },
   tableRow: { flexDirection: "row", paddingVertical: 5, borderTopWidth: 1, borderTopColor: CINZA_100 },
   tableRowZebra: { backgroundColor: CINZA_ZEBRA },
+  tableRowNota: { borderLeftWidth: 3 },
   tableFootRow: { flexDirection: "row", paddingVertical: 7, borderTopWidth: 1.5, borderTopColor: PRETO },
+  notaResumo: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "center",
+    paddingVertical: 4,
+    paddingHorizontal: 7,
+    borderTopWidth: 2,
+    flexWrap: "wrap",
+    gap: 6,
+  },
+  notaResumoTitulo: { fontSize: 7.5, fontFamily: "Helvetica-Bold", color: PRETO },
+  notaResumoInfo: { flexDirection: "row", alignItems: "center", gap: 6 },
+  notaResumoRiscado: { fontSize: 7, color: CINZA_400, textDecoration: "line-through" },
+  notaResumoDesconto: { fontSize: 7, fontFamily: "Helvetica-Bold", color: VERDE },
+  notaResumoAcrescimo: { fontSize: 7, fontFamily: "Helvetica-Bold", color: LARANJA },
+  notaResumoTotal: { fontSize: 7.5, fontFamily: "Helvetica-Bold", color: PRETO },
+  notaBadge: { fontSize: 6.5, fontFamily: "Helvetica-Bold" },
   th: {
     color: BRANCO,
     fontSize: 6.8,
@@ -172,6 +200,7 @@ function RelatorioDocument({
   const maiorCategoria = Math.max(0, ...dados.porCategoria.map((c) => c.total));
   const maiorEtapa = Math.max(0, ...dados.porEtapa.map((c) => c.total));
   const grupos = agruparPorObra(dados.despesas);
+  const temNotaAgrupada = dados.despesas.some((d) => d.notaGrupo);
   const larguraDescritiva =
     (COLS.data + COLS.categoria + COLS.etapa + COLS.fornecedor + COLS.descricao + COLS.qtd) * 100;
 
@@ -200,6 +229,15 @@ function RelatorioDocument({
                 {f.rotulo}: {f.valor}
               </Text>
             ))}
+          </View>
+        )}
+
+        {temNotaAgrupada && (
+          <View style={{ marginBottom: 14, marginTop: -6 }}>
+            <Text style={{ fontSize: 7, color: CINZA_500 }}>
+              Nota: lançamentos de uma mesma nota têm a mesma barra colorida à esquerda e um resumo acima do
+              primeiro item (total da nota, desconto quando houver, e o valor de fato pago).
+            </Text>
           </View>
         )}
 
@@ -299,36 +337,79 @@ function RelatorioDocument({
               </View>
 
               {grupo.itens.map((d, indice) => (
-                <View
-                  key={d.id}
-                  style={[styles.tableRow, ...(indice % 2 === 1 ? [styles.tableRowZebra] : [])]}
-                  wrap={false}
-                >
-                  <Text style={[styles.tdMuted, { width: `${COLS.data * 100}%` }]}>
-                    {d.data.split("-").reverse().join("/")}
-                  </Text>
-                  <Text style={[styles.td, { width: `${COLS.categoria * 100}%` }]}>{d.categoriaNome}</Text>
-                  <Text style={[styles.td, { width: `${COLS.etapa * 100}%` }]}>{d.etapaNome}</Text>
-                  <Text style={[styles.td, { width: `${COLS.fornecedor * 100}%` }]}>{d.fornecedorNome}</Text>
-                  <Text style={[styles.td, { width: `${COLS.descricao * 100}%` }]}>{d.descricao ?? "-"}</Text>
-                  <Text style={[styles.tdMuted, { width: `${COLS.qtd * 100}%` }]}>
-                    {d.quantidade != null
-                      ? `${d.quantidade}${d.valorUnitario != null ? ` × ${formatBRL(d.valorUnitario)}` : ""}`
-                      : "-"}
-                  </Text>
-                  <Text style={[styles.tdValor, { width: `${COLS.valor * 100}%` }]}>{formatBRL(d.valor)}</Text>
-                  <View style={{ width: `${COLS.documentos * 100}%`, paddingHorizontal: 5, flexDirection: "row", gap: 6 }}>
-                    {d.notaUrl && (
-                      <Link src={d.notaUrl} style={[styles.tdLink, styles.tdLinkNota]}>
-                        Nota
-                      </Link>
-                    )}
-                    {d.comprovanteUrl && (
-                      <Link src={d.comprovanteUrl} style={[styles.tdLink, styles.tdLinkComprovante]}>
-                        Comprov.
-                      </Link>
-                    )}
-                    {!d.notaUrl && !d.comprovanteUrl && <Text style={styles.tdSemDocumento}>-</Text>}
+                <View key={d.id} wrap={false}>
+                  {d.notaGrupo && d.notaGrupo.indice === 1 && (
+                    <View
+                      style={[
+                        styles.notaResumo,
+                        { backgroundColor: hexParaRgba(d.notaGrupo.cor, 0.08), borderTopColor: d.notaGrupo.cor },
+                      ]}
+                    >
+                      <Text style={styles.notaResumoTitulo}>
+                        Nota com {d.notaGrupo.totalItens} itens · {d.fornecedorNome}
+                      </Text>
+                      <View style={styles.notaResumoInfo}>
+                        {d.notaGrupo.valorDesconto != null && (
+                          <Text style={styles.notaResumoRiscado}>
+                            {formatBRL(d.notaGrupo.valorItensOriginal ?? 0)}
+                          </Text>
+                        )}
+                        {d.notaGrupo.valorDesconto != null && d.notaGrupo.valorDesconto > 0 && (
+                          <Text style={styles.notaResumoDesconto}>
+                            Desconto -{formatBRL(d.notaGrupo.valorDesconto)}
+                          </Text>
+                        )}
+                        {d.notaGrupo.valorDesconto != null && d.notaGrupo.valorDesconto < 0 && (
+                          <Text style={styles.notaResumoAcrescimo}>
+                            Acréscimo +{formatBRL(Math.abs(d.notaGrupo.valorDesconto))}
+                          </Text>
+                        )}
+                        <Text style={styles.notaResumoTotal}>{formatBRL(d.notaGrupo.totalPago)} pago</Text>
+                      </View>
+                    </View>
+                  )}
+                  <View
+                    style={[
+                      styles.tableRow,
+                      ...(indice % 2 === 1 ? [styles.tableRowZebra] : []),
+                      ...(d.notaGrupo
+                        ? [styles.tableRowNota, { borderLeftColor: d.notaGrupo.cor, backgroundColor: hexParaRgba(d.notaGrupo.cor, 0.05) }]
+                        : []),
+                    ]}
+                  >
+                    <Text style={[styles.tdMuted, { width: `${COLS.data * 100}%` }]}>
+                      {d.data.split("-").reverse().join("/")}
+                    </Text>
+                    <Text style={[styles.td, { width: `${COLS.categoria * 100}%` }]}>{d.categoriaNome}</Text>
+                    <Text style={[styles.td, { width: `${COLS.etapa * 100}%` }]}>{d.etapaNome}</Text>
+                    <View style={{ width: `${COLS.fornecedor * 100}%`, flexDirection: "row", alignItems: "center", gap: 3, paddingHorizontal: 5 }}>
+                      <Text style={[styles.td, { paddingHorizontal: 0, flex: 1 }]}>{d.fornecedorNome}</Text>
+                      {d.notaGrupo && (
+                        <Text style={[styles.notaBadge, { color: d.notaGrupo.cor }]}>
+                          {d.notaGrupo.indice}/{d.notaGrupo.totalItens}
+                        </Text>
+                      )}
+                    </View>
+                    <Text style={[styles.td, { width: `${COLS.descricao * 100}%` }]}>{d.descricao ?? "-"}</Text>
+                    <Text style={[styles.tdMuted, { width: `${COLS.qtd * 100}%` }]}>
+                      {d.quantidade != null
+                        ? `${d.quantidade}${d.valorUnitario != null ? ` × ${formatBRL(d.valorUnitario)}` : ""}`
+                        : "-"}
+                    </Text>
+                    <Text style={[styles.tdValor, { width: `${COLS.valor * 100}%` }]}>{formatBRL(d.valor)}</Text>
+                    <View style={{ width: `${COLS.documentos * 100}%`, paddingHorizontal: 5, flexDirection: "row", gap: 6 }}>
+                      {d.notaUrl && (
+                        <Link src={d.notaUrl} style={[styles.tdLink, styles.tdLinkNota]}>
+                          Nota
+                        </Link>
+                      )}
+                      {d.comprovanteUrl && (
+                        <Link src={d.comprovanteUrl} style={[styles.tdLink, styles.tdLinkComprovante]}>
+                          Comprov.
+                        </Link>
+                      )}
+                      {!d.notaUrl && !d.comprovanteUrl && <Text style={styles.tdSemDocumento}>-</Text>}
+                    </View>
                   </View>
                 </View>
               ))}

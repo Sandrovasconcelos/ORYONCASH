@@ -1,5 +1,8 @@
 import { createAdminClient } from "@/lib/supabase/admin";
 import { formatDataBrasil } from "@/lib/format-date";
+import { carregarNotas } from "@/lib/despesas/notas";
+
+const PALETA_GRUPOS_NOTA = ["#296dd1", "#7c3aed", "#bd7600", "#0f766e", "#c2185b", "#4d7c0f"];
 
 export type FiltrosRelatorio = {
   obra?: string;
@@ -26,6 +29,15 @@ export type DespesaRelatorio = {
   fornecedorNome: string;
   notaUrl: string | null;
   comprovanteUrl: string | null;
+  /** Preenchido quando esta despesa é um dos vários itens de uma mesma nota. */
+  notaGrupo: {
+    indice: number;
+    totalItens: number;
+    cor: string;
+    totalPago: number;
+    valorDesconto: number | null;
+    valorItensOriginal: number | null;
+  } | null;
 };
 
 export type DadosRelatorio = {
@@ -148,21 +160,65 @@ export async function buscarDadosRelatorio(filtros: FiltrosRelatorio): Promise<D
     })
   );
 
-  const despesas: DespesaRelatorio[] = despesasBrutas.map((d) => ({
-    id: d.id,
-    valor: d.valor,
-    quantidade: d.quantidade,
-    valorUnitario: d.valor_unitario,
-    descricao: d.descricao,
-    data: d.data,
-    obraNome: nomeDe(d.obras),
-    categoriaNome: nomeDe(d.categorias),
-    etapaNome: nomeDe(d.etapas),
-    materialNome: nomeDe(d.materiais),
-    fornecedorNome: nomeDe(d.fornecedores),
-    notaUrl: documentosPorDespesa.get(d.id)?.nota ?? null,
-    comprovanteUrl: documentosPorDespesa.get(d.id)?.comprovante ?? null,
-  }));
+  // Varios itens de uma mesma nota viram varias despesas (uma por item), que
+  // compartilham o mesmo arquivo em despesa_comprovantes - agrupa visualmente
+  // igual na tela de Lançamentos, pra quem olha o relatório (web ou PDF)
+  // conseguir ver quais linhas vieram da mesma nota.
+  const grupoNotaPorDespesa = new Map<string, { indice: number; totalItens: number; cor: string }>();
+  {
+    const idsPorChave = new Map<string, string[]>();
+    for (const d of despesasBrutas) {
+      const comprovantesDaDespesa = (comprovantesData ?? []).filter((c) => c.despesa_id === d.id);
+      const arquivoCompartilhado =
+        comprovantesDaDespesa.find((c) => c.tipo_documento === "documento_cobranca") ??
+        comprovantesDaDespesa.find((c) => c.tipo_documento === "comprovante_pagamento");
+      if (!arquivoCompartilhado) continue;
+      const chave = `${arquivoCompartilhado.storage_bucket}/${arquivoCompartilhado.storage_path}`;
+      const lista = idsPorChave.get(chave) ?? [];
+      lista.push(d.id);
+      idsPorChave.set(chave, lista);
+    }
+    let corIndex = 0;
+    for (const ids of idsPorChave.values()) {
+      if (ids.length < 2) continue;
+      const cor = PALETA_GRUPOS_NOTA[corIndex % PALETA_GRUPOS_NOTA.length];
+      ids.forEach((despesaId, i) => {
+        grupoNotaPorDespesa.set(despesaId, { indice: i + 1, totalItens: ids.length, cor });
+      });
+      corIndex += 1;
+    }
+  }
+  const notasCompletas = await carregarNotas(idsDespesas);
+
+  const despesas: DespesaRelatorio[] = despesasBrutas.map((d) => {
+    const grupo = grupoNotaPorDespesa.get(d.id);
+    const notaCompleta = notasCompletas.get(d.id);
+    return {
+      id: d.id,
+      valor: d.valor,
+      quantidade: d.quantidade,
+      valorUnitario: d.valor_unitario,
+      descricao: d.descricao,
+      data: d.data,
+      obraNome: nomeDe(d.obras),
+      categoriaNome: nomeDe(d.categorias),
+      etapaNome: nomeDe(d.etapas),
+      materialNome: nomeDe(d.materiais),
+      fornecedorNome: nomeDe(d.fornecedores),
+      notaUrl: documentosPorDespesa.get(d.id)?.nota ?? null,
+      comprovanteUrl: documentosPorDespesa.get(d.id)?.comprovante ?? null,
+      notaGrupo: grupo
+        ? {
+            indice: grupo.indice,
+            totalItens: notaCompleta?.membros.length ?? grupo.totalItens,
+            cor: grupo.cor,
+            totalPago: notaCompleta?.total ?? d.valor,
+            valorDesconto: notaCompleta?.valorDesconto ?? null,
+            valorItensOriginal: notaCompleta?.valorItensOriginal ?? null,
+          }
+        : null,
+    };
+  });
 
   const totalGasto = despesas.reduce((soma, d) => soma + d.valor, 0);
   const quantidade = despesas.length;
