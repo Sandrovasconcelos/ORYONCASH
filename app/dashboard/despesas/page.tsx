@@ -1,4 +1,5 @@
 import Link from "next/link";
+import { Fragment } from "react";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { formatBRL } from "@/lib/conversation/format";
 import { rotuloOrigem } from "@/lib/origem";
@@ -729,11 +730,11 @@ export default async function DespesasPage({
       {notasCompletas.size > 0 && (
         <div className="rounded-card border border-brand-gray-300/60 bg-white px-4 py-3 text-xs text-brand-gray-600 shadow-card">
           <strong className="text-brand-black">🧾 Como ler as notas com vários itens:</strong> cada produto da nota é
-          um lançamento, com o mesmo valor que está impresso nela (pra bater quando você conferir com a nota em mãos),
-          mas o pagamento (PIX/boleto) é um só, com o valor da nota inteira. Itens da mesma nota têm a mesma barra
-          colorida na esquerda, e o mesmo comprovante aparece em todos eles. Quando o fornecedor dá desconto (ou
-          cobra frete à parte), o selo <span className="font-bold text-status-success">📉 Desconto</span> mostra isso —
-          o valor de cada item continua igual à nota, só o total do grupo é que já sai descontado.
+          um lançamento, com o mesmo valor que está impresso nela (pra bater quando você conferir com a nota em mãos).
+          O resumo em destaque acima do primeiro item mostra o total da nota, um eventual{" "}
+          <span className="font-bold text-status-success">📉 desconto</span> e o comprovante — tudo isso já descontado
+          no total pago. Os itens abaixo só trazem a barra colorida e a posição (ex: 3/115) pra não repetir a mesma
+          informação em cada linha.
         </div>
       )}
 
@@ -779,8 +780,54 @@ export default async function DespesasPage({
               const notaCompleta = notasCompletas.get(d.id);
 
               return (
+                <Fragment key={d.id}>
+                {grupoNota && grupoNota.indice === 1 && notaCompleta && (
+                  <tr
+                    className="block md:table-row"
+                    style={{ background: `${grupoNota.cor}0f` }}
+                  >
+                    <td
+                      colSpan={6}
+                      className="block border-b-2 px-4 py-3 md:table-cell md:px-5"
+                      style={{ borderColor: grupoNota.cor }}
+                    >
+                      <div className="flex flex-wrap items-center justify-between gap-x-4 gap-y-1.5">
+                        <p className="flex items-center gap-1.5 text-xs font-extrabold text-brand-black">
+                          <span style={{ color: grupoNota.cor }}>🧾</span>
+                          Nota com {notaCompleta.membros.length} itens
+                          {fornecedorNome !== "-" ? ` · ${fornecedorNome}` : ""}
+                        </p>
+                        <div className="flex flex-wrap items-center gap-2 text-xs">
+                          {notaCompleta.valorDesconto != null && (
+                            <span className="text-brand-gray-400 line-through">
+                              {formatBRL(notaCompleta.valorItensOriginal ?? 0)}
+                            </span>
+                          )}
+                          {notaCompleta.valorDesconto != null && notaCompleta.valorDesconto > 0 && (
+                            <span
+                              className="inline-flex w-fit items-center gap-1 rounded-full bg-status-success/10 px-2 py-0.5 font-extrabold text-status-success"
+                              title={`Os itens continuam com o preço de tabela. Este total já é o que foi de fato pago, descontando ${formatBRL(notaCompleta.valorDesconto)}.`}
+                            >
+                              📉 -{formatBRL(notaCompleta.valorDesconto)}
+                            </span>
+                          )}
+                          {notaCompleta.valorDesconto != null && notaCompleta.valorDesconto < 0 && (
+                            <span
+                              className="inline-flex w-fit items-center gap-1 rounded-full bg-status-warning/10 px-2 py-0.5 font-extrabold text-status-warning"
+                              title={`Os itens continuam com o preço de tabela. Este total já inclui ${formatBRL(Math.abs(notaCompleta.valorDesconto))} de frete/acréscimo não itemizado.`}
+                            >
+                              📈 +{formatBRL(Math.abs(notaCompleta.valorDesconto))}
+                            </span>
+                          )}
+                          <span className="font-extrabold text-brand-black">
+                            {formatBRL(notaCompleta.total)} pago
+                          </span>
+                        </div>
+                      </div>
+                    </td>
+                  </tr>
+                )}
                 <tr
-                  key={d.id}
                   className="relative mb-3 flex flex-wrap items-start gap-y-2 rounded-card border border-brand-gray-300/60 bg-white p-4 shadow-card last:mb-0 md:mb-0 md:table-row md:flex-none md:gap-0 md:rounded-none md:border-0 md:bg-transparent md:p-0 md:shadow-none md:align-top md:hover:bg-brand-gray-100/60"
                   style={grupoNota ? { borderLeft: `4px solid ${grupoNota.cor}` } : undefined}
                 >
@@ -849,23 +896,9 @@ export default async function DespesasPage({
                               <span
                                 className="inline-flex w-fit items-center gap-1 rounded-full px-2 py-0.5 text-[10px] font-extrabold"
                                 style={{ background: `${grupoNota.cor}1a`, color: grupoNota.cor }}
+                                title="Item desta nota"
                               >
-                                🧾 Mesma nota · {grupoNota.indice}/{notaCompleta?.membros.length ?? grupoNota.total}
-                                {notaCompleta ? ` · total ${formatBRL(notaCompleta.total)}` : ""}
-                              </span>
-                            )}
-                            {notaCompleta?.valorDesconto != null && (
-                              <span
-                                className={`inline-flex w-fit items-center gap-1 rounded-full px-2 py-0.5 text-[10px] font-extrabold ${
-                                  notaCompleta.valorDesconto > 0
-                                    ? "bg-status-success/10 text-status-success"
-                                    : "bg-status-warning/10 text-status-warning"
-                                }`}
-                                title={`Os itens desta nota mantêm o preço de tabela (soma ${formatBRL(notaCompleta.valorItensOriginal ?? 0)}). O total mostrado acima (${formatBRL(notaCompleta.total)}) já é o que foi de fato pago.`}
-                              >
-                                {notaCompleta.valorDesconto > 0
-                                  ? `📉 Desconto de ${formatBRL(notaCompleta.valorDesconto)} (no total, não nos itens)`
-                                  : `📈 Acréscimo de ${formatBRL(Math.abs(notaCompleta.valorDesconto))} (no total, não nos itens)`}
+                                🧾 {grupoNota.indice}/{notaCompleta?.membros.length ?? grupoNota.total}
                               </span>
                             )}
                           </div>
@@ -929,11 +962,6 @@ export default async function DespesasPage({
                         </span>
                       )}
                     </div>
-                    {notaCompleta && comprovantesPagamento[0]?.url && (
-                      <p className="mt-1.5 text-[10px] leading-snug text-brand-gray-500 md:max-w-[190px]">
-                        O comprovante cobre a nota inteira ({formatBRL(notaCompleta.total)}), não só este item.
-                      </p>
-                    )}
                   </td>
                   <td className="order-4 block w-full border-t border-brand-gray-300/60 pt-3 text-right md:table-cell md:w-auto md:border-0 md:px-5 md:py-4">
                     <div className="flex items-center justify-end gap-2 whitespace-nowrap">
@@ -946,75 +974,56 @@ export default async function DespesasPage({
                         triggerId={`despesa-${d.id}`}
                         modalSize="wide"
                       >
-                        <form action={updateDespesaAction} className="space-y-5">
+                        <form action={updateDespesaAction} className="space-y-5 pb-16">
                           <input type="hidden" name="id" value={d.id} />
-                          <div className="rounded-brand-sm border border-brand-gray-300/70 bg-brand-gray-100/60 p-4 sm:col-span-2">
-                            <p className="text-sm font-bold text-brand-black">Resumo do lançamento</p>
-                            <div className="mt-3 grid gap-3 text-sm sm:grid-cols-3">
-                              <div>
-                                <p className="text-xs font-bold uppercase tracking-[0.12em] text-brand-gray-400">Criado por</p>
-                                <p className="mt-1 font-semibold text-brand-black">{d.criado_por_nome || d.criado_por_telefone || "Dashboard"}</p>
-                              </div>
-                              <div>
-                                <p className="text-xs font-bold uppercase tracking-[0.12em] text-brand-gray-400">Origem</p>
-                                <p className="mt-1 font-semibold text-brand-black">{rotuloOrigem(d.origem, d.criado_por_telefone)}</p>
-                              </div>
-                              <div>
-                                <p className="text-xs font-bold uppercase tracking-[0.12em] text-brand-gray-400">Registrado em</p>
-                                <p className="mt-1 font-semibold text-brand-black">{formatDataHoraBrasil(d.created_at)}</p>
-                              </div>
+                          <input type="hidden" name="despesa_id" value={d.id} />
+
+                          <div className="rounded-brand-sm border border-brand-gray-300/70 bg-brand-gray-100/60 p-4 text-xs">
+                            <div className="flex flex-wrap items-center gap-x-4 gap-y-1.5 text-brand-gray-600">
+                              <span><strong className="font-bold text-brand-black">Criado por</strong> {d.criado_por_nome || d.criado_por_telefone || "Dashboard"}</span>
+                              <span><strong className="font-bold text-brand-black">Origem</strong> {rotuloOrigem(d.origem, d.criado_por_telefone)}</span>
+                              <span><strong className="font-bold text-brand-black">Registrado em</strong> {formatDataHoraBrasil(d.created_at)}</span>
                             </div>
-                          </div>
-                          {fornecedorDados &&
-                            (fornecedorDados.cnpj ||
-                              fornecedorDados.cpf ||
-                              fornecedorDados.chave_pix ||
-                              fornecedorDados.conta_banco) && (
-                              <div className="rounded-brand-sm border border-brand-gray-300/70 bg-brand-gray-100/60 p-4 sm:col-span-2">
-                                <p className="text-sm font-bold text-brand-black">
-                                  Dados do fornecedor rastreados do recibo/comprovante
-                                </p>
-                                <div className="mt-3 grid gap-3 text-sm sm:grid-cols-4">
+                            {fornecedorDados &&
+                              (fornecedorDados.cnpj ||
+                                fornecedorDados.cpf ||
+                                fornecedorDados.chave_pix ||
+                                fornecedorDados.conta_banco) && (
+                                <div className="mt-2 flex flex-wrap items-center gap-x-4 gap-y-1.5 border-t border-brand-gray-300/60 pt-2 text-brand-gray-600">
+                                  <span className="font-extrabold uppercase tracking-[0.1em] text-brand-gray-400">
+                                    📄 Rastreado do comprovante
+                                  </span>
                                   {fornecedorDados.cnpj && (
-                                    <div>
-                                      <p className="text-xs font-bold uppercase tracking-[0.12em] text-brand-gray-400">CNPJ</p>
-                                      <p className="mt-1 font-semibold text-brand-black">{fornecedorDados.cnpj}</p>
-                                    </div>
+                                    <span><strong className="font-bold text-brand-black">CNPJ</strong> {fornecedorDados.cnpj}</span>
                                   )}
                                   {fornecedorDados.cpf && (
-                                    <div>
-                                      <p className="text-xs font-bold uppercase tracking-[0.12em] text-brand-gray-400">CPF</p>
-                                      <p className="mt-1 font-semibold text-brand-black">{fornecedorDados.cpf}</p>
-                                    </div>
+                                    <span><strong className="font-bold text-brand-black">CPF</strong> {fornecedorDados.cpf}</span>
                                   )}
                                   {fornecedorDados.chave_pix && (
-                                    <div>
-                                      <p className="text-xs font-bold uppercase tracking-[0.12em] text-brand-gray-400">Chave Pix</p>
-                                      <p className="mt-1 font-semibold text-brand-black">{fornecedorDados.chave_pix}</p>
-                                    </div>
+                                    <span><strong className="font-bold text-brand-black">Pix</strong> {fornecedorDados.chave_pix}</span>
                                   )}
                                   {fornecedorDados.conta_banco && (
-                                    <div>
-                                      <p className="text-xs font-bold uppercase tracking-[0.12em] text-brand-gray-400">Conta</p>
-                                      <p className="mt-1 font-semibold text-brand-black">
-                                        {[
-                                          fornecedorDados.conta_banco,
-                                          fornecedorDados.conta_agencia,
-                                          fornecedorDados.conta_numero,
-                                        ]
-                                          .filter(Boolean)
-                                          .join(" · ")}
-                                      </p>
-                                    </div>
+                                    <span>
+                                      <strong className="font-bold text-brand-black">Conta</strong>{" "}
+                                      {[
+                                        fornecedorDados.conta_banco,
+                                        fornecedorDados.conta_agencia,
+                                        fornecedorDados.conta_numero,
+                                      ]
+                                        .filter(Boolean)
+                                        .join(" · ")}
+                                    </span>
                                   )}
                                 </div>
-                              </div>
-                            )}
+                              )}
+                          </div>
+
                           <div className="rounded-brand border border-brand-gray-300/70 bg-white p-5">
-                            <div className="mb-4">
-                              <p className="text-sm font-extrabold text-brand-black">Dados do lançamento</p>
-                              <p className="mt-1 text-xs text-brand-gray-500">Edite classificação, valor, data e descrição.</p>
-                            </div>
+                            <p className="text-sm font-extrabold text-brand-black">Dados do lançamento</p>
+
+                            <p className="mb-2 mt-4 text-[11px] font-extrabold uppercase tracking-[0.14em] text-brand-gray-400">
+                              Classificação
+                            </p>
                             <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
                           <label className="flex flex-col gap-1 text-sm text-brand-gray-700">
                             Obra
@@ -1106,6 +1115,12 @@ export default async function DespesasPage({
                               ))}
                             </select>
                           </label>
+                            </div>
+
+                            <p className="mb-2 mt-5 text-[11px] font-extrabold uppercase tracking-[0.14em] text-brand-gray-400">
+                              Valores e data
+                            </p>
+                            <div className="grid grid-cols-2 gap-4 sm:grid-cols-4">
                           <label className="flex flex-col gap-1 text-sm text-brand-gray-700">
                             Data
                             <input
@@ -1122,7 +1137,7 @@ export default async function DespesasPage({
                               name="valor"
                               defaultValue={valorInputBR(d.valor)}
                               required
-                              className="rounded-brand-sm border border-brand-gray-300 bg-white px-3 py-2 text-sm outline-none focus:border-brand-red"
+                              className="rounded-brand-sm border border-brand-gray-300 bg-white px-3 py-2 text-sm font-semibold outline-none focus:border-brand-red"
                             />
                           </label>
                           <label className="flex flex-col gap-1 text-sm text-brand-gray-700">
@@ -1143,16 +1158,17 @@ export default async function DespesasPage({
                               className="rounded-brand-sm border border-brand-gray-300 bg-white px-3 py-2 text-sm outline-none focus:border-brand-red"
                             />
                           </label>
-                          <label className="flex flex-col gap-1 text-sm text-brand-gray-700 sm:col-span-2">
-                            Descrição
+                            </div>
+
+                            <p className="mb-2 mt-5 text-[11px] font-extrabold uppercase tracking-[0.14em] text-brand-gray-400">
+                              Descrição
+                            </p>
                             <textarea
                               name="descricao"
                               defaultValue={d.descricao ?? ""}
                               rows={3}
-                              className="rounded-brand-sm border border-brand-gray-300 bg-white px-3 py-2 text-sm outline-none focus:border-brand-red"
+                              className="w-full rounded-brand-sm border border-brand-gray-300 bg-white px-3 py-2 text-sm outline-none focus:border-brand-red"
                             />
-                          </label>
-                            </div>
                           </div>
                           <div className="rounded-brand border border-brand-gray-300/70 bg-brand-gray-100/60 p-5">
                             <div className="flex flex-col gap-1 sm:flex-row sm:items-start sm:justify-between">
@@ -1327,16 +1343,19 @@ export default async function DespesasPage({
                                 })}
                               </div>
                           </div>
-                          <input type="hidden" name="despesa_id" value={d.id} />
-                          <SubmitButton className="rounded-brand-sm bg-brand-red px-4 py-2 text-sm font-semibold text-white hover:bg-brand-red-700 sm:col-span-2">
-                            Salvar edição
-                          </SubmitButton>
+
+                          <div className="sticky bottom-0 z-10 -mx-5 -mb-5 border-t border-brand-gray-300/70 bg-white/95 px-5 py-3 backdrop-blur sm:-mx-7 sm:-mb-5 sm:px-7">
+                            <SubmitButton className="w-full rounded-brand-sm bg-brand-red px-4 py-2.5 text-sm font-semibold text-white hover:bg-brand-red-700 sm:w-auto">
+                              Salvar edição
+                            </SubmitButton>
+                          </div>
                         </form>
                       </CadastroModal>
                       <DeleteButton despesaId={d.id} action={deleteDespesaAction} />
                     </div>
                   </td>
                 </tr>
+                </Fragment>
               );
             })}
 
