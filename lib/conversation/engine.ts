@@ -323,6 +323,14 @@ export async function handleIncomingMessage(message: IncomingMessage) {
     return;
   }
 
+  // Pergunta de gasto ("quanto gastei com cimento?") e reconhecida em
+  // qualquer estado, nao so no menu - nao faz sentido ficar presa a um
+  // fluxo em andamento (ex: a pessoa pode perguntar isso no meio de um
+  // cadastro). So em texto livre de verdade (sem replyId de botao/lista).
+  if (!message.replyId && (await tentarRelatorioPorPergunta(from, message.text))) {
+    return;
+  }
+
   // Botoes dos avisos (desfazer, corrigir, paguei, pagamentos do extrato). No
   // Telegram o webhook resolve antes de chegar aqui; no WhatsApp chegam por aqui.
   if (message.replyId && PADRAO_ACAO_DE_BOTAO.test(message.replyId)) {
@@ -505,7 +513,6 @@ async function handleMenu(from: string, message: IncomingMessage) {
       await iniciarConciliacao(from);
       return;
     default:
-      if (await tentarRelatorioPorPergunta(from, message.text)) return;
       if (await tentarLancamentoRapido(from, message.text)) return;
       await sendMenuPrincipal(from);
   }
