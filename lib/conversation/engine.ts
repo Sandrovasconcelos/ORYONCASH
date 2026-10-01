@@ -1552,6 +1552,9 @@ async function handleAudioRecebido(from: string, media: IncomingMedia) {
 /** Tudo que acontece depois de o audio ser entendido (ou de a leitura falhar de vez). */
 export async function processarAudioLido(from: string, extraido: DespesaDeAudio | null) {
   if (!extraido || !extraido.valor || !extraido.descricao) {
+    // Nao parece uma despesa (sem valor/descricao) - antes de desistir, ve
+    // se a transcricao e uma pergunta de gasto ("quanto ja gastei com X?").
+    if (await tentarRelatorioPorPergunta(from, extraido?.transcricao ?? null)) return;
     await iniciarFallbackManual(
       from,
       "Não consegui entender o valor e o que foi essa despesa no áudio. Pode digitar o valor? (ex: 150,00)"

@@ -13,17 +13,26 @@ export type DespesaDeAudio = {
   obraMencionada?: string | null;
   categoriaMencionada?: string | null;
   etapaMencionada?: string | null;
+  // Transcricao bruta - usada quando NAO da pra extrair uma despesa (ex: a
+  // pessoa fez uma pergunta tipo "quanto ja gastei com cimento?" em vez de
+  // descrever um gasto), pra tentar entender como pergunta de relatorio.
+  transcricao: string | null;
 };
 
 const PROMPT = `Este e um audio (mensagem de voz do WhatsApp) em portugues, de
 alguem descrevendo uma despesa que fez em uma obra de construcao (ex.:
 "gastei 50 reais com o pedreiro", "paguei 200 de frete pro caminhao de
-areia", "comprei tinta por 80 reais na loja tal").
+areia", "comprei tinta por 80 reais na loja tal") - mas tambem pode ser uma
+PERGUNTA sobre quanto ja foi gasto (ex: "quanto eu ja gastei com cimento?"),
+que nao e uma despesa nova.
 
 Transcreva e extraia em JSON:
 {
-  "valor": number ou null se nao mencionar um valor em reais,
-  "descricao": string curta (o que foi pago/comprado) ou null se nao ficar claro,
+  "transcricao": a transcricao literal do que foi dito,
+  "valor": number ou null se nao mencionar um valor em reais (uma pergunta
+    sobre gasto, sem valor novo mencionado, e sempre null aqui),
+  "descricao": string curta (o que foi pago/comprado) ou null se nao ficar
+    claro ou se for uma pergunta em vez de uma despesa,
   "fornecedorNome": string com o nome do fornecedor/loja/pessoa mencionada, ou null,
   "obraMencionada": nome da obra citada (ex: "Costa Amalfitana"), ou null,
   "categoriaMencionada": tipo do gasto citado - ex: "Material", "Mão de obra",
@@ -40,6 +49,7 @@ Responda APENAS com o JSON.`;
 const RESPONSE_SCHEMA = {
   type: "object",
   properties: {
+    transcricao: { type: "string", nullable: true },
     valor: { type: "number", nullable: true },
     descricao: { type: "string", nullable: true },
     fornecedorNome: { type: "string", nullable: true },
