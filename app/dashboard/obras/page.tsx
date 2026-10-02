@@ -22,6 +22,7 @@ import {
   PermanentlyDeleteObraButton,
   RestoreObraButton,
 } from "./obra-trash-buttons";
+import { IconeNome } from "../icone-svg";
 
 export const dynamic = "force-dynamic";
 
@@ -372,7 +373,10 @@ export default async function ObrasPage() {
                                         <tr key={etapa.id}>
                                           <td data-th="Ordem" className="text-brand-gray-500">{etapa.ordem}</td>
                                           <td data-th="Etapa">
-                                            <p className="font-semibold text-brand-black">{etapa.nome}</p>
+                                            <p className="flex items-center gap-2.5 font-semibold text-brand-black">
+                                              <IconeNome nomes={[etapa.nome]} gerarPara={etapa.nome} tamanho={32} />
+                                              {etapa.nome}
+                                            </p>
                                           </td>
                                           <td data-th="Orçado">{formatBRL(Number(etapa.valor_orcado ?? 0))}</td>
                                           <td data-th="Uso">

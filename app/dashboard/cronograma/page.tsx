@@ -23,6 +23,7 @@ import { DistribuicaoMensalTable } from "./distribuicao-mensal-table";
 import { CurvaSChart } from "../charts/curva-s-chart";
 import { ContratoFornecedorForm } from "./contrato-fornecedor-form";
 import { TarefaCronogramaLinha } from "./tarefa-cronograma-linha";
+import { IconeNome } from "../icone-svg";
 
 export const dynamic = "force-dynamic";
 
@@ -578,7 +579,10 @@ export default async function CronogramaPage({
           return (
             <div key={etapa.id} className="rounded-card border border-brand-gray-300/60 bg-white p-5 shadow-card">
               <div className="flex flex-col gap-1 sm:flex-row sm:items-center sm:justify-between">
-                <h3 className="text-sm font-extrabold text-brand-black">{etapa.nome}</h3>
+                <h3 className="flex items-center gap-2.5 text-sm font-extrabold text-brand-black">
+                  <IconeNome nomes={[etapa.nome]} gerarPara={etapa.nome} tamanho={32} />
+                  {etapa.nome}
+                </h3>
                 <p className="text-xs text-brand-gray-500">
                   Previsto até {etapa.data_fim_prevista ? formatDataBR(etapa.data_fim_prevista) : "—"}
                 </p>

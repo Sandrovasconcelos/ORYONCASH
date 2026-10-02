@@ -13,6 +13,7 @@ import {
 } from "../actions";
 import { CadastroModal } from "../cadastro-modal";
 import { ActionIcon } from "../action-icon";
+import { IconeNome } from "../icone-svg";
 import { DeleteButton } from "./delete-button";
 import { OpenDespesaModalButton } from "./open-despesa-modal-button";
 import { SubmitButton } from "../submit-button";
@@ -29,58 +30,6 @@ function valorInputBR(valor: number) {
     minimumFractionDigits: 2,
     maximumFractionDigits: 2,
   });
-}
-
-function normalizarParaBusca(texto: string): string {
-  return texto
-    .normalize("NFD")
-    .replace(/[̀-ͯ]/g, "")
-    .toLowerCase();
-}
-
-/**
- * Figurinha (emoji) da linha do lancamento. Primeiro tenta reconhecer o
- * TIPO de material pelo nome do material ou da descrição - mais
- * específico. Se não bater com nada, cai pra uma figurinha pela categoria
- * (Mão de obra, Corretagem, etc), e por último pro recibo genérico.
- */
-function figurinhaDoLancamento(input: {
-  categoriaNome: string;
-  materialNome: string;
-  descricao: string | null;
-}): { emoji: string; rotulo: string } {
-  const texto = normalizarParaBusca(`${input.materialNome} ${input.descricao ?? ""}`);
-
-  if (/cabo|fio\b|eletric|disjuntor|tomada|interruptor|luminaria|lampada/.test(texto)) {
-    return { emoji: "⚡", rotulo: "Material elétrico" };
-  }
-  if (/cano|tubo|hidraulic|dreno|drenagem|esgoto|registro|torneira|conexao|conexoes/.test(texto)) {
-    return { emoji: "🚰", rotulo: "Material hidráulico" };
-  }
-  if (/cimento|concreto|argamassa|tijolo|bloco|alvenaria/.test(texto)) {
-    return { emoji: "🧱", rotulo: "Alvenaria" };
-  }
-  if (/areia|brita|agregado|pedra|seixo/.test(texto)) {
-    return { emoji: "🪨", rotulo: "Agregado" };
-  }
-  if (/tinta|pintura|verniz/.test(texto)) {
-    return { emoji: "🎨", rotulo: "Pintura" };
-  }
-  if (/madeira|compensado|mdf/.test(texto)) {
-    return { emoji: "🪵", rotulo: "Madeira" };
-  }
-  if (/vidro|espelho|janela/.test(texto)) {
-    return { emoji: "🪟", rotulo: "Vidro/esquadria" };
-  }
-
-  const categoria = normalizarParaBusca(input.categoriaNome);
-  if (categoria.includes("material")) return { emoji: "📦", rotulo: "Material" };
-  if (categoria.includes("mao de obra")) return { emoji: "👷", rotulo: "Mão de obra" };
-  if (categoria.includes("corretagem")) return { emoji: "🏠", rotulo: "Corretagem" };
-  if (categoria.includes("equipamento")) return { emoji: "🛠️", rotulo: "Equipamento" };
-  if (categoria.includes("finaliza")) return { emoji: "🏁", rotulo: "Finalização" };
-  if (categoria.includes("administrativ")) return { emoji: "🏢", rotulo: "Administrativo" };
-  return { emoji: "🧾", rotulo: "Despesa" };
 }
 
 function formatDataBR(data: string): string {
@@ -843,16 +792,7 @@ export default async function DespesasPage({
                   <td className="order-1 block w-full pb-3 pr-10 md:table-cell md:w-auto md:px-5 md:py-4 md:pr-5">
                     <OpenDespesaModalButton despesaId={d.id}>
                       <div className="flex items-start gap-3">
-                        <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-brand-sm bg-brand-red/10 text-2xl leading-none">
-                          {(() => {
-                            const figurinha = figurinhaDoLancamento({ categoriaNome, materialNome, descricao: d.descricao });
-                            return (
-                              <span role="img" aria-label={figurinha.rotulo} title={figurinha.rotulo}>
-                                {figurinha.emoji}
-                              </span>
-                            );
-                          })()}
-                        </div>
+                        <IconeNome nomes={[materialNome, d.descricao, etapaNome, categoriaNome]} gerarPara={categoriaNome} />
                         <div className="min-w-0">
                           <div className="flex flex-wrap items-center gap-x-2 gap-y-1">
                             <p className="font-semibold text-brand-black">{obraNome}</p>

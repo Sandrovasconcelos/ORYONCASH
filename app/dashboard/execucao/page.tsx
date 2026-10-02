@@ -15,6 +15,7 @@ import { ActionIcon } from "../action-icon";
 import { ObraSelector } from "../obra-selector";
 import { SubmitButton } from "../submit-button";
 import { TarefaLinha } from "./tarefa-linha";
+import { IconeNome } from "../icone-svg";
 
 export const dynamic = "force-dynamic";
 
@@ -231,7 +232,12 @@ export default async function ExecucaoPage({
 
                 return (
                   <tr key={etapa.id}>
-                    <td data-th="Etapa" className="font-semibold text-brand-black">{etapa.nome}</td>
+                    <td data-th="Etapa" className="font-semibold text-brand-black">
+                      <span className="flex items-center gap-2.5">
+                        <IconeNome nomes={[etapa.nome]} gerarPara={etapa.nome} tamanho={32} />
+                        {etapa.nome}
+                      </span>
+                    </td>
                     <td data-th="Fornecedor" className="text-brand-gray-700">
                       <p>{etapa.fornecedor_id ? nomesFornecedor.get(etapa.fornecedor_id) ?? "—" : "—"}</p>
                       {contrato && (

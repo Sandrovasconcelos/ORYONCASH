@@ -9,6 +9,7 @@ import { CadastroModal } from "../cadastro-modal";
 import { DeleteCadastroButton } from "../delete-cadastro-button";
 import { ActionIcon } from "../action-icon";
 import { SubmitButton } from "../submit-button";
+import { IconeNome } from "../icone-svg";
 
 export const dynamic = "force-dynamic";
 
@@ -123,13 +124,16 @@ export default async function CategoriasPage() {
                   className="mb-3 block rounded-card border border-brand-gray-300/60 bg-white p-4 shadow-card last:mb-0 md:mb-0 md:table-row md:rounded-none md:border-0 md:bg-transparent md:p-0 md:shadow-none md:align-middle md:hover:bg-brand-gray-100/55"
                 >
                   <td className="block w-full pb-2 md:table-cell md:px-5 md:py-4 md:pb-4">
-                    <Link
-                      href={`/dashboard/despesas?categoria=${categoria.id}`}
-                      className="font-semibold text-brand-black hover:text-brand-red hover:underline"
-                      title="Ver lançamentos desta categoria"
-                    >
-                      {categoria.nome}
-                    </Link>
+                    <div className="flex items-center gap-3">
+                      <IconeNome nomes={[categoria.nome]} gerarPara={categoria.nome} tamanho={40} />
+                      <Link
+                        href={`/dashboard/despesas?categoria=${categoria.id}`}
+                        className="font-semibold text-brand-black hover:text-brand-red hover:underline"
+                        title="Ver lançamentos desta categoria"
+                      >
+                        {categoria.nome}
+                      </Link>
+                    </div>
                   </td>
                   <td className="mb-2 block w-full md:mb-0 md:table-cell md:px-5 md:py-4">
                     <span className="mr-1.5 text-[10px] font-bold uppercase tracking-[0.06em] text-brand-gray-400 md:hidden">

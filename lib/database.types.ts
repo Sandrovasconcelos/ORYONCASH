@@ -494,6 +494,22 @@ export interface Database {
         Update: Partial<Database["public"]["Tables"]["saude_canais"]["Insert"]>;
         Relationships: [];
       };
+      icones_personalizados: {
+        Row: {
+          nome_normalizado: string;
+          nome: string;
+          svg: string;
+          created_at: string;
+        };
+        Insert: {
+          nome_normalizado: string;
+          nome: string;
+          svg: string;
+          created_at?: string;
+        };
+        Update: Partial<Database["public"]["Tables"]["icones_personalizados"]["Insert"]>;
+        Relationships: [];
+      };
       leituras_pendentes: {
         Row: {
           id: string;
