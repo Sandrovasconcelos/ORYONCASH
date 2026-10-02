@@ -3,7 +3,7 @@
 import Link from "next/link";
 import Image from "next/image";
 import { usePathname, useRouter } from "next/navigation";
-import { useEffect, useState, useTransition } from "react";
+import { useState, useTransition } from "react";
 import { signOutAction } from "./actions";
 
 const NAV_GROUPS = [
@@ -42,8 +42,6 @@ const NAV_GROUPS = [
     ],
   },
 ];
-
-const NAV_ITEMS = NAV_GROUPS.flatMap((grupo) => grupo.itens);
 
 function NavIcon({ name }: { name: string }) {
   const paths: Record<string, React.ReactNode> = {
@@ -194,14 +192,6 @@ function NavLinks({ onNavigate }: { onNavigate?: () => void }) {
   const destinoPendente =
     navegacao?.origem === pathname ? navegacao.destino : null;
 
-  useEffect(() => {
-    for (const item of NAV_ITEMS) {
-      if (item.href !== pathname) {
-        router.prefetch(item.href);
-      }
-    }
-  }, [pathname, router]);
-
   return (
     <nav aria-label="Navegação principal" className="flex flex-1 flex-col gap-4 overflow-y-auto">
       {NAV_GROUPS.map((grupo) => (
@@ -224,7 +214,14 @@ function NavLinks({ onNavigate }: { onNavigate?: () => void }) {
               <Link
                 key={item.href}
                 href={item.href}
-                prefetch
+                // Sem prefetch automatico: pre-carregar as ~17 telas (todas dinamicas,
+                // com consultas pesadas) a cada mudanca de pagina e a cada salvamento
+                // sobrecarregava servidor e banco e deixava tudo mais lento. Pre-carrega
+                // so a tela para a qual a pessoa aponta/toca.
+                prefetch={false}
+                onPointerEnter={() => {
+                  if (pathname !== item.href) router.prefetch(item.href);
+                }}
                 onClick={(event) => {
                   if (pathname === item.href) return;
                   event.preventDefault();
