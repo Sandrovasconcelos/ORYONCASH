@@ -133,7 +133,7 @@ export function FormularioEdicao(props: FormularioEdicaoProps) {
       <section>
         <p className={`mb-2 ${SECAO}`}>Valores e data</p>
         <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
-          <label className={`${ROTULO} col-span-2 sm:col-span-1`}>
+          <label className={ROTULO}>
             Valor (R$)
             <input
               name="valor"
@@ -143,7 +143,7 @@ export function FormularioEdicao(props: FormularioEdicaoProps) {
               className={`${CAMPO} font-display text-lg font-bold sm:text-base`}
             />
           </label>
-          <label className={`${ROTULO} col-span-2 sm:col-span-1`}>
+          <label className={ROTULO}>
             Data
             <input type="date" name="data" defaultValue={d.data} required className={CAMPO} />
           </label>
@@ -309,7 +309,7 @@ export function FormularioEdicao(props: FormularioEdicaoProps) {
                     type="submit"
                     formAction={reclassificarComprovanteDespesaAction.bind(null, arquivo.id, outro.tipo)}
                     formNoValidate
-                    className="mt-2 text-[11px] font-bold text-brand-gray-500 underline-offset-2 hover:text-brand-red hover:underline"
+                    className="mt-2 block text-left text-[11px] font-bold text-brand-gray-500 underline-offset-2 hover:text-brand-red hover:underline"
                   >
                     Esse arquivo é {outro.titulo.toLowerCase()}? Mover para lá
                   </button>
@@ -369,17 +369,19 @@ export function FormularioEdicao(props: FormularioEdicaoProps) {
       <input type="hidden" name="despesa_id" value={d.id} />
 
       <header className="rounded-brand border border-brand-gray-300/70 bg-white p-4 shadow-sm">
-        <div className="flex items-start gap-3">
-          <IconeNome nomes={[nomes.material, d.descricao, nomes.categoria]} gerarPara={nomes.categoria} tamanho={52} />
-          <div className="min-w-0 flex-1">
-            <p className="line-clamp-2 break-words text-sm font-extrabold leading-snug text-brand-black">
+        <div className="flex flex-wrap items-start gap-x-3 gap-y-2">
+          <IconeNome nomes={[nomes.material, d.descricao, nomes.categoria]} gerarPara={nomes.categoria} tamanho={48} />
+          <div className="min-w-0 flex-1 basis-[calc(100%-4rem)] sm:basis-0">
+            <p className="line-clamp-3 break-words text-sm font-extrabold leading-snug text-brand-black sm:line-clamp-2">
               {d.descricao || "Sem descrição"}
             </p>
             <p className="mt-0.5 text-xs text-brand-gray-500">
-              {[nomes.obra, nomes.categoria, nomes.etapa !== "-" ? nomes.etapa : null].filter(Boolean).join(" · ")}
+              {[...new Set([nomes.obra, nomes.categoria, nomes.etapa !== "-" ? nomes.etapa : null].filter(Boolean))].join(" · ")}
             </p>
           </div>
-          <p className="shrink-0 font-display text-lg font-black leading-none text-brand-black">{formatBRL(d.valor)}</p>
+          <p className="w-full font-display text-2xl font-black leading-none text-brand-black sm:w-auto sm:shrink-0 sm:text-lg">
+            {formatBRL(d.valor)}
+          </p>
         </div>
         <div className="mt-3 flex flex-wrap items-center gap-1.5">
           <Selo ok={temNota} textoOk="Nota anexada" textoPendente="Sem nota" />

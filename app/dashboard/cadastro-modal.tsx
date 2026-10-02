@@ -58,6 +58,7 @@ export function CadastroModal({
         description={descricao}
         tone="neutral"
         size={modalSize}
+        rodapeSoDesktop
         footer={
           <button type="button" onClick={() => setOpen(false)} className="oc-button oc-button-soft">
             Fechar

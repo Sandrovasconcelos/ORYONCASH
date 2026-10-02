@@ -11,6 +11,7 @@ export function AppModal({
   children,
   footer,
   size = "default",
+  rodapeSoDesktop = false,
 }: {
   open: boolean;
   onClose: () => void;
@@ -21,6 +22,8 @@ export function AppModal({
   size?: "default" | "wide";
   children?: React.ReactNode;
   footer: React.ReactNode;
+  /** No celular o X do cabecalho ja fecha: esconde o rodape pra sobrar espaco ao conteudo. */
+  rodapeSoDesktop?: boolean;
 }) {
   useEffect(() => {
     if (!open) return;
@@ -58,13 +61,17 @@ export function AppModal({
           size === "wide" ? "max-w-[960px]" : "max-w-[680px]"
         }`}
       >
-        <div className="relative border-b border-brand-gray-300/70 bg-brand-gray-100/95 px-5 py-5 pr-16 text-left sm:px-7 sm:py-6 sm:text-center">
-          <p className="oc-eyebrow mb-3">{eyebrow}</p>
-          <h2 id="app-modal-title" className="oc-title break-words text-2xl leading-tight">
+        <div className="relative border-b border-brand-gray-300/70 bg-brand-gray-100/95 px-5 py-3.5 pr-16 text-left sm:px-7 sm:py-6 sm:text-center">
+          <p className="oc-eyebrow mb-1.5 sm:mb-3">{eyebrow}</p>
+          <h2 id="app-modal-title" className="oc-title break-words text-xl leading-tight sm:text-2xl">
             {title}
           </h2>
           {description && (
-            <div className="mx-auto mt-2 max-w-[560px] break-words text-sm leading-6 text-brand-gray-500">
+            <div
+              className={`mx-auto mt-2 max-w-[560px] break-words text-sm leading-6 text-brand-gray-500 ${
+                children ? "hidden sm:block" : ""
+              }`}
+            >
               {description}
             </div>
           )}
@@ -85,7 +92,11 @@ export function AppModal({
           </div>
         )}
 
-        <div className="flex flex-col-reverse gap-2 border-t border-brand-gray-300/70 bg-white/95 px-5 py-4 sm:flex-row sm:justify-end sm:px-7">
+        <div
+          className={`flex-col-reverse gap-2 border-t border-brand-gray-300/70 bg-white/95 px-5 py-4 sm:flex sm:flex-row sm:justify-end sm:px-7 ${
+            rodapeSoDesktop ? "hidden" : "flex"
+          }`}
+        >
           {footer}
         </div>
       </section>
