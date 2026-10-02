@@ -10,6 +10,7 @@ import { PrintButton } from "./print-button";
 import { enviarRelatorioPdfWhatsAppAction } from "../../actions";
 import { SubmitButton } from "../../submit-button";
 import { consultarEmLotes } from "@/lib/supabase/emLotes";
+import { IconeNome } from "../../icone-svg";
 
 const PALETA_GRUPOS_NOTA = ["#296dd1", "#7c3aed", "#bd7600", "#0f766e", "#c2185b", "#4d7c0f"];
 
@@ -586,7 +587,16 @@ export default async function RelatorioDespesasPage({
                             </span>
                           )}
                         </td>
-                        <td data-th="Descrição" className="break-words md:max-w-[220px] md:truncate">{d.descricao ?? "-"}</td>
+                        <td data-th="Descrição" className="break-words md:max-w-[240px]">
+                          <span className="flex items-center gap-2">
+                            <IconeNome
+                              nomes={[nomeDe(d.materiais), d.descricao, nomeDe(d.categorias)]}
+                              tamanho={26}
+                              className="print:hidden"
+                            />
+                            <span className="min-w-0 md:truncate">{d.descricao ?? "-"}</span>
+                          </span>
+                        </td>
                         <td data-th="Qtd" className="whitespace-nowrap text-xs text-brand-gray-600">
                           {d.quantidade != null ? (
                             <>

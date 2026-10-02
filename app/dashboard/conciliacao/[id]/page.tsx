@@ -9,6 +9,7 @@ import { carregarNotas, expandirParaNota } from "@/lib/despesas/notas";
 import { SubmitButton } from "../../submit-button";
 import { RevisaoTransacaoModal } from "./revisao-transacao-modal";
 import { sugerirLancamentos } from "@/lib/conciliacao/sugestoes";
+import { IconeNome } from "../../icone-svg";
 
 export const dynamic = "force-dynamic";
 
@@ -227,7 +228,9 @@ export default async function ConciliacaoDetalhePage({
                     </td>
                     <td className="mb-2 block w-full border-t border-black/5 pt-2 text-xs text-brand-gray-600 md:mb-0 md:border-0 md:pt-0 md:table-cell md:px-4 md:py-3">
                       {despesa ? (
-                        <>
+                        <div className="flex items-start gap-2.5">
+                          <IconeNome nomes={[despesa.descricao, despesa.categorias?.nome]} tamanho={32} />
+                          <div className="min-w-0">
                           <p className="font-semibold text-brand-black">
                             {formatBRL(notasPorDespesa.get(despesa.id)?.total ?? despesa.valor)}
                           </p>
@@ -240,7 +243,8 @@ export default async function ConciliacaoDetalhePage({
                             {despesa.obras?.nome ?? "—"} · {despesa.categorias?.nome ?? "—"}
                           </p>
                           {despesa.descricao && <p className="text-brand-gray-500">{despesa.descricao}</p>}
-                        </>
+                          </div>
+                        </div>
                       ) : vinculosPorValor.get(t.id) ? (
                         <div className="flex flex-col gap-1">
                           <p className="font-semibold text-status-warning">Possível lançamento (data diferente)</p>

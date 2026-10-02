@@ -4,6 +4,8 @@ import Link from "next/link";
 import { useMemo, useState } from "react";
 import { formatBRL } from "@/lib/conversation/format";
 import { AppModal } from "../../app-modal";
+import { IconeTile } from "../../icone-tile";
+import { chaveIconeDe } from "@/lib/icones/resolver";
 
 export type DespesaDoDia = {
   id: string;
@@ -220,7 +222,8 @@ export function CalendarioGrid({
             .sort((a, b) => b.valor - a.valor)
             .map((d) => (
               <li key={d.id} className="flex items-center justify-between gap-3 py-2.5 text-sm">
-                <div className="min-w-0">
+                <IconeTile chave={chaveIconeDe(d.descricao, d.categoriaNome)} tamanho={36} />
+                <div className="min-w-0 flex-1">
                   <p className="truncate font-semibold text-brand-black">
                     {d.obraNome ?? "Sem obra"} · {d.categoriaNome ?? "Sem categoria"}
                   </p>
