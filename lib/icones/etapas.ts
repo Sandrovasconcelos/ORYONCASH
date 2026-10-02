@@ -143,3 +143,99 @@ export const ICONES_ETAPA: Record<string, IconeMaterial> = {
 <circle cx="17" cy="17" r="3.4" fill="#fff"/>`,
   },
 };
+
+export const ICONES_ITEM: Record<string, IconeMaterial> = {
+  trena: {
+    rotulo: "Trena / medição",
+    svg: `<rect x="6" y="10" width="26" height="26" rx="7" fill="#F5B820"/>
+<circle cx="19" cy="23" r="8" fill="#E09F10"/><circle cx="19" cy="23" r="3.2" fill="#fff"/>
+<rect x="30" y="27" width="14" height="7" rx="1.2" fill="#fff" stroke="#9CA3AF" stroke-width="1.4"/>
+<path d="M33 27v3M36 27v4.5M39 27v3M42 27v4.5" stroke="#374151" stroke-width="1.3"/>`,
+  },
+  serra: {
+    rotulo: "Serra",
+    svg: `<rect x="3" y="12" width="32" height="13" fill="#CBD0D6"/>
+<path d="M3 25l3 5 3-5 3 5 3-5 3 5 3-5 3 5 3-5 3 5 3-5 2 4v-4z" fill="#9CA3AF"/>
+<rect x="33" y="8" width="12" height="22" rx="5" fill="#D9603B"/>
+<rect x="36.5" y="13" width="5" height="9" rx="2.5" fill="#fff" opacity=".85"/>`,
+  },
+  bota: {
+    rotulo: "Bota / calçado de segurança",
+    svg: `<path d="M13 6h14v17c0 2 1 3 3 4l10 4c2 1 3 2 3 4v3H10z" fill="#8D6E4F"/>
+<rect x="8" y="36" width="37" height="6" rx="2.5" fill="#374151"/>
+<path d="M14 12h12M14 17h12M14 22h12" stroke="#5E452D" stroke-width="1.6" stroke-linecap="round"/>
+<path d="M32 30l8 3" stroke="#9CA3AF" stroke-width="3" stroke-linecap="round"/>`,
+  },
+  luva: {
+    rotulo: "Luva",
+    svg: `<rect x="12" y="22" width="24" height="17" rx="6" fill="#F5B820"/>
+<rect x="12" y="9" width="5.4" height="18" rx="2.7" fill="#F5B820"/>
+<rect x="18.2" y="6" width="5.4" height="20" rx="2.7" fill="#F5B820"/>
+<rect x="24.4" y="6" width="5.4" height="20" rx="2.7" fill="#F5B820"/>
+<rect x="30.6" y="9" width="5.4" height="18" rx="2.7" fill="#F5B820"/>
+<rect x="6" y="24" width="12" height="5.4" rx="2.7" fill="#F5B820" transform="rotate(30 12 26)"/>
+<rect x="14" y="38" width="20" height="6" rx="2" fill="#E09F10"/>`,
+  },
+  linha: {
+    rotulo: "Linha / prumo de pedreiro",
+    svg: `<rect x="12" y="7" width="24" height="5" rx="2" fill="#9CA3AF"/>
+<rect x="12" y="34" width="24" height="5" rx="2" fill="#9CA3AF"/>
+<rect x="15" y="12" width="18" height="22" fill="#F5B820"/>
+<path d="M15 17h18M15 22h18M15 27h18" stroke="#E09F10" stroke-width="1.6"/>
+<path d="M33 30c7 1 9 5 9 12" stroke="#F5B820" stroke-width="2" fill="none" stroke-linecap="round"/>`,
+  },
+  pix: {
+    rotulo: "Pagamento Pix",
+    svg: `<rect x="9" y="9" width="30" height="30" rx="7" transform="rotate(45 24 24)" fill="#32BCAD"/>
+<path d="M24 15l9 9-9 9-9-9z" fill="none" stroke="#fff" stroke-width="3" stroke-linejoin="round"/>`,
+  },
+  calculadora: {
+    rotulo: "Contabilidade",
+    svg: `<rect x="10" y="5" width="28" height="38" rx="4" fill="#4B5563"/>
+<rect x="14" y="9" width="20" height="9" rx="2" fill="#A7F3D0"/>
+<g fill="#E5E7EB"><rect x="14" y="22" width="5" height="5" rx="1.2"/><rect x="21.5" y="22" width="5" height="5" rx="1.2"/><rect x="29" y="22" width="5" height="5" rx="1.2"/>
+<rect x="14" y="29.5" width="5" height="5" rx="1.2"/><rect x="21.5" y="29.5" width="5" height="5" rx="1.2"/><rect x="29" y="29.5" width="5" height="5" rx="1.2"/></g>
+<rect x="14" y="37" width="12.5" height="3.5" rx="1.2" fill="#F5B820"/><rect x="29" y="37" width="5" height="3.5" rx="1.2" fill="#E45B4A"/>`,
+  },
+  megafone: {
+    rotulo: "Marketing / divulgação",
+    svg: `<path d="M9 19l24-11v32L9 29z" fill="#E45B4A"/>
+<rect x="5" y="18" width="8" height="12" rx="3" fill="#9CA3AF"/>
+<path d="M13 31l3 9h6l-3-9" fill="#6B7280"/>
+<path d="M38 17c3 3 3 11 0 14M42 13c5 5 5 17 0 22" stroke="#F5B820" stroke-width="2.4" fill="none" stroke-linecap="round"/>`,
+  },
+  camera: {
+    rotulo: "Câmera / vigilância",
+    svg: `<rect x="5" y="12" width="32" height="15" rx="4" fill="#4B5563"/>
+<circle cx="31" cy="19.5" r="5.5" fill="#1F2937"/><circle cx="31" cy="19.5" r="2.2" fill="#60A5FA"/>
+<rect x="9" y="27" width="5" height="9" fill="#9CA3AF"/><rect x="5" y="35" width="14" height="5" rx="2" fill="#9CA3AF"/>
+<circle cx="10" cy="17" r="1.6" fill="#EF4444"/>`,
+  },
+  impressora: {
+    rotulo: "Impressão / projetos",
+    svg: `<rect x="14" y="5" width="20" height="12" rx="1.5" fill="#fff" stroke="#CBD5E1" stroke-width="1.6"/>
+<rect x="5" y="16" width="38" height="18" rx="4" fill="#6B7280"/>
+<rect x="12" y="27" width="24" height="15" rx="1.5" fill="#fff" stroke="#CBD5E1" stroke-width="1.6"/>
+<path d="M16 32h16M16 36h10" stroke="#94A3B8" stroke-width="1.6" stroke-linecap="round"/>
+<circle cx="37" cy="21" r="1.6" fill="#34D399"/>`,
+  },
+  combustivel: {
+    rotulo: "Combustível",
+    svg: `<rect x="8" y="7" width="22" height="34" rx="3" fill="#E4572E"/>
+<rect x="12" y="11" width="14" height="9" rx="1.5" fill="#FDE68A"/>
+<rect x="5" y="39" width="28" height="5" rx="2" fill="#4B5563"/>
+<path d="M30 15h4a3 3 0 0 1 3 3v14a2.4 2.4 0 0 0 4.8 0V20l-3-4" fill="none" stroke="#374151" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"/>`,
+  },
+  cadeado: {
+    rotulo: "Cadeado / segurança",
+    svg: `<path d="M15 22v-6a9 9 0 0 1 18 0v6" fill="none" stroke="#9CA3AF" stroke-width="4.5" stroke-linecap="round"/>
+<rect x="9" y="21" width="30" height="21" rx="4" fill="#F5B820"/>
+<circle cx="24" cy="30" r="3" fill="#92400E"/><rect x="22.6" y="31" width="2.8" height="6" rx="1.2" fill="#92400E"/>`,
+  },
+  lampada: {
+    rotulo: "Lâmpada / iluminação",
+    svg: `<path d="M24 6a12 12 0 0 0-6 22.4V33h12v-4.6A12 12 0 0 0 24 6z" fill="#FFE27A"/>
+<path d="M17 15a8 8 0 0 1 5-5" stroke="#fff" opacity=".75" stroke-width="2.2" fill="none" stroke-linecap="round"/>
+<rect x="18" y="34" width="12" height="3" rx="1.5" fill="#9CA3AF"/><rect x="19.5" y="38.5" width="9" height="3" rx="1.5" fill="#6B7280"/>`,
+  },
+};

@@ -792,7 +792,7 @@ export default async function DespesasPage({
                   <td className="order-1 block w-full pb-3 pr-10 md:table-cell md:w-auto md:px-5 md:py-4 md:pr-5">
                     <OpenDespesaModalButton despesaId={d.id}>
                       <div className="flex items-start gap-3">
-                        <IconeNome nomes={[materialNome, d.descricao, etapaNome, categoriaNome]} gerarPara={categoriaNome} />
+                        <IconeNome nomes={[materialNome, d.descricao, categoriaNome]} gerarPara={categoriaNome} />
                         <div className="min-w-0">
                           <div className="flex flex-wrap items-center gap-x-2 gap-y-1">
                             <p className="font-semibold text-brand-black">{obraNome}</p>
