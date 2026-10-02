@@ -57,7 +57,7 @@ export function AppModal({
         role="dialog"
         aria-modal="true"
         aria-labelledby="app-modal-title"
-        className={`relative flex max-h-[94dvh] w-full flex-col overflow-hidden whitespace-normal rounded-card border border-brand-gray-300 bg-white text-brand-black shadow-brand-md sm:max-h-[88vh] ${
+        className={`relative flex max-h-[94dvh] w-full flex-col overflow-hidden whitespace-normal text-left rounded-card border border-brand-gray-300 bg-white text-brand-black shadow-brand-md sm:max-h-[88vh] ${
           size === "wide" ? "max-w-[960px]" : "max-w-[680px]"
         }`}
       >
