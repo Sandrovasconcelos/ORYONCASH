@@ -36,9 +36,14 @@ const REGRAS: [RegExp, string][] = [
   // --- ferramentas e pecas (antes dos materiais) ---
   [/limpeza|faxina|diarista|vassoura/, "limpeza"],
   [/trena|metro articulado/, "trena"],
-  [/chave allen|chave teste|cunha |lapis carpinteiro|desengripante|camara de ar|nivelamento/, "martelo"],
+  [/lapis|caneta|marcador/, "lapis"],
+  [/chave (allen|teste|dobrar|de fenda|inglesa|de grifo|de)\b|jogo chave|\bchave\b.*\d+ ?pcs/, "chaveInglesa"],
+  [/cunha |desengripante|camara de ar|nivelamento/, "martelo"],
+  [/veda rosca|fita veda|teflon/, "fita"],
+  [/grelha|\bralo\b|caixa sif|porta grelha/, "ralo"],
   [/linha pedreiro|linha de pedreiro|prumo|esquadro/, "linha"],
-  [/disco|lixa|esmeril/, "disco"],
+  [/\blixa/, "lixa"],
+  [/disco|esmeril/, "disco"],
   [/\bserra\b|serrote|arco de serra/, "serra"],
   [/broca|\bbits?\b|furadeira|martelete|parafusadeira/, "broca"],
   [/\bbota|botina|\bsapato|calcado|perneira/, "bota"],
@@ -47,7 +52,7 @@ const REGRAS: [RegExp, string][] = [
   [/martelo|marreta|talhadeira|picareta|alviao|torques|chave de|chave dobrar|alicate|enxada|\bpa\b|colher de pedreiro|ferramenta/, "martelo"],
   [/desemp|espatula|gesso|massa corrida|massa acrilica|rejunte|adesivo|\bcola\b|silicone|espuma/, "massa"],
   [/broxa|\brolo\b|pincel|tinta|extralatex|corante|thinner|spray|selador|verniz|\bpintura\b|esmalte/, "pintura"],
-  [/parafuso|prego|\bbucha\b|\bparaf\b|veda rosca|arruela|\bporca\b/, "parafuso"],
+  [/parafuso|prego|\bbucha\b|\bparaf\b|arruela|\bporca\b/, "parafuso"],
   [/balde|carrinho|carro de mao|\blona\b|escora|andaime/, "betoneira"],
 
   // --- materiais de construcao ---

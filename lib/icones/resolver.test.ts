@@ -22,6 +22,12 @@ describe("chaveIconePorNome", () => {
     ["Conta de luz 150526", "luz"],
     ["CAIXA LUZ 4X2 QUAD AMA", "eletrico"],
     ["Refeição obra", "refeicao"],
+    ["VEDA ROSCA 18MMX10M TIGRE", "fita"],
+    ["LAPIS CARPINTEIRO AZUL IRWIN", "lapis"],
+    ["JOGO CHAVE ALLEN 10PCS 00101100 PROFILED", "chaveInglesa"],
+    ["LIXA FERRO GR80 3M", "lixa"],
+    ["GRELHA QUAD CAIXA SIF 100MM 289 HERC", "ralo"],
+    ["PORTA GRELHA QUAD 10X10 TIGRE", "ralo"],
     ["Algo totalmente desconhecido xyz", "generico"],
   ])("%s -> %s", (nome, esperado) => {
     expect(chaveIconePorNome(nome)).toBe(esperado);

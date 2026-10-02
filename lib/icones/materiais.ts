@@ -127,8 +127,8 @@ export const ICONES_MATERIAL: Record<string, IconeMaterial> = {
   },
   massa: {
     rotulo: "Massa / gesso / rejunte",
-    svg: `<path d="M11 28c1-8 8-11 13-11s12 3 13 11z" fill="#F3F4F6" stroke="#D5D9DE" stroke-width="1.5"/>
-<path d="M17 24c2-3 5-4 7-4" stroke="#fff" stroke-width="2" stroke-linecap="round" fill="none"/>
+    svg: `<path d="M11 28c1-8 8-11 13-11s12 3 13 11z" fill="#E2DCCF" stroke="#B9B2A4" stroke-width="1.5"/>
+<path d="M17 24c2-3 5-4 7-4" stroke="#F6F3EC" stroke-width="2" stroke-linecap="round" fill="none"/>
 <rect x="5" y="28" width="38" height="8" rx="2.5" fill="#B8BEC5"/>
 <rect x="5" y="28" width="38" height="3" rx="1.5" fill="#D1D5DB"/>`,
   },

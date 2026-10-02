@@ -238,4 +238,39 @@ export const ICONES_ITEM: Record<string, IconeMaterial> = {
 <path d="M17 15a8 8 0 0 1 5-5" stroke="#fff" opacity=".75" stroke-width="2.2" fill="none" stroke-linecap="round"/>
 <rect x="18" y="34" width="12" height="3" rx="1.5" fill="#9CA3AF"/><rect x="19.5" y="38.5" width="9" height="3" rx="1.5" fill="#6B7280"/>`,
   },
+  lapis: {
+    rotulo: "Lápis / marcação",
+    svg: `<g transform="rotate(45 24 24)"><rect x="20" y="5" width="8" height="5" rx="1.5" fill="#E45B4A"/>
+<rect x="20" y="10" width="8" height="3" fill="#CBD0D6"/><rect x="20" y="13" width="8" height="21" fill="#F5B820"/>
+<rect x="24" y="13" width="4" height="21" fill="#E09F10"/>
+<path d="M20 34h8l-4 9z" fill="#F1D7B0"/><path d="M22.3 39.4h3.4L24 43z" fill="#374151"/></g>`,
+  },
+  chaveInglesa: {
+    rotulo: "Chave / ferramenta",
+    svg: `<g transform="rotate(-45 24 24)"><rect x="21" y="16" width="6" height="28" rx="3" fill="#9CA3AF"/>
+<path d="M14 4h6v8h8V4h6v11a7 7 0 0 1-7 7h-6a7 7 0 0 1-7-7z" fill="#6B7280"/></g>`,
+  },
+  lixa: {
+    rotulo: "Lixa",
+    svg: `<g transform="rotate(-10 24 24)"><rect x="9" y="8" width="30" height="32" rx="2" fill="#D9B77E"/>
+<rect x="9" y="8" width="30" height="8" rx="2" fill="#F1E3D3"/>
+<path d="M14 12h14" stroke="#B58B4F" stroke-width="2" stroke-linecap="round"/>
+<g fill="#B58B4F"><circle cx="15" cy="23" r="1.1"/><circle cx="22" cy="21" r="1.1"/><circle cx="30" cy="24" r="1.1"/><circle cx="35" cy="21" r="1.1"/>
+<circle cx="13" cy="30" r="1.1"/><circle cx="20" cy="28" r="1.1"/><circle cx="27" cy="31" r="1.1"/><circle cx="34" cy="29" r="1.1"/>
+<circle cx="16" cy="36" r="1.1"/><circle cx="24" cy="37" r="1.1"/><circle cx="32" cy="36" r="1.1"/></g></g>`,
+  },
+  fita: {
+    rotulo: "Fita veda rosca",
+    svg: `<circle cx="24" cy="24" r="16" fill="#F4F5F7" stroke="#C9CED6" stroke-width="3"/>
+<circle cx="24" cy="24" r="11" fill="none" stroke="#7DB7F0" stroke-width="3.2"/>
+<circle cx="24" cy="24" r="6" fill="#fff" stroke="#C9CED6" stroke-width="2.4"/>
+<path d="M36 33c5 2 6 6 6 9l-9-2z" fill="#F4F5F7" stroke="#C9CED6" stroke-width="2" stroke-linejoin="round"/>`,
+  },
+  ralo: {
+    rotulo: "Ralo / grelha",
+    svg: `<rect x="6" y="6" width="36" height="36" rx="5" fill="#B8BEC5"/>
+<rect x="11" y="11" width="26" height="26" rx="2.5" fill="#6B7280"/>
+<g fill="#E5E7EB"><rect x="14" y="14" width="20" height="3.2" rx="1.6"/><rect x="14" y="19.6" width="20" height="3.2" rx="1.6"/>
+<rect x="14" y="25.2" width="20" height="3.2" rx="1.6"/><rect x="14" y="30.8" width="20" height="3.2" rx="1.6"/></g>`,
+  },
 };
