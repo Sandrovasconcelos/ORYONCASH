@@ -4,17 +4,24 @@ import {
   type PeriodoRelativo,
   type TipoFiltroRelatorio,
 } from "@/lib/gemini/interpretarPerguntaRelatorio";
+import { createAdminClient } from "@/lib/supabase/admin";
 import { sendText } from "@/lib/whatsapp/messages";
 import { gerarEEnviarRelatorioPorPergunta } from "./relatorio";
-import {
-  encontrarPorPista,
-  hojeNoBrasil,
-  listCategorias,
-  listEtapas,
-  listFornecedores,
-  listMateriais,
-  listObrasAtivas,
-} from "./queries";
+import { agruparPorNome, candidatosPorPista } from "./agruparPorNome";
+import { hojeNoBrasil } from "./queries";
+
+type Cadastro = { id: string; nome: string };
+
+/**
+ * Todos os cadastros de uma tabela, sem o teto de 60 itens das listas do
+ * chat (essas existem por causa do limite de botoes do WhatsApp) - aqui a
+ * busca e so por nome, entao precisa enxergar tudo.
+ */
+async function carregarTodos(tabela: "categorias" | "materiais" | "fornecedores" | "etapas" | "obras"): Promise<Cadastro[]> {
+  const supabase = createAdminClient();
+  const { data } = await supabase.from(tabela).select("id, nome").is("deleted_at", null).limit(5000);
+  return data ?? [];
+}
 
 // Ve se vale a pena chamar o Gemini (que custa tempo/dinheiro) antes de
 // qualquer coisa - so passa quem tem cara de pergunta de gasto. O Gemini
@@ -74,30 +81,41 @@ function resolverPeriodo(
   return {};
 }
 
-async function tentarDimensao(
-  tipo: TipoFiltroRelatorio,
-  termo: string
-): Promise<{ filtro: Partial<FiltrosRelatorio>; contexto: string } | null> {
+type Resolucao =
+  | { tipo: "ok"; filtro: Partial<FiltrosRelatorio>; contexto: string }
+  | { tipo: "ambiguo"; opcoes: string[] };
+
+/**
+ * Casa o termo com os cadastros de UMA dimensao. Material parecido e somado
+ * (todos os "vergalhao" juntos); nas demais, mais de um candidato vira
+ * pergunta pro usuario em vez de chute.
+ */
+export async function tentarDimensao(tipo: TipoFiltroRelatorio, termo: string): Promise<Resolucao | null> {
   switch (tipo) {
-    case "categoria": {
-      const match = encontrarPorPista(await listCategorias(), termo);
-      return match ? { filtro: { categoria: match.id }, contexto: match.nome } : null;
-    }
     case "material": {
-      const match = encontrarPorPista(await listMateriais(), termo);
-      return match ? { filtro: { material: match.id }, contexto: match.nome } : null;
-    }
-    case "fornecedor": {
-      const match = encontrarPorPista(await listFornecedores(), termo);
-      return match ? { filtro: { fornecedor: match.id }, contexto: match.nome } : null;
+      const achados = candidatosPorPista(await carregarTodos("materiais"), termo, false);
+      if (achados.length === 0) return null;
+      return {
+        tipo: "ok",
+        filtro: { material: achados.map((m) => m.id).join(",") },
+        contexto: achados.length === 1 ? achados[0].nome : `${termo.trim()} (${achados.length} itens)`,
+      };
     }
     case "etapa": {
-      const match = encontrarPorPista(await listEtapas(), termo);
-      return match ? { filtro: { etapa: match.id }, contexto: match.nome } : null;
+      // a mesma etapa existe uma vez por obra: soma todas
+      const achados = candidatosPorPista(agruparPorNome(await carregarTodos("etapas")), termo);
+      if (achados.length === 0) return null;
+      if (achados.length > 1) return { tipo: "ambiguo", opcoes: achados.map((e) => e.nome) };
+      return { tipo: "ok", filtro: { etapa: achados[0].ids.join(",") }, contexto: achados[0].nome };
     }
+    case "categoria":
+    case "fornecedor":
     case "obra": {
-      const match = encontrarPorPista(await listObrasAtivas(), termo);
-      return match ? { filtro: { obra: match.id }, contexto: match.nome } : null;
+      const tabela = tipo === "categoria" ? "categorias" : tipo === "fornecedor" ? "fornecedores" : "obras";
+      const achados = candidatosPorPista(await carregarTodos(tabela), termo);
+      if (achados.length === 0) return null;
+      if (achados.length > 1) return { tipo: "ambiguo", opcoes: achados.map((a) => a.nome) };
+      return { tipo: "ok", filtro: { [tipo]: achados[0].id }, contexto: achados[0].nome };
     }
     default:
       return null;
@@ -111,12 +129,10 @@ const TODAS_DIMENSOES: TipoFiltroRelatorio[] = ["categoria", "material", "fornec
  * tenta as outras - a classificacao de tipo erra de vez em quando (ex:
  * "mão de obra do Alex" virar "fornecedor" em vez de "categoria"), mas o
  * nome buscado geralmente so bate em UM cadastro mesmo testando todas as
- * listas, entao vale tentar antes de desistir.
+ * listas, entao vale tentar antes de desistir. Ambiguidade para na hora
+ * (melhor perguntar do que cair em outra dimensao por acaso).
  */
-async function resolverDimensao(
-  tipoSugerido: TipoFiltroRelatorio,
-  termo: string
-): Promise<{ filtro: Partial<FiltrosRelatorio>; contexto: string } | null> {
+async function resolverDimensao(tipoSugerido: TipoFiltroRelatorio, termo: string): Promise<Resolucao | null> {
   const ordem = [tipoSugerido, ...TODAS_DIMENSOES.filter((tipo) => tipo !== tipoSugerido)];
   for (const tipo of ordem) {
     const resolvido = await tentarDimensao(tipo, termo);
@@ -172,7 +188,7 @@ async function resolverRanking(
 
   const vencedor = ranking[0];
   const resolvido = await tentarDimensao(tipo, vencedor.nome);
-  if (!resolvido) return null;
+  if (!resolvido || resolvido.tipo !== "ok") return null;
 
   return { filtro: resolvido.filtro, contexto: vencedor.nome, ranking };
 }
@@ -228,6 +244,14 @@ export async function tentarRelatorioPorPergunta(from: string, texto: string | n
       await sendText(
         from,
         `🤔 Não encontrei "${interpretacao.termoBusca}" cadastrado. Confere o nome (ou digite *menu* pra ver as opções de relatório).`
+      );
+      return true;
+    }
+    if (resolvido.tipo === "ambiguo") {
+      const lista = resolvido.opcoes.slice(0, 6).map((nome) => `• ${nome}`).join("\n");
+      await sendText(
+        from,
+        `🤔 Achei mais de um para "${interpretacao.termoBusca}":\n${lista}\n\nPergunte de novo com o nome completo (ex: "quanto gastei com ${resolvido.opcoes[0]}?").`
       );
       return true;
     }

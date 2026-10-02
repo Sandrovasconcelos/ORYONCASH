@@ -106,8 +106,15 @@ export async function buscarDadosRelatorio(filtros: FiltrosRelatorio): Promise<D
   } else {
     if (filtros.obra) query = query.eq("obra_id", filtros.obra);
     if (filtros.categoria) query = query.eq("categoria_id", filtros.categoria);
-    if (filtros.etapa) query = query.eq("etapa_id", filtros.etapa);
-    if (filtros.material) query = query.eq("material_id", filtros.material);
+    // "etapa" aceita varios ids separados por virgula (mesma etapa em obras diferentes).
+    if (filtros.etapa) {
+      const idsEtapa = filtros.etapa.split(",").filter(Boolean);
+      query = idsEtapa.length > 1 ? query.in("etapa_id", idsEtapa) : query.eq("etapa_id", idsEtapa[0]);
+    }
+    if (filtros.material) {
+      const idsMaterial = filtros.material.split(",").filter(Boolean);
+      query = idsMaterial.length > 1 ? query.in("material_id", idsMaterial) : query.eq("material_id", idsMaterial[0]);
+    }
     if (filtros.fornecedor) query = query.eq("fornecedor_id", filtros.fornecedor);
     if (filtros.dataInicio) query = query.gte("data", filtros.dataInicio);
     if (filtros.dataFim) query = query.lte("data", filtros.dataFim);
@@ -123,10 +130,10 @@ export async function buscarDadosRelatorio(filtros: FiltrosRelatorio): Promise<D
         ? supabase.from("categorias").select("nome").eq("id", filtros.categoria).maybeSingle()
         : Promise.resolve({ data: null }),
       !usaSelecaoManual && filtros.etapa
-        ? supabase.from("etapas").select("nome").eq("id", filtros.etapa).maybeSingle()
+        ? supabase.from("etapas").select("nome").eq("id", filtros.etapa.split(",")[0]).maybeSingle()
         : Promise.resolve({ data: null }),
       !usaSelecaoManual && filtros.material
-        ? supabase.from("materiais").select("nome").eq("id", filtros.material).maybeSingle()
+        ? supabase.from("materiais").select("nome").eq("id", filtros.material.split(",")[0]).maybeSingle()
         : Promise.resolve({ data: null }),
       !usaSelecaoManual && filtros.fornecedor
         ? supabase.from("fornecedores").select("nome").eq("id", filtros.fornecedor).maybeSingle()
