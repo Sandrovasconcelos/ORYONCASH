@@ -2,6 +2,7 @@
 
 import { useState } from "react";
 import { AppModal } from "./app-modal";
+import { FecharModalContext } from "./modal-context";
 
 type CadastroModalProps = {
   titulo: string;
@@ -65,7 +66,7 @@ export function CadastroModal({
           </button>
         }
       >
-        {children}
+        <FecharModalContext.Provider value={() => setOpen(false)}>{children}</FecharModalContext.Provider>
       </AppModal>
     </>
   );
