@@ -14,6 +14,7 @@ import { buscarDadosRelatorio, type FiltrosRelatorio } from "@/lib/relatorio/dad
 import { gerarRelatorioPdfBuffer } from "@/lib/relatorio/pdf";
 import { sendDocument } from "@/lib/whatsapp/messages";
 import { formatDataHoraBrasil } from "@/lib/format-date";
+import { destinoDeVolta } from "@/lib/despesas/destinoDeVolta";
 
 const LIXEIRA_ENTIDADES = {
   obra: { tabela: "obras", nome: "Obra", rota: "/dashboard/obras" },
@@ -1161,7 +1162,7 @@ export async function updateDespesaAction(formData: FormData) {
 
   revalidatePath("/dashboard/despesas");
   revalidatePath("/dashboard");
-  redirect("/dashboard/despesas");
+  redirect(destinoDeVolta(String(formData.get("retorno") ?? ""), "/dashboard/despesas"));
 }
 
 export async function reclassificarComprovanteDespesaAction(

@@ -946,6 +946,7 @@ export default async function DespesasPage({
                           contas={contasBancarias ?? []}
                           comprovantes={comprovantesDaDespesa}
                           fornecedorDados={fornecedorDados}
+                        retorno={`/dashboard/despesas${queryString ? `?${queryString}` : ""}`}
                           nota={
                             grupoNota && notaCompleta
                               ? {

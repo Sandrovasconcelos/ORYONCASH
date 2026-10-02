@@ -60,6 +60,8 @@ export type FormularioEdicaoProps = {
     conta_agencia: string | null;
     conta_numero: string | null;
   } | null;
+  /** URL atual da lista (filtros e pagina), pra voltar pra ela depois de salvar. */
+  retorno: string;
   nota: {
     posicao: number;
     totalItens: number;
@@ -367,6 +369,7 @@ export function FormularioEdicao(props: FormularioEdicaoProps) {
     <form action={updateDespesaAction} className="space-y-4 pb-16">
       <input type="hidden" name="id" value={d.id} />
       <input type="hidden" name="despesa_id" value={d.id} />
+      <input type="hidden" name="retorno" value={props.retorno} />
 
       <header className="rounded-brand border border-brand-gray-300/70 bg-white p-4 shadow-sm">
         <div className="flex flex-wrap items-start gap-x-3 gap-y-2">
