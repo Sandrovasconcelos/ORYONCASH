@@ -3,17 +3,11 @@ import { Fragment } from "react";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { formatBRL } from "@/lib/conversation/format";
 import { rotuloOrigem } from "@/lib/origem";
-import { formatDataHoraBrasil } from "@/lib/format-date";
-import {
-  createDespesaAction,
-  deleteDespesaAction,
-  excluirComprovanteDespesaAction,
-  reclassificarComprovanteDespesaAction,
-  updateDespesaAction,
-} from "../actions";
+import { createDespesaAction, deleteDespesaAction } from "../actions";
 import { CadastroModal } from "../cadastro-modal";
 import { ActionIcon } from "../action-icon";
 import { IconeNome } from "../icone-svg";
+import { FormularioEdicao } from "./formulario-edicao";
 import { DeleteButton } from "./delete-button";
 import { OpenDespesaModalButton } from "./open-despesa-modal-button";
 import { SubmitButton } from "../submit-button";
@@ -907,389 +901,59 @@ export default async function DespesasPage({
                     <div className="flex items-center justify-end gap-2 whitespace-nowrap">
                       <CadastroModal
                         titulo="Editar lançamento"
-                        descricao="Ajuste obra, categoria, etapa, material, fornecedor, valor e descrição."
+                        descricao="Confira e corrija os dados, os documentos e a classificação."
                         botao="Editar"
                         icone={<ActionIcon name="edit" />}
                         variante="icone"
                         triggerId={`despesa-${d.id}`}
-                        modalSize="wide"
                       >
-                        <form action={updateDespesaAction} className="space-y-5 pb-16">
-                          <input type="hidden" name="id" value={d.id} />
-                          <input type="hidden" name="despesa_id" value={d.id} />
-
-                          <div className="rounded-brand-sm border border-brand-gray-300/70 bg-brand-gray-100/60 p-4 text-xs">
-                            <div className="flex flex-wrap items-center gap-x-4 gap-y-1.5 text-brand-gray-600">
-                              <span><strong className="font-bold text-brand-black">Criado por</strong> {d.criado_por_nome || d.criado_por_telefone || "Dashboard"}</span>
-                              <span><strong className="font-bold text-brand-black">Origem</strong> {rotuloOrigem(d.origem, d.criado_por_telefone)}</span>
-                              <span><strong className="font-bold text-brand-black">Registrado em</strong> {formatDataHoraBrasil(d.created_at)}</span>
-                            </div>
-                            {fornecedorDados &&
-                              (fornecedorDados.cnpj ||
-                                fornecedorDados.cpf ||
-                                fornecedorDados.chave_pix ||
-                                fornecedorDados.conta_banco) && (
-                                <div className="mt-2 flex flex-wrap items-center gap-x-4 gap-y-1.5 border-t border-brand-gray-300/60 pt-2 text-brand-gray-600">
-                                  <span className="font-extrabold uppercase tracking-[0.1em] text-brand-gray-400">
-                                    📄 Rastreado do comprovante
-                                  </span>
-                                  {fornecedorDados.cnpj && (
-                                    <span><strong className="font-bold text-brand-black">CNPJ</strong> {fornecedorDados.cnpj}</span>
-                                  )}
-                                  {fornecedorDados.cpf && (
-                                    <span><strong className="font-bold text-brand-black">CPF</strong> {fornecedorDados.cpf}</span>
-                                  )}
-                                  {fornecedorDados.chave_pix && (
-                                    <span><strong className="font-bold text-brand-black">Pix</strong> {fornecedorDados.chave_pix}</span>
-                                  )}
-                                  {fornecedorDados.conta_banco && (
-                                    <span>
-                                      <strong className="font-bold text-brand-black">Conta</strong>{" "}
-                                      {[
-                                        fornecedorDados.conta_banco,
-                                        fornecedorDados.conta_agencia,
-                                        fornecedorDados.conta_numero,
-                                      ]
-                                        .filter(Boolean)
-                                        .join(" · ")}
-                                    </span>
-                                  )}
-                                </div>
-                              )}
-                          </div>
-
-                          <div className="rounded-brand border border-brand-gray-300/70 bg-white p-5">
-                            <p className="text-sm font-extrabold text-brand-black">Dados do lançamento</p>
-
-                            <p className="mb-2 mt-4 text-[11px] font-extrabold uppercase tracking-[0.14em] text-brand-gray-400">
-                              Classificação
-                            </p>
-                            <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
-                          <label className="flex flex-col gap-1 text-sm text-brand-gray-700">
-                            Obra
-                            <select
-                              name="obra_id"
-                              defaultValue={d.obra_id ?? ""}
-                              className="rounded-brand-sm border border-brand-gray-300 bg-white px-3 py-2 text-sm outline-none focus:border-brand-red"
-                            >
-                              <option value="">Sem obra (Administrativo)</option>
-                              {(obras ?? []).map((obra) => (
-                                <option key={obra.id} value={obra.id}>
-                                  {obra.nome}
-                                </option>
-                              ))}
-                            </select>
-                          </label>
-                          <label className="flex flex-col gap-1 text-sm text-brand-gray-700">
-                            Categoria
-                            <select
-                              name="categoria_id"
-                              defaultValue={d.categoria_id}
-                              required
-                              className="rounded-brand-sm border border-brand-gray-300 bg-white px-3 py-2 text-sm outline-none focus:border-brand-red"
-                            >
-                              {(categorias ?? []).map((categoria) => (
-                                <option key={categoria.id} value={categoria.id}>
-                                  {categoria.nome}
-                                </option>
-                              ))}
-                            </select>
-                          </label>
-                          <label className="flex flex-col gap-1 text-sm text-brand-gray-700">
-                            Etapa
-                            <select
-                              name="etapa_id"
-                              defaultValue={d.etapa_id ?? ""}
-                              className="rounded-brand-sm border border-brand-gray-300 bg-white px-3 py-2 text-sm outline-none focus:border-brand-red"
-                            >
-                              <option value="">Sem etapa</option>
-                              {etapasDaDespesa.map((etapa) => (
-                                <option key={etapa.id} value={etapa.id}>
-                                  {etapa.nome}
-                                </option>
-                              ))}
-                            </select>
-                          </label>
-                          <label className="flex flex-col gap-1 text-sm text-brand-gray-700">
-                            Material
-                            <select
-                              name="material_id"
-                              defaultValue={d.material_id ?? ""}
-                              className="rounded-brand-sm border border-brand-gray-300 bg-white px-3 py-2 text-sm outline-none focus:border-brand-red"
-                            >
-                              <option value="">Sem material</option>
-                              {(materiais ?? []).map((material) => (
-                                <option key={material.id} value={material.id}>
-                                  {material.nome}
-                                </option>
-                              ))}
-                            </select>
-                          </label>
-                          <label className="flex flex-col gap-1 text-sm text-brand-gray-700">
-                            Fornecedor
-                            <select
-                              name="fornecedor_id"
-                              defaultValue={d.fornecedor_id ?? ""}
-                              className="rounded-brand-sm border border-brand-gray-300 bg-white px-3 py-2 text-sm outline-none focus:border-brand-red"
-                            >
-                              <option value="">Sem fornecedor</option>
-                              {(fornecedores ?? []).map((fornecedor) => (
-                                <option key={fornecedor.id} value={fornecedor.id}>
-                                  {fornecedor.nome}
-                                </option>
-                              ))}
-                            </select>
-                          </label>
-                          <label className="flex flex-col gap-1 text-sm text-brand-gray-700">
-                            Conta bancária
-                            <select
-                              name="conta_bancaria_id"
-                              defaultValue={contaBancariaInfo.conta_bancaria_id ?? ""}
-                              className="rounded-brand-sm border border-brand-gray-300 bg-white px-3 py-2 text-sm outline-none focus:border-brand-red"
-                            >
-                              <option value="">Sem conta</option>
-                              {(contasBancarias ?? []).map((conta) => (
-                                <option key={conta.id} value={conta.id}>
-                                  {conta.nome}
-                                </option>
-                              ))}
-                            </select>
-                          </label>
-                            </div>
-
-                            <p className="mb-2 mt-5 text-[11px] font-extrabold uppercase tracking-[0.14em] text-brand-gray-400">
-                              Valores e data
-                            </p>
-                            <div className="grid grid-cols-2 gap-4 sm:grid-cols-4">
-                          <label className="flex flex-col gap-1 text-sm text-brand-gray-700">
-                            Data
-                            <input
-                              type="date"
-                              name="data"
-                              defaultValue={d.data}
-                              required
-                              className="rounded-brand-sm border border-brand-gray-300 bg-white px-3 py-2 text-sm outline-none focus:border-brand-red"
-                            />
-                          </label>
-                          <label className="flex flex-col gap-1 text-sm text-brand-gray-700">
-                            Valor
-                            <input
-                              name="valor"
-                              defaultValue={valorInputBR(d.valor)}
-                              required
-                              className="rounded-brand-sm border border-brand-gray-300 bg-white px-3 py-2 text-sm font-semibold outline-none focus:border-brand-red"
-                            />
-                          </label>
-                          <label className="flex flex-col gap-1 text-sm text-brand-gray-700">
-                            Quantidade
-                            <input
-                              name="quantidade"
-                              defaultValue={d.quantidade != null ? valorInputBR(d.quantidade) : ""}
-                              placeholder="Ex: 50"
-                              className="rounded-brand-sm border border-brand-gray-300 bg-white px-3 py-2 text-sm outline-none focus:border-brand-red"
-                            />
-                          </label>
-                          <label className="flex flex-col gap-1 text-sm text-brand-gray-700">
-                            Valor unitário
-                            <input
-                              name="valor_unitario"
-                              defaultValue={d.valor_unitario != null ? valorInputBR(d.valor_unitario) : ""}
-                              placeholder="Ex: 53,00"
-                              className="rounded-brand-sm border border-brand-gray-300 bg-white px-3 py-2 text-sm outline-none focus:border-brand-red"
-                            />
-                          </label>
-                            </div>
-
-                            <p className="mb-2 mt-5 text-[11px] font-extrabold uppercase tracking-[0.14em] text-brand-gray-400">
-                              Descrição
-                            </p>
-                            <textarea
-                              name="descricao"
-                              defaultValue={d.descricao ?? ""}
-                              rows={3}
-                              className="w-full rounded-brand-sm border border-brand-gray-300 bg-white px-3 py-2 text-sm outline-none focus:border-brand-red"
-                            />
-                          </div>
-                          <div className="rounded-brand border border-brand-gray-300/70 bg-brand-gray-100/60 p-5">
-                            <div className="flex flex-col gap-1 sm:flex-row sm:items-start sm:justify-between">
-                              <div>
-                                <p className="text-sm font-bold text-brand-black">Documentos do lançamento</p>
-                                <p className="mt-1 text-xs leading-5 text-brand-gray-500">
-                                  Organize o que é cobrança e o que comprova o pagamento.
-                                </p>
-                              </div>
-                              <span className="mt-1 inline-flex w-fit rounded-full bg-white px-3 py-1 text-[11px] font-extrabold uppercase tracking-[0.16em] text-brand-gray-500">
-                                {comprovantesDaDespesa.length} arquivo(s)
-                              </span>
-                            </div>
-
-                            <div className="mt-4 grid gap-3 lg:grid-cols-2">
-                                {[
-                                  {
-                                    tipo: "documento_cobranca",
-                                    titulo: "Conta / nota",
-                                    descricao: "Nota fiscal, boleto, conta de luz ou cobrança original.",
-                                    icone: "file" as const,
-                                    cor: "text-status-info",
-                                    bg: "bg-status-info/10",
-                                    borda: "border-status-info/20",
-                                    vazio: "Nenhuma conta ou nota vinculada.",
-                                    acao: "Mover para conta",
-                                  },
-                                  {
-                                    tipo: "comprovante_pagamento",
-                                    titulo: "Comprovante de pagamento",
-                                    descricao: "Pix, recibo bancário ou confirmação de pagamento.",
-                                    icone: "payment" as const,
-                                    cor: "text-status-success",
-                                    bg: "bg-status-success/10",
-                                    borda: "border-status-success/20",
-                                    vazio: "Pagamento ainda sem comprovante.",
-                                    acao: "Mover para pagamento",
-                                  },
-                                ].map((grupo) => {
-                                  const arquivosDoTipo = comprovantesDaDespesa.filter(
-                                    (comprovante) => comprovante.tipo_documento === grupo.tipo
-                                  );
-                                  const outrosArquivos = comprovantesDaDespesa.filter(
-                                    (comprovante) => comprovante.tipo_documento !== grupo.tipo
-                                  );
-
-                                  return (
-                                    <div
-                                      key={grupo.tipo}
-                                      className={`rounded-brand border ${grupo.borda} bg-white p-4 shadow-sm`}
-                                    >
-                                      <div className="flex items-start gap-3">
-                                        <span
-                                          className={`inline-flex h-10 w-10 shrink-0 items-center justify-center rounded-brand-sm ${grupo.bg} ${grupo.cor}`}
-                                        >
-                                          <ActionIcon name={grupo.icone} />
-                                        </span>
-                                        <div className="min-w-0">
-                                          <p className="text-sm font-extrabold text-brand-black">{grupo.titulo}</p>
-                                          <p className="mt-1 text-xs leading-5 text-brand-gray-500">{grupo.descricao}</p>
-                                        </div>
-                                      </div>
-
-                                      <div className="mt-4 flex flex-col gap-2">
-                                        {arquivosDoTipo.length > 0 ? (
-                                          arquivosDoTipo.map((comprovante, index) => (
-                                            <div
-                                              key={comprovante.id}
-                                              className="flex items-center justify-between gap-3 rounded-brand-sm bg-brand-gray-100 px-3 py-2"
-                                            >
-                                              <div className="min-w-0">
-                                                <p className="truncate text-xs font-bold text-brand-black">
-                                                  {comprovante.nome_arquivo || `Arquivo ${index + 1}`}
-                                                </p>
-                                                <p className="text-[11px] text-brand-gray-500">
-                                                  Classificação correta
-                                                </p>
-                                                {grupo.tipo === "comprovante_pagamento" &&
-                                                  (comprovante.conta_origem_banco ||
-                                                    comprovante.conta_origem_titular ||
-                                                    comprovante.metodo_pagamento) && (
-                                                    <p className="mt-1 text-[11px] leading-4 text-brand-gray-600">
-                                                      Origem: {[comprovante.conta_origem_banco, comprovante.conta_origem_titular]
-                                                        .filter(Boolean)
-                                                        .join(" | ")}
-                                                      {comprovante.metodo_pagamento
-                                                        ? ` | ${comprovante.metodo_pagamento}`
-                                                        : ""}
-                                                    </p>
-                                                  )}
-                                                {comprovante.numero_documento && (
-                                                  <p className="mt-1 text-[11px] leading-4 text-brand-gray-600">
-                                                    Nº do documento: {comprovante.numero_documento}
-                                                  </p>
-                                                )}
-                                              </div>
-                                              <div className="flex shrink-0 items-center gap-2">
-                                                {comprovante.url && (
-                                                  <Link
-                                                    href={comprovante.url}
-                                                    target="_blank"
-                                                    rel="noreferrer"
-                                                    className="inline-flex h-9 w-9 shrink-0 items-center justify-center rounded-brand-sm border border-brand-gray-300 bg-white text-brand-gray-700 hover:border-brand-red/40 hover:text-brand-red"
-                                                    aria-label={`Ver ${grupo.titulo.toLowerCase()}`}
-                                                    title={`Ver ${grupo.titulo.toLowerCase()}`}
-                                                  >
-                                                    <ActionIcon name="file" />
-                                                  </Link>
-                                                )}
-                                                <button
-                                                  type="submit"
-                                                  formAction={excluirComprovanteDespesaAction.bind(null, comprovante.id)}
-                                                  className="inline-flex h-9 w-9 shrink-0 items-center justify-center rounded-brand-sm border border-status-danger/30 bg-white text-status-danger hover:bg-status-danger/10"
-                                                  aria-label={`Excluir ${grupo.titulo.toLowerCase()}`}
-                                                  title={`Excluir (pra substituir, anexe o correto abaixo depois)`}
-                                                >
-                                                  <ActionIcon name="trash" />
-                                                </button>
-                                              </div>
-                                            </div>
-                                          ))
-                                        ) : (
-                                          <div className="rounded-brand-sm border border-dashed border-brand-gray-300 bg-brand-gray-100/70 px-3 py-3 text-xs text-brand-gray-500">
-                                            {grupo.vazio}
-                                          </div>
-                                        )}
-                                      </div>
-
-                                      {outrosArquivos.length > 0 && (
-                                        <div className="mt-3 border-t border-brand-gray-300/70 pt-3">
-                                          <p className="mb-2 text-[11px] font-bold uppercase tracking-[0.14em] text-brand-gray-400">
-                                            Corrigir classificação
-                                          </p>
-                                          <div className="flex flex-wrap gap-2">
-                                            {outrosArquivos.map((comprovante) => (
-                                              <button
-                                                key={comprovante.id}
-                                                type="submit"
-                                                formAction={reclassificarComprovanteDespesaAction.bind(
-                                                  null,
-                                                  comprovante.id,
-                                                  grupo.tipo
-                                                )}
-                                                className={`inline-flex items-center gap-2 rounded-brand-sm border ${grupo.borda} bg-white px-3 py-2 text-xs font-bold ${grupo.cor} hover:bg-brand-gray-100`}
-                                              >
-                                                <ActionIcon name={grupo.icone} />
-                                                {grupo.acao}
-                                              </button>
-                                            ))}
-                                          </div>
-                                        </div>
-                                      )}
-
-                                      <div className="mt-3 border-t border-brand-gray-300/70 pt-3">
-                                        <p className="mb-2 text-[11px] font-bold uppercase tracking-[0.14em] text-brand-gray-400">
-                                          Anexar pelo app
-                                        </p>
-                                        <div className="flex flex-col gap-2">
-                                          <input
-                                            type="file"
-                                            name={`arquivo_${grupo.tipo}`}
-                                            accept="image/*,application/pdf"
-                                            className="block w-full rounded-brand-sm border border-brand-gray-300 bg-white px-3 py-2 text-xs text-brand-gray-600 file:mr-3 file:rounded-brand-sm file:border-0 file:bg-brand-gray-100 file:px-3 file:py-1.5 file:text-xs file:font-bold file:text-brand-black hover:file:bg-brand-gray-200"
-                                          />
-                                          <p className="rounded-brand-sm bg-white px-3 py-2 text-[11px] leading-5 text-brand-gray-500">
-                                            Escolha um arquivo e clique em <strong>Salvar alterações</strong> para anexar.
-                                          </p>
-                                        </div>
-                                      </div>
-                                    </div>
-                                  );
-                                })}
-                              </div>
-                          </div>
-
-                          <div className="sticky bottom-0 z-10 -mx-5 -mb-5 border-t border-brand-gray-300/70 bg-white/95 px-5 py-3 backdrop-blur sm:-mx-7 sm:-mb-5 sm:px-7">
-                            <SubmitButton className="w-full rounded-brand-sm bg-brand-red px-4 py-2.5 text-sm font-semibold text-white hover:bg-brand-red-700 sm:w-auto">
-                              Salvar edição
-                            </SubmitButton>
-                          </div>
-                        </form>
+                        <FormularioEdicao
+                          despesa={{
+                            id: d.id,
+                            obra_id: d.obra_id,
+                            categoria_id: d.categoria_id,
+                            etapa_id: d.etapa_id,
+                            material_id: d.material_id,
+                            fornecedor_id: d.fornecedor_id,
+                            conta_bancaria_id: contaBancariaInfo.conta_bancaria_id,
+                            valor: d.valor,
+                            quantidade: d.quantidade,
+                            valor_unitario: d.valor_unitario,
+                            data: d.data,
+                            descricao: d.descricao,
+                            origem: d.origem,
+                            criado_por_nome: d.criado_por_nome,
+                            criado_por_telefone: d.criado_por_telefone,
+                            created_at: d.created_at,
+                          }}
+                          nomes={{
+                            obra: obraNome,
+                            categoria: categoriaNome,
+                            etapa: etapaNome,
+                            material: materialNome,
+                            fornecedor: fornecedorNome,
+                            conta: contaBancariaInfo.contas_bancarias?.nome ?? "Sem conta",
+                          }}
+                          obras={obras ?? []}
+                          categorias={categorias ?? []}
+                          etapas={etapasDaDespesa}
+                          materiais={materiais ?? []}
+                          fornecedores={fornecedores ?? []}
+                          contas={contasBancarias ?? []}
+                          comprovantes={comprovantesDaDespesa}
+                          fornecedorDados={fornecedorDados}
+                          nota={
+                            grupoNota && notaCompleta
+                              ? {
+                                  posicao: grupoNota.indice,
+                                  totalItens: notaCompleta.membros.length,
+                                  cor: grupoNota.cor,
+                                  totalPago: notaCompleta.total,
+                                  valorDesconto: notaCompleta.valorDesconto,
+                                }
+                              : null
+                          }
+                        />
                       </CadastroModal>
                       <DeleteButton despesaId={d.id} action={deleteDespesaAction} />
                     </div>
