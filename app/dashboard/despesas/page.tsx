@@ -835,8 +835,8 @@ export default async function DespesasPage({
                     <DespesaCheckbox id={d.id} />
                   </td>
                   <td
-                    className="order-2 block w-1/2 whitespace-nowrap pr-2 text-xs font-bold text-brand-gray-500 md:table-cell md:w-auto md:px-5 md:py-4 md:text-sm md:font-semibold md:text-brand-black"
-                    style={grupoNota ? { boxShadow: `inset 4px 0 0 0 ${grupoNota.cor}` } : undefined}
+                    className="order-2 block w-1/2 whitespace-nowrap pr-2 text-xs font-bold text-brand-gray-500 md:table-cell md:w-auto md:px-5 md:py-4 md:text-sm md:font-semibold md:text-brand-black md:[box-shadow:inset_4px_0_0_0_var(--grupo-cor)]"
+                    style={grupoNota ? ({ "--grupo-cor": grupoNota.cor } as React.CSSProperties) : undefined}
                   >
                     {formatDataBR(d.data)}
                   </td>
