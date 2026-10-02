@@ -16,6 +16,7 @@ import { SelecaoLancamentosProvider } from "./selecao-context";
 import { DespesaCheckbox, SelecionarTodosCheckbox } from "./despesa-checkbox";
 import { SelecaoActionBar } from "./selecao-action-bar";
 import { carregarNotas } from "@/lib/despesas/notas";
+import { consultarEmLotes } from "@/lib/supabase/emLotes";
 
 export const dynamic = "force-dynamic";
 
@@ -227,25 +228,24 @@ export default async function DespesasPage({
   // busca) para poder buscar tambem por numero do documento/CNPJ do emissor -
   // nao so pelos campos ja carregados na despesa.
   const idsDespesasBrutas = despesasBrutas.map((d) => d.id);
-  const comprovantesQuery =
-    idsDespesasBrutas.length > 0
-      ? await (async () => {
-          const queryComContaOrigem = await supabase
-            .from("despesa_comprovantes")
-            .select("id, despesa_id, tipo_documento, storage_bucket, storage_path, mime_type, nome_arquivo, conta_origem_banco, conta_origem_titular, conta_origem_documento, conta_origem_agencia, conta_origem_numero, metodo_pagamento, numero_documento")
-            .in("despesa_id", idsDespesasBrutas)
-            .order("created_at", { ascending: false });
-
-          if (!queryComContaOrigem.error) return queryComContaOrigem;
-
-          return supabase
-            .from("despesa_comprovantes")
-            .select("id, despesa_id, tipo_documento, storage_bucket, storage_path, mime_type, nome_arquivo")
-            .in("despesa_id", idsDespesasBrutas)
-            .order("created_at", { ascending: false });
-        })()
-      : { data: [], error: null };
-  const comprovantes = comprovantesQuery.data ?? [];
+  // Em lotes, rodando juntos: um .in() com centenas de ids vira uma URL
+  // gigante (lento e, passando do limite, falha) - e isso rodava a cada
+  // abertura/salvamento da pagina.
+  const COLUNAS_COMPROVANTE_COMPLETAS =
+    "id, despesa_id, tipo_documento, storage_bucket, storage_path, mime_type, nome_arquivo, conta_origem_banco, conta_origem_titular, conta_origem_documento, conta_origem_agencia, conta_origem_numero, metodo_pagamento, numero_documento";
+  const COLUNAS_COMPROVANTE_BASICAS =
+    "id, despesa_id, tipo_documento, storage_bucket, storage_path, mime_type, nome_arquivo";
+  const buscarComprovantes = (colunas: string) =>
+    consultarEmLotes(idsDespesasBrutas, (lote) =>
+      supabase
+        .from("despesa_comprovantes")
+        .select(colunas)
+        .in("despesa_id", lote)
+        .order("created_at", { ascending: false })
+    );
+  let comprovantesQuery = await buscarComprovantes(COLUNAS_COMPROVANTE_COMPLETAS);
+  if (comprovantesQuery.error) comprovantesQuery = await buscarComprovantes(COLUNAS_COMPROVANTE_BASICAS);
+  const comprovantes = comprovantesQuery.data as unknown as ComprovanteQueryRow[];
   const comprovantesIndisponiveis =
     comprovantesQuery.error?.code === "PGRST205" ||
     comprovantesQuery.error?.message?.toLowerCase().includes("despesa_comprovantes");
@@ -372,7 +372,7 @@ export default async function DespesasPage({
   const inicioPagina = (paginaAtual - 1) * porPagina;
   const despesasPagina = despesas.slice(inicioPagina, inicioPagina + porPagina);
   // Nota completa (todos os itens e o total), mesmo quando o filtro/pagina mostra so parte dela.
-  const notasCompletas = await carregarNotas(despesasPagina.map((d) => d.id));
+  const promessaNotas = carregarNotas(despesasPagina.map((d) => d.id));
 
   // So gera signed URL pros comprovantes que vao realmente aparecer na tela
   // (a pagina atual), em paralelo - antes disso rodava sequencialmente pra
@@ -381,14 +381,18 @@ export default async function DespesasPage({
   const comprovantesDaPaginaAtual = despesasPagina.flatMap(
     (d) => comprovantesPorDespesa.get(d.id) ?? []
   );
-  await Promise.all(
-    comprovantesDaPaginaAtual.map(async (comprovante) => {
-      const { data: signed } = await supabase.storage
-        .from(comprovante.storage_bucket)
-        .createSignedUrl(comprovante.storage_path, 60 * 60);
-      comprovante.url = signed?.signedUrl ?? null;
-    })
-  );
+  // Notas e links dos arquivos sao independentes: carrega juntos.
+  const [notasCompletas] = await Promise.all([
+    promessaNotas,
+    Promise.all(
+      comprovantesDaPaginaAtual.map(async (comprovante) => {
+        const { data: signed } = await supabase.storage
+          .from(comprovante.storage_bucket)
+          .createSignedUrl(comprovante.storage_path, 60 * 60);
+        comprovante.url = signed?.signedUrl ?? null;
+      })
+    ),
+  ]);
 
   const hrefComOverrides = (overrides: Record<string, string | undefined>) => {
     const sp = new URLSearchParams();

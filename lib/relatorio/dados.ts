@@ -1,6 +1,7 @@
 import { createAdminClient } from "@/lib/supabase/admin";
 import { formatDataBrasil } from "@/lib/format-date";
 import { carregarNotas } from "@/lib/despesas/notas";
+import { consultarEmLotes } from "@/lib/supabase/emLotes";
 
 const PALETA_GRUPOS_NOTA = ["#296dd1", "#7c3aed", "#bd7600", "#0f766e", "#c2185b", "#4d7c0f"];
 
@@ -143,13 +144,9 @@ export async function buscarDadosRelatorio(filtros: FiltrosRelatorio): Promise<D
   const despesasBrutas = data ?? [];
 
   const idsDespesas = despesasBrutas.map((d) => d.id);
-  const { data: comprovantesData } =
-    idsDespesas.length > 0
-      ? await supabase
-          .from("despesa_comprovantes")
-          .select("despesa_id, tipo_documento, storage_bucket, storage_path")
-          .in("despesa_id", idsDespesas)
-      : { data: [] };
+  const { data: comprovantesData } = await consultarEmLotes(idsDespesas, (lote) =>
+    supabase.from("despesa_comprovantes").select("despesa_id, tipo_documento, storage_bucket, storage_path").in("despesa_id", lote)
+  );
   // 7 dias em vez de 1 hora - o PDF costuma ser salvo/reaberto ou mandado
   // por WhatsApp bem depois de gerado, entao o link nao pode expirar cedo.
   const VALIDADE_LINK_DOCUMENTO = 60 * 60 * 24 * 7;

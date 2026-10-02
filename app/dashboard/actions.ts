@@ -1097,11 +1097,11 @@ export async function updateDespesaAction(formData: FormData) {
   const valorUnitario = parseValorBR(String(formData.get("valor_unitario") ?? "")) ?? null;
 
   const supabase = await createClient();
-  const { data: antes } = await supabase
-    .from("despesas")
-    .select("*")
-    .eq("id", id)
-    .maybeSingle();
+  // O autor (consulta de login) nao depende do resto: busca junto.
+  const [{ data: antes }, autorNome] = await Promise.all([
+    supabase.from("despesas").select("*").eq("id", id).maybeSingle(),
+    getAutorNomeDashboard(),
+  ]);
 
   const depois = {
     obra_id: String(formData.get("obra_id") ?? "") || null,
@@ -1141,7 +1141,6 @@ export async function updateDespesaAction(formData: FormData) {
     await supabase.from("despesas").update(semQuantidade).eq("id", id);
   }
 
-  const autorNome = await getAutorNomeDashboard();
   await anexarArquivosSelecionadosNoFormulario({
     supabase,
     formData,

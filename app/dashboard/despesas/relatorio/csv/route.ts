@@ -1,6 +1,7 @@
 import { NextRequest } from "next/server";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { rotuloOrigem } from "@/lib/origem";
+import { consultarEmLotes } from "@/lib/supabase/emLotes";
 
 export const dynamic = "force-dynamic";
 
@@ -54,13 +55,9 @@ export async function GET(request: NextRequest) {
 
   const despesas = data ?? [];
   const idsDespesas = despesas.map((d) => d.id);
-  const { data: comprovantesData } =
-    idsDespesas.length > 0
-      ? await supabase
-          .from("despesa_comprovantes")
-          .select("despesa_id, tipo_documento, storage_bucket, storage_path")
-          .in("despesa_id", idsDespesas)
-      : { data: [] };
+  const { data: comprovantesData } = await consultarEmLotes(idsDespesas, (lote) =>
+    supabase.from("despesa_comprovantes").select("despesa_id, tipo_documento, storage_bucket, storage_path").in("despesa_id", lote)
+  );
 
   // Mesma validade de 7 dias do relatorio em PDF - CSV tambem costuma ser
   // salvo/reaberto depois, entao o link nao pode expirar em 1h.

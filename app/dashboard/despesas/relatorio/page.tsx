@@ -9,6 +9,7 @@ import { ActionIcon, type ActionIconName } from "../../action-icon";
 import { PrintButton } from "./print-button";
 import { enviarRelatorioPdfWhatsAppAction } from "../../actions";
 import { SubmitButton } from "../../submit-button";
+import { consultarEmLotes } from "@/lib/supabase/emLotes";
 
 const PALETA_GRUPOS_NOTA = ["#296dd1", "#7c3aed", "#bd7600", "#0f766e", "#c2185b", "#4d7c0f"];
 
@@ -180,13 +181,9 @@ export default async function RelatorioDespesasPage({
   const totalGasto = despesas.reduce((soma, d) => soma + d.valor, 0);
 
   const idsDespesas = despesas.map((d) => d.id);
-  const { data: comprovantesData } =
-    idsDespesas.length > 0
-      ? await supabase
-          .from("despesa_comprovantes")
-          .select("id, despesa_id, tipo_documento, storage_bucket, storage_path")
-          .in("despesa_id", idsDespesas)
-      : { data: [] };
+  const { data: comprovantesData } = await consultarEmLotes(idsDespesas, (lote) =>
+    supabase.from("despesa_comprovantes").select("id, despesa_id, tipo_documento, storage_bucket, storage_path").in("despesa_id", lote)
+  );
   // 7 dias em vez de 1 hora - esse relatorio costuma ser salvo em PDF ou
   // impresso pra consulta futura, entao o link precisa sobreviver mais
   // tempo que a sessao de quem gerou.

@@ -4,6 +4,7 @@ import { createClient } from "@/lib/supabase/server";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { formatBRL } from "@/lib/conversation/format";
 import { formatDataBrasil, formatDataHoraBrasil } from "@/lib/format-date";
+import { consultarEmLotes } from "@/lib/supabase/emLotes";
 
 const MAX_IDS = 200;
 
@@ -55,10 +56,12 @@ export async function GET(request: NextRequest) {
       .in("id", ids)
       .is("deleted_at", null)
       .order("data", { ascending: false }),
-    admin
-      .from("despesa_comprovantes")
-      .select("id, despesa_id, tipo_documento, storage_bucket, storage_path, mime_type, nome_arquivo")
-      .in("despesa_id", ids),
+    consultarEmLotes(ids, (lote) =>
+      admin
+        .from("despesa_comprovantes")
+        .select("id, despesa_id, tipo_documento, storage_bucket, storage_path, mime_type, nome_arquivo")
+        .in("despesa_id", lote)
+    ),
   ]);
 
   if (!despesas || despesas.length === 0) {
