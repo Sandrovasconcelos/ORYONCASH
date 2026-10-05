@@ -4,6 +4,7 @@ import { verifyWebhookSignature, isAllowedNumber } from "@/lib/whatsapp/verify";
 import { parseIncomingMessage } from "@/lib/whatsapp/parse";
 import { handleIncomingMessage } from "@/lib/conversation/engine";
 import { excedeuLimiteDeTaxa } from "@/lib/whatsapp/rateLimit";
+import { registrarEventosMeta } from "@/lib/whatsapp/registrarEventosMeta";
 import {
   comTimeoutDeAviso,
   jaProcessadaOuMarcarComoProcessada,
@@ -41,6 +42,11 @@ export async function POST(request: NextRequest) {
   }
 
   const payload = JSON.parse(rawBody);
+
+  // Avisos da conta (ban, revisao, alertas, falhas de envio): antes eram
+  // descartados em silencio - e e ali que vem o motivo de um banimento.
+  await registrarEventosMeta(payload);
+
   const message = parseIncomingMessage(payload);
 
   // Nao ha mensagem (ex.: evento de status de entrega) - apenas confirma o recebimento.

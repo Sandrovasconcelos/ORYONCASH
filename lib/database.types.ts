@@ -494,6 +494,28 @@ export interface Database {
         Update: Partial<Database["public"]["Tables"]["saude_canais"]["Insert"]>;
         Relationships: [];
       };
+      eventos_meta: {
+        Row: {
+          id: string;
+          recebido_em: string;
+          campo: string;
+          evento: string;
+          resumo: string;
+          importante: boolean;
+          payload: Json | null;
+        };
+        Insert: {
+          id?: string;
+          recebido_em?: string;
+          campo: string;
+          evento: string;
+          resumo: string;
+          importante?: boolean;
+          payload?: Json | null;
+        };
+        Update: Partial<Database["public"]["Tables"]["eventos_meta"]["Insert"]>;
+        Relationships: [];
+      };
       icones_personalizados: {
         Row: {
           nome_normalizado: string;
