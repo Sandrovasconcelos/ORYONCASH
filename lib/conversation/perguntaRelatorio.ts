@@ -9,6 +9,8 @@ import { sendText } from "@/lib/whatsapp/messages";
 import { gerarEEnviarRelatorioPorPergunta } from "./relatorio";
 import { agruparPorNome, candidatosPorPista } from "./agruparPorNome";
 import { hojeNoBrasil } from "./queries";
+import { responderComparativo, responderContasAPagar, responderOrcamento } from "./consultas";
+import { pareceConsulta } from "./gateConsulta";
 
 type Cadastro = { id: string; nome: string };
 
@@ -22,12 +24,6 @@ async function carregarTodos(tabela: "categorias" | "materiais" | "fornecedores"
   const { data } = await supabase.from(tabela).select("id, nome").is("deleted_at", null).limit(5000);
   return data ?? [];
 }
-
-// Ve se vale a pena chamar o Gemini (que custa tempo/dinheiro) antes de
-// qualquer coisa - so passa quem tem cara de pergunta de gasto. O Gemini
-// ainda confirma de verdade (ehPerguntaDeGasto) pra nao disparar em falso.
-const PARECE_PERGUNTA_DE_GASTO = /gast\w*/;
-const TEM_PALAVRA_DE_PERGUNTA = /\b(quanto|quanta|quantos|quantas|qual|quais|quem|total)\b/;
 
 /**
  * Resolve um periodo relativo ("semana_atual", "mes_passado"...) pra datas
@@ -203,12 +199,30 @@ async function resolverRanking(
 export async function tentarRelatorioPorPergunta(from: string, texto: string | null): Promise<boolean> {
   const t = texto?.trim();
   if (!t || t.length < 6) return false;
-  const minusculo = t.toLowerCase();
-  if (!PARECE_PERGUNTA_DE_GASTO.test(minusculo) || !TEM_PALAVRA_DE_PERGUNTA.test(minusculo)) return false;
+  if (!pareceConsulta(t)) return false;
 
   try {
     const interpretacao = await interpretarPerguntaRelatorio(t, hojeNoBrasil());
     if (!interpretacao?.ehPerguntaDeGasto) return false;
+
+    switch (interpretacao.consulta) {
+      case "orcamento":
+        await responderOrcamento(from, interpretacao.termoBusca);
+        return true;
+      case "contas_a_pagar":
+        await responderContasAPagar(from);
+        return true;
+      case "comparativo": {
+        const tipo =
+          interpretacao.periodo === "semana_atual" || interpretacao.periodo === "ano_atual"
+            ? interpretacao.periodo
+            : "mes_atual";
+        await responderComparativo(from, tipo);
+        return true;
+      }
+      default:
+        break;
+    }
 
     const periodo = resolverPeriodo(interpretacao.periodo, {
       dataInicio: interpretacao.dataInicioPersonalizada,

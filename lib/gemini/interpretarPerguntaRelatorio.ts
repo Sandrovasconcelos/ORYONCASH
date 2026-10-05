@@ -13,8 +13,12 @@ export type PeriodoRelativo =
   | "ano_atual"
   | "personalizado";
 
+export type TipoConsulta = "gasto" | "orcamento" | "comparativo" | "contas_a_pagar";
+
 export type PerguntaRelatorio = {
   ehPerguntaDeGasto: boolean;
+  /** Que tipo de pergunta e (padrao "gasto"). */
+  consulta?: TipoConsulta | null;
   tipo: TipoFiltroRelatorio | null;
   /** true = "qual/quem X mais gastou" (quer o MAIOR, sem um nome especifico). */
   ranking: boolean;
@@ -30,6 +34,7 @@ const RESPONSE_SCHEMA = {
   type: "object",
   properties: {
     ehPerguntaDeGasto: { type: "boolean" },
+    consulta: { type: "string", enum: ["gasto", "orcamento", "comparativo", "contas_a_pagar"], nullable: true },
     tipo: { type: "string", enum: ["categoria", "material", "fornecedor", "etapa", "obra", "geral"], nullable: true },
     ranking: { type: "boolean" },
     termoBusca: { type: "string", nullable: true },
@@ -51,12 +56,20 @@ function montarPrompt(pergunta: string, hoje: string): string {
 
 Hoje é ${hoje} (AAAA-MM-DD).
 
-Diga se é uma PERGUNTA sobre gastos (ex: "quanto gastei com cimento", "quanto já
+Diga se é uma PERGUNTA sobre gastos, orçamento, comparação de períodos ou contas a pagar (ex: "quanto gastei com cimento", "quanto já
 gastei com a mão de obra do Alex", "qual fornecedor mais gastou essa semana",
 "quem mais recebeu esse mês", "total de material em setembro") - e não outra
 coisa (lançar uma despesa nova, tirar dúvida, conversa aleatória).
 
 Se for, identifique:
+
+- "consulta": o tipo da pergunta -
+  "gasto" (quanto foi gasto com algo, ranking, total - o padrão),
+  "orcamento" (quanto falta/sobrou/estourou do orçamento de uma obra, ou quanto do
+  orçamento já foi usado; "termoBusca" = nome da obra, se citada),
+  "comparativo" (gastei mais ou menos que no mês/semana/ano passado; "periodo" =
+  mes_atual, semana_atual ou ano_atual conforme o que ela quer comparar),
+  "contas_a_pagar" (quanto devo, o que vence, boletos pendentes, contas vencidas).
 
 - "tipo": sobre o que ela é -
   "categoria" (tipo de gasto, ex: mão de obra, material, locação de equipamento),
