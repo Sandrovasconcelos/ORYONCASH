@@ -14,6 +14,7 @@ import { rotuloOrigem } from "@/lib/origem";
 import { sendTelegramTextComBotoes } from "@/lib/telegram/messages";
 import { TECLADO_RESUMO, botaoDashboard, tecladoLancamento, type Teclado } from "@/lib/telegram/interativo";
 import { destinoTelegram, ehTelegram, idsTelegramParaAvisos } from "@/lib/telegram/ids";
+import { whatsappForaDoAr } from "@/lib/saude/canalForaDoAr";
 
 // Duplicado de lib/conversation/queries.ts (nao importado de la) pra evitar
 // import circular: queries.ts chama notificarLancamento deste arquivo.
@@ -114,7 +115,11 @@ export async function enviarNotificacao(
   // Telegram: teclado inline. WhatsApp: botoes/lista nativos (links viram texto).
   const enviarPara = (destino: string) => enviarComBotoes(destino, mensagem, opcoes.botoes);
 
-  if (!ehTelegram(numero)) {
+  // WhatsApp ja marcado como fora do ar pelo monitor (ex: conta banida): vai
+  // direto pro Telegram, sem tentar de novo um envio que se sabe que falha.
+  const pularWhatsApp = !ehTelegram(numero) && extras.length > 0 && (await whatsappForaDoAr());
+
+  if (!ehTelegram(numero) && !pularWhatsApp) {
     try {
       await enviarPara(numero);
       return;
