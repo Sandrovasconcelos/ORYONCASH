@@ -14,7 +14,7 @@ import { buscarArquivos, type ArquivoBuscavel } from "./busca";
 import { resolverDestinoDeObra } from "./obraOuProjeto";
 import { AJUDA_DE_CORRECAO, lerCorrecao } from "./comandos";
 import { legendaPedeGuardar, nomeDoArquivoSugere, pareceBuscaDeArquivo, pareceConsultaDeVencimentos } from "./gate";
-import { extensaoDoArquivo, nomeSeguro } from "./nomes";
+import { extensaoDoArquivo, nomeParaDownload, nomeSeguro } from "./nomes";
 import { caminhoDoArquivo, normalizarTipo, TIPO_PADRAO, type AreaArquivo } from "./tipos";
 import { diasParaVencer, formatarDataBR, situacaoDaValidade, textoDaValidade } from "./validade";
 
@@ -476,10 +476,6 @@ export async function aplicarCorrecao(from: string, texto: string, dados: Record
 
 // ---------- pedir de volta ----------
 
-function nomeDoDownload(a: ArquivoRow): string {
-  return `${nomeSeguro(a.nome)}.${extensaoDoArquivo(a.mime_type, a.nome_arquivo)}`;
-}
-
 export async function enviarArquivo(from: string, a: ArquivoComObra): Promise<void> {
   const { data, error } = await createAdminClient().storage.from(a.storage_bucket).createSignedUrl(a.storage_path, LINK_VALIDO_SEGUNDOS);
   if (error || !data?.signedUrl) {
@@ -490,7 +486,7 @@ export async function enviarArquivo(from: string, a: ArquivoComObra): Promise<vo
   const hoje = hojeNoBrasil();
   const legenda = [`*${a.nome}*`, caminhoDe(a), a.validade ? linhaDeValidade(a, hoje) : null].filter(Boolean).join("\n");
   try {
-    await sendDocument(from, data.signedUrl, nomeDoDownload(a), legenda);
+    await sendDocument(from, data.signedUrl, nomeParaDownload(a), legenda);
   } catch (e) {
     console.error("Erro ao enviar documento:", e);
     await sendText(from, `⚠️ Não consegui mandar o arquivo por aqui. Abra no painel (Arquivos): *${a.nome}*.`);

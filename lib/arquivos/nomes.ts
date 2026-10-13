@@ -53,3 +53,13 @@ export function abreNoNavegador(mimeType: string | null | undefined): boolean {
   const m = (mimeType ?? "").toLowerCase();
   return m === "application/pdf" || m.startsWith("image/");
 }
+
+/**
+ * Nome com que o arquivo e entregue (WhatsApp, Telegram, painel): o original
+ * que a pessoa enviou; se nao houver, o titulo do documento com a extensao certa.
+ */
+export function nomeParaDownload(a: { nome: string; nome_arquivo: string | null; mime_type: string | null }): string {
+  const original = a.nome_arquivo?.replace(/[\\/:*?"<>|]+/g, "-").trim();
+  if (original) return original;
+  return `${nomeSeguro(a.nome)}.${extensaoDoArquivo(a.mime_type, a.nome_arquivo)}`;
+}

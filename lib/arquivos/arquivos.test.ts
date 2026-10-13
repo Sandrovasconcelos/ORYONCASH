@@ -209,3 +209,19 @@ describe("busca no conteudo do arquivo", () => {
     expect(buscarArquivos(lista, "villa borghese").melhor?.id).toBe("m");
   });
 });
+
+import { nomeParaDownload } from "./nomes";
+
+describe("nomeParaDownload", () => {
+  it("usa o nome original enviado", () => {
+    expect(nomeParaDownload({ nome: "Matrícula", nome_arquivo: "REMANESCENTE_MAT.74912_228.595,309m².pdf", mime_type: "application/pdf" })).toBe(
+      "REMANESCENTE_MAT.74912_228.595,309m².pdf"
+    );
+  });
+  it("sem nome original, usa o titulo", () => {
+    expect(nomeParaDownload({ nome: "Alvará de construção", nome_arquivo: null, mime_type: "application/pdf" })).toBe("alvara-de-construcao.pdf");
+  });
+  it("tira caracteres proibidos", () => {
+    expect(nomeParaDownload({ nome: "x", nome_arquivo: 'a/b:c.pdf', mime_type: null })).toBe("a-b-c.pdf");
+  });
+});

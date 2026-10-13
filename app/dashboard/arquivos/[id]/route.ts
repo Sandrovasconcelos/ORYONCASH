@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createClient } from "@/lib/supabase/server";
 import { createAdminClient } from "@/lib/supabase/admin";
-import { extensaoDoArquivo, nomeSeguro } from "@/lib/arquivos/nomes";
+import { nomeParaDownload } from "@/lib/arquivos/nomes";
 
 /** Abre (ou baixa) um arquivo da biblioteca: confere o login e redireciona pra um link temporario. */
 export async function GET(request: NextRequest, { params }: { params: Promise<{ id: string }> }) {
@@ -21,7 +21,7 @@ export async function GET(request: NextRequest, { params }: { params: Promise<{ 
   if (!arquivo) return NextResponse.json({ error: "Arquivo não encontrado" }, { status: 404 });
 
   const baixar = request.nextUrl.searchParams.get("baixar") === "1";
-  const nomeDownload = `${nomeSeguro(arquivo.nome)}.${extensaoDoArquivo(arquivo.mime_type, arquivo.nome_arquivo)}`;
+  const nomeDownload = nomeParaDownload(arquivo);
   const { data, error } = await admin.storage
     .from(arquivo.storage_bucket)
     .createSignedUrl(arquivo.storage_path, 60 * 5, baixar ? { download: nomeDownload } : undefined);
