@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { enviarNotificacaoDiaria } from "@/lib/alertas/notificar";
 import { retomarLeiturasPendentes } from "@/lib/gemini/leiturasPendentes";
 import { enviarAgendaDoDia } from "@/lib/agenda/lembretes";
+import { enviarAvisosDeValidade } from "@/lib/arquivos/avisos";
 
 export async function GET(request: NextRequest) {
   const auth = request.headers.get("authorization");
@@ -22,5 +23,10 @@ export async function GET(request: NextRequest) {
     console.error("Falha ao enviar a agenda do dia:", error);
     return { pessoas: 0 };
   });
-  return NextResponse.json({ ...resultado, leiturasRetomadas, agenda });
+  // Documentos que vencem (certidoes, alvaras, licitacoes). Nunca derruba o aviso diario.
+  const documentos = await enviarAvisosDeValidade().catch((error) => {
+    console.error("Falha ao avisar vencimento de documentos:", error);
+    return { avisados: 0 };
+  });
+  return NextResponse.json({ ...resultado, leiturasRetomadas, agenda, documentos });
 }

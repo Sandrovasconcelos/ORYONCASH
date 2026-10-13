@@ -62,6 +62,9 @@ export const ESTADOS = {
 
   CONCILIACAO_CONTA: "conciliacao_conta",
   CONCILIACAO_ARQUIVO: "conciliacao_arquivo",
+
+  ARQUIVO_OFERTA: "arquivo_oferta",
+  ARQUIVO_CORRIGIR: "arquivo_corrigir",
 } as const;
 
 export const MENU_IDS = {

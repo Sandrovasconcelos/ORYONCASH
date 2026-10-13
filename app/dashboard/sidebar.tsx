@@ -33,6 +33,10 @@ const NAV_GROUPS = [
     ],
   },
   {
+    titulo: "Documentos",
+    itens: [{ href: "/dashboard/arquivos", label: "Arquivos", icon: "folder" }],
+  },
+  {
     titulo: "Sistema",
     itens: [
       { href: "/dashboard/atividades", label: "Atividades", icon: "clock" },
@@ -108,6 +112,11 @@ function NavIcon({ name }: { name: string }) {
         <path d="M10 11v6M14 11v6" />
         <path d="M6 7l1 14h10l1-14" />
         <path d="M9 7V4h6v3" />
+      </>
+    ),
+    folder: (
+      <>
+        <path d="M3 7a2 2 0 0 1 2-2h4l2 2.5h8a2 2 0 0 1 2 2V17a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V7Z" />
       </>
     ),
     wallet: (

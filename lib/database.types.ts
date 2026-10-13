@@ -494,6 +494,62 @@ export interface Database {
         Update: Partial<Database["public"]["Tables"]["saude_canais"]["Insert"]>;
         Relationships: [];
       };
+      arquivos: {
+        Row: {
+          id: string;
+          area: "obra" | "licitacao" | "empresa" | "pessoal";
+          obra_id: string | null;
+          pasta: string | null;
+          tipo: string;
+          nome: string;
+          descricao: string | null;
+          nome_arquivo: string | null;
+          storage_bucket: string;
+          storage_path: string;
+          mime_type: string | null;
+          tamanho_bytes: number | null;
+          validade: string | null;
+          avisar_dias_antes: number;
+          aviso_antecipado_em: string | null;
+          aviso_vencimento_em: string | null;
+          origem: string;
+          enviado_por: string | null;
+          created_at: string;
+          updated_at: string;
+        };
+        Insert: {
+          id?: string;
+          area?: "obra" | "licitacao" | "empresa" | "pessoal";
+          obra_id?: string | null;
+          pasta?: string | null;
+          tipo?: string;
+          nome: string;
+          descricao?: string | null;
+          nome_arquivo?: string | null;
+          storage_bucket?: string;
+          storage_path: string;
+          mime_type?: string | null;
+          tamanho_bytes?: number | null;
+          validade?: string | null;
+          avisar_dias_antes?: number;
+          aviso_antecipado_em?: string | null;
+          aviso_vencimento_em?: string | null;
+          origem?: string;
+          enviado_por?: string | null;
+          created_at?: string;
+          updated_at?: string;
+        };
+        Update: Partial<Database["public"]["Tables"]["arquivos"]["Insert"]>;
+        Relationships: [
+          {
+            foreignKeyName: "arquivos_obra_id_fkey";
+            columns: ["obra_id"];
+            isOneToOne: false;
+            referencedRelation: "obras";
+            referencedColumns: ["id"];
+          },
+        ];
+      };
       compromissos: {
         Row: {
           id: string;

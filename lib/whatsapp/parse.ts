@@ -1,6 +1,10 @@
 export type IncomingMedia = {
   id: string;
   mimeType: string;
+  /** Texto que acompanhou a foto/documento (legenda). */
+  legenda?: string;
+  /** Nome do arquivo, quando o remetente mandou um documento. */
+  nomeArquivo?: string;
 };
 
 export type IncomingMessage = {
@@ -25,9 +29,10 @@ type WebhookPayload = {
             list_reply?: { id?: string };
             button_reply?: { id?: string };
           };
-          image?: { id: string; mime_type: string };
-          document?: { id: string; mime_type: string };
+          image?: { id: string; mime_type: string; caption?: string };
+          document?: { id: string; mime_type: string; caption?: string; filename?: string };
           audio?: { id: string; mime_type: string };
+          video?: { id: string; mime_type: string; caption?: string };
         }[];
       };
     }[];
@@ -80,7 +85,11 @@ export function parseIncomingMessage(payload: unknown): IncomingMessage | null {
       from,
       text: null,
       replyId: null,
-      media: { id: message.image.id, mimeType: message.image.mime_type },
+      media: {
+        id: message.image.id,
+        mimeType: message.image.mime_type,
+        ...(message.image.caption?.trim() ? { legenda: message.image.caption.trim() } : {}),
+      },
     };
   }
 
@@ -90,7 +99,26 @@ export function parseIncomingMessage(payload: unknown): IncomingMessage | null {
       from,
       text: null,
       replyId: null,
-      media: { id: message.document.id, mimeType: message.document.mime_type },
+      media: {
+        id: message.document.id,
+        mimeType: message.document.mime_type,
+        ...(message.document.caption?.trim() ? { legenda: message.document.caption.trim() } : {}),
+        ...(message.document.filename ? { nomeArquivo: message.document.filename } : {}),
+      },
+    };
+  }
+
+  if (message.type === "video" && message.video) {
+    return {
+      id,
+      from,
+      text: null,
+      replyId: null,
+      media: {
+        id: message.video.id,
+        mimeType: message.video.mime_type,
+        ...(message.video.caption?.trim() ? { legenda: message.video.caption.trim() } : {}),
+      },
     };
   }
 

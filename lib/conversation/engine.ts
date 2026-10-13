@@ -20,6 +20,15 @@ import { sendListPeriodoRelatorio, gerarEEnviarRelatorio } from "./relatorio";
 import { tentarRelatorioPorPergunta } from "./perguntaRelatorio";
 import { tentarAgenda } from "@/lib/agenda/servico";
 import {
+  aplicarCorrecao,
+  guardarDaOferta,
+  midiaDaOferta,
+  oferecerGuardarComprovante,
+  tentarArquivoRecebido,
+  tentarPedidoDeArquivo,
+  tratarBotaoDeArquivo,
+} from "@/lib/arquivos/servico";
+import {
   sendListObras,
   sendListCategorias,
   sendListEtapas,
@@ -304,11 +313,15 @@ export async function handleIncomingMessage(message: IncomingMessage) {
     if (session.estado_atual === ESTADOS.CONCILIACAO_ARQUIVO) {
       return handleExtratoRecebido(from, message.media, session);
     }
-    if (MIME_TYPES_PLANILHA.includes(message.media.mimeType)) {
-      return handleOrcamentoRecebido(from, message.media);
-    }
     if (message.media.mimeType.startsWith("audio/")) {
       return handleAudioRecebido(from, message.media);
+    }
+    // Arquivo pra guardar (matricula, alvara, certidao...) x conta: so no menu e so pro dono.
+    if (session.estado_atual === ESTADOS.MENU && (await tentarArquivoRecebido(from, message.media))) {
+      return;
+    }
+    if (MIME_TYPES_PLANILHA.includes(message.media.mimeType)) {
+      return handleOrcamentoRecebido(from, message.media);
     }
     return handleNotaFiscalRecebida(from, message.media, {
       forcarNovaDespesa: true,
@@ -336,6 +349,16 @@ export async function handleIncomingMessage(message: IncomingMessage) {
   // em andamento), pra nao sequestrar uma resposta de outro fluxo.
   if (!message.replyId && session.estado_atual === ESTADOS.MENU && (await tentarAgenda(from, message.text))) {
     return;
+  }
+
+  // Pedido de arquivo guardado ("manda a matricula do lote 12") ou de vencimentos.
+  if (!message.replyId && session.estado_atual === ESTADOS.MENU && (await tentarPedidoDeArquivo(from, message.text))) {
+    return;
+  }
+
+  // Botoes da biblioteca de arquivos (guardar, corrigir, excluir, abrir).
+  if (message.replyId?.startsWith("arq:")) {
+    return tratarBotaoDeArquivoNoChat(from, message.replyId, session);
   }
 
   // Botoes dos avisos (desfazer, corrigir, paguei, pagamentos do extrato). No
@@ -421,6 +444,12 @@ export async function handleIncomingMessage(message: IncomingMessage) {
 
     case ESTADOS.CONCILIACAO_CONTA:
       return handleConciliacaoConta(from, message);
+    case ESTADOS.ARQUIVO_CORRIGIR:
+      return aplicarCorrecao(from, message.text ?? "", session.dados_coletados);
+    case ESTADOS.ARQUIVO_OFERTA:
+      await sendText(from, "📎 Toque em um dos botões acima: *É uma conta* ou *Guardar arquivo*. Pra sair, digite *menu*.");
+      return;
+
     case ESTADOS.CONCILIACAO_ARQUIVO:
       await sendText(from, "🏦 Envie o *PDF ou a foto do extrato* aqui no chat. Pra cancelar, digite *menu*.");
       return;
@@ -1362,6 +1391,8 @@ export async function processarDocumentoLido(
   }
 
   if (!invoice || invoice.itens.length === 0) {
+    // Nao e uma conta: pro dono, oferece guardar na biblioteca de arquivos.
+    if (comprovante && (await oferecerGuardarComprovante(from, comprovante))) return;
     await iniciarFallbackManual(
       from,
       "Não consegui ler os dados automaticamente. Vamos registrar manualmente: qual o valor da despesa? (ex: 150,00)",
@@ -1570,6 +1601,7 @@ export async function processarAudioLido(from: string, extraido: DespesaDeAudio 
     // se a transcricao e uma pergunta de gasto ("quanto ja gastei com X?").
     if (await tentarRelatorioPorPergunta(from, extraido?.transcricao ?? null)) return;
     if (await tentarAgenda(from, extraido?.transcricao ?? null)) return;
+    if (await tentarPedidoDeArquivo(from, extraido?.transcricao ?? null)) return;
     await iniciarFallbackManual(
       from,
       "Não consegui entender o valor e o que foi essa despesa no áudio. Pode digitar o valor? (ex: 150,00)"
@@ -1712,6 +1744,34 @@ async function iniciarDespesaUnicaExtraida(
   dados.etapaNome = etapa.nome;
   await sendText(from, `${linhasSabidas}\n📐 *Etapa:* ${etapa.nome}`);
   await continuarAposEtapa(from, dados);
+}
+
+async function tratarBotaoDeArquivoNoChat(from: string, replyId: string, session: Session) {
+  if (replyId === "arq:conta") {
+    const media = midiaDaOferta(session.dados_coletados);
+    await resetSession(from);
+    if (!media) {
+      await sendText(from, "⚠️ Perdi o arquivo da conversa. Manda de novo?");
+      return;
+    }
+    return handleNotaFiscalRecebida(from, media, { forcarNovaDespesa: true });
+  }
+  if (replyId === "arq:guardar") {
+    if (session.estado_atual !== ESTADOS.ARQUIVO_OFERTA) {
+      await sendText(from, "🤔 Esse pedido já foi atendido. Se quiser guardar um arquivo, é só mandá-lo de novo.");
+      return;
+    }
+    return guardarDaOferta(from, session.dados_coletados);
+  }
+  if (replyId === "arq:manual") {
+    const comprovante = session.dados_coletados.comprovante as Dados["comprovante"] | undefined;
+    return iniciarFallbackManual(
+      from,
+      "Ok! Vamos lançar à mão: qual o valor da despesa? (ex: 150,00)",
+      comprovante ? { comprovante } : {}
+    );
+  }
+  return tratarBotaoDeArquivo(from, replyId);
 }
 
 async function iniciarFallbackManual(

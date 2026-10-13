@@ -8,10 +8,12 @@ type TgMensagem = {
   from?: { id: number; is_bot?: boolean };
   chat: { id: number; type: string };
   text?: string;
+  caption?: string;
   entities?: Entidade[];
   reply_markup?: { inline_keyboard?: Teclado };
   photo?: TgFoto[];
-  document?: { file_id: string; mime_type?: string };
+  document?: { file_id: string; mime_type?: string; file_name?: string };
+  video?: { file_id: string; mime_type?: string; file_name?: string };
   voice?: { file_id: string; mime_type?: string };
   audio?: { file_id: string; mime_type?: string };
 };
@@ -95,12 +97,16 @@ export function parseTelegramUpdate(update: TgUpdate): ResultadoParse {
     return { incoming: { ...base, text: normalizarTexto(msg.text) }, callback: null };
   }
 
+  const legenda = msg.caption?.trim() || undefined;
   if (msg.photo && msg.photo.length > 0) {
     const maior = [...msg.photo].sort(
       (a, b) => (b.file_size ?? b.width * b.height) - (a.file_size ?? a.width * a.height)
     )[0];
     return {
-      incoming: { ...base, media: { id: `tg_${maior.file_id}`, mimeType: "image/jpeg" } },
+      incoming: {
+        ...base,
+        media: { id: `tg_${maior.file_id}`, mimeType: "image/jpeg", ...(legenda ? { legenda } : {}) },
+      },
       callback: null,
     };
   }
@@ -111,6 +117,22 @@ export function parseTelegramUpdate(update: TgUpdate): ResultadoParse {
         media: {
           id: `tg_${msg.document.file_id}`,
           mimeType: msg.document.mime_type ?? "application/octet-stream",
+          ...(legenda ? { legenda } : {}),
+          ...(msg.document.file_name ? { nomeArquivo: msg.document.file_name } : {}),
+        },
+      },
+      callback: null,
+    };
+  }
+  if (msg.video) {
+    return {
+      incoming: {
+        ...base,
+        media: {
+          id: `tg_${msg.video.file_id}`,
+          mimeType: msg.video.mime_type ?? "video/mp4",
+          ...(legenda ? { legenda } : {}),
+          ...(msg.video.file_name ? { nomeArquivo: msg.video.file_name } : {}),
         },
       },
       callback: null,
