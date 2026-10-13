@@ -18,8 +18,10 @@ const PALAVRAS_DE_CONTA = /\b(boleto|fatura|nota|nf|nfe|nfce|danfe|cupom|recibo|
 export function legendaPedeGuardar(legenda: string | null | undefined): boolean {
   const t = semAcento(legenda ?? "").trim();
   if (!t) return false;
-  if (/\b(guarda|guardar|guarde|arquiva|arquivar|arquive|salva|salvar|salve)\b/.test(t) && !PALAVRAS_DE_CONTA.test(t)) return true;
-  if (/\b(arquivo|documento)\b/.test(t) && !PALAVRAS_DE_CONTA.test(t)) return true;
+  // Pedido explicito de arquivar ("salva em Arquivos", "arquivar") vale mesmo com "orcamento", "nota" etc na legenda.
+  if (/\b(arquiva|arquivar|arquive|arquivos?)\b/.test(t) && /\b(arquiva|arquivar|arquive|salva|salvar|salve|guarda|guardar|guarde|em|nos?|na|pra|para)\b/.test(t)) return true;
+  if (/\b(guarda|guardar|guarde|salva|salvar|salve)\b/.test(t) && !PALAVRAS_DE_CONTA.test(t)) return true;
+  if (/\b(arquivos?|documentos?)\b/.test(t) && !PALAVRAS_DE_CONTA.test(t)) return true;
   return PALAVRAS_DE_DOCUMENTO.test(t) && !PALAVRAS_DE_CONTA.test(t);
 }
 

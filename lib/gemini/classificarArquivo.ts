@@ -54,7 +54,7 @@ Obras cadastradas: ${entrada.obras.length ? entrada.obras.join("; ") : "(nenhuma
  - "documento": documento pra GUARDAR: matrícula, escritura, alvará, certidão, contrato, edital, projeto/planta, ART, registro, CNH/RG, procuração, ata etc.
  - "incerto": não dá pra saber.
 2) Se for "documento":
- - "area": "obra" (documento de um terreno/obra/empreendimento), "licitacao" (edital, proposta, habilitação ou certidão de uma licitação), "empresa" (documentos da empresa em si: contrato social, certidões da empresa) ou "pessoal" (documentos pessoais).
+ - "area": "obra" (documento de um terreno/obra/empreendimento), "licitacao" (edital, proposta, habilitação ou certidão de uma licitação), "empresa" (documentos da empresa em si: contrato social, certidões da empresa) ou "pessoal" (documentos pessoais ou da casa do dono, ex: orçamento para o quarto dele; se a legenda disser que é pessoal, "meu", "minha casa" etc., use "pessoal").
  - "tipo", preferindo um destes por área:
 ${tipos}
  - "obraNome": o nome da obra/empreendimento/projeto a que o documento pertence, se a legenda ou o documento citarem (ex: "Villa Borghese"). Se for uma das obras cadastradas, devolva EXATAMENTE o nome da lista; se não estiver na lista, devolva o nome como foi citado. Nunca invente.
@@ -63,6 +63,7 @@ ${tipos}
  - "validade": AAAA-MM-DD, SOMENTE se o documento mostra data de validade/vencimento (certidões, alvarás, CNH). Matrícula e escritura NÃO vencem: null. Nunca invente.
  - "resumo": uma frase curta (até 20 palavras) dizendo o que é, sem dados sensíveis (sem CPF/RG completos).
  - "textoBusca": o MÁXIMO de informações do documento que ajudem a achá-lo depois, numa lista corrida separada por vírgulas ou ponto e vírgula, até 1200 caracteres: tipo do documento, números de identificação (matrícula, processo, protocolo, ART, CNPJ, número do edital), nomes de pessoas e empresas (proprietários, requerentes, responsável técnico, órgão emissor), cartório/prefeitura/comarca, município e estado, endereço, bairro, lote/quadra, áreas e medidas, valores, datas importantes (emissão, validade) e palavras-chave do assunto. NÃO inclua CPF nem RG de pessoas. Escreva só o que está no documento.
+Se a legenda pedir para guardar/salvar/arquivar o arquivo (mesmo sendo um orçamento, nota ou lista de preços), a categoria é "documento": orçamento vai no tipo "Orçamentos".
 Se for "conta", deixe os demais campos null.
 
 Responda APENAS com o JSON.`;

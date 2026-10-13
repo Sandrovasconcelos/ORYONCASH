@@ -225,3 +225,16 @@ describe("nomeParaDownload", () => {
     expect(nomeParaDownload({ nome: "x", nome_arquivo: 'a/b:c.pdf', mime_type: null })).toBe("a-b-c.pdf");
   });
 });
+
+describe("legenda com pedido explicito de arquivar", () => {
+  it("vence as palavras de conta", () => {
+    expect(legendaPedeGuardar("Salva em Arquivos Sandro: Orçamento de tintas pintura do meu quarto.")).toBe(true);
+    expect(legendaPedeGuardar("arquivar orçamento do pedreiro")).toBe(true);
+    expect(legendaPedeGuardar("guarda nos arquivos a nota da obra")).toBe(true);
+  });
+  it("sem pedido explicito, orcamento e nota seguem como conta", () => {
+    expect(legendaPedeGuardar("orçamento de tintas")).toBe(false);
+    expect(legendaPedeGuardar("nota do cimento")).toBe(false);
+    expect(legendaPedeGuardar("salva essa nota")).toBe(false);
+  });
+});

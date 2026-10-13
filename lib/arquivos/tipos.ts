@@ -8,10 +8,10 @@ export const AREAS: { id: AreaArquivo; rotulo: string; icone: string; descricao:
 ];
 
 export const TIPOS_SUGERIDOS: Record<AreaArquivo, string[]> = {
-  obra: ["Terreno e matrícula", "Licenças", "Projetos", "Contratos", "Certidões", "Fotos", "Outros"],
+  obra: ["Terreno e matrícula", "Licenças", "Projetos", "Contratos", "Orçamentos", "Certidões", "Fotos", "Outros"],
   licitacao: ["Edital", "Proposta", "Habilitação", "Certidões", "Contratos", "Outros"],
-  empresa: ["Certidões", "Contratos", "Licenças", "Outros"],
-  pessoal: ["Identificação", "Contratos", "Outros"],
+  empresa: ["Certidões", "Contratos", "Licenças", "Orçamentos", "Outros"],
+  pessoal: ["Identificação", "Contratos", "Orçamentos", "Outros"],
 };
 
 export const TIPO_PADRAO = "Outros";
