@@ -68,8 +68,9 @@ function lerCampos(formData: FormData): CamposDoArquivo | null {
 
   return {
     area,
-    obra_id: area === "obra" ? obraId || null : null,
-    pasta: area === "obra" ? null : pasta || null,
+    // Obra cadastrada (id) ou, em "Projeto", so o nome da pasta - sem criar obra no financeiro.
+    obra_id: area === "obra" && obraId && obraId !== "__projeto" ? obraId : null,
+    pasta: area === "obra" && obraId && obraId !== "__projeto" ? null : pasta || null,
     tipo: normalizarTipo(String(formData.get("tipo") ?? "")),
     nome,
     descricao: String(formData.get("descricao") ?? "").trim().slice(0, 300) || null,

@@ -24,7 +24,8 @@ export type Pasta = {
 
 /** Chave da pasta de um arquivo dentro da area (id da obra, ou o nome da licitacao/pasta). */
 export function chaveDaPasta(a: Pick<ArquivoDePasta, "area" | "obra_id" | "pasta">): string {
-  if (a.area === "obra") return a.obra_id ?? PASTA_SEM_OBRA;
+  // Obra cadastrada pelo id; projeto sem obra no financeiro pelo nome da pasta.
+  if (a.area === "obra") return a.obra_id ?? (a.pasta?.trim() || PASTA_SEM_OBRA);
   return a.pasta?.trim() || PASTA_GERAL;
 }
 

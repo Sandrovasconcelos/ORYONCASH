@@ -505,6 +505,7 @@ export interface Database {
           tipo: string;
           nome: string;
           descricao: string | null;
+          texto_busca: string | null;
           nome_arquivo: string | null;
           storage_bucket: string;
           storage_path: string;
@@ -527,6 +528,7 @@ export interface Database {
           tipo?: string;
           nome: string;
           descricao?: string | null;
+          texto_busca?: string | null;
           nome_arquivo?: string | null;
           storage_bucket?: string;
           storage_path: string;

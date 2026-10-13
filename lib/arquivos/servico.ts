@@ -6,11 +6,12 @@ import { sendButtons, sendDocument, sendList, sendText } from "@/lib/whatsapp/me
 import { saveSession, resetSession } from "@/lib/whatsapp/session";
 import { ESTADOS } from "@/lib/conversation/states";
 import { hojeNoBrasil } from "@/lib/conversation/queries";
-import { candidatosPorPista } from "@/lib/conversation/agruparPorNome";
+
 import { ehTelegram } from "@/lib/telegram/ids";
 import { classificarArquivo, type LeituraArquivo } from "@/lib/gemini/classificarArquivo";
 import { ehDono } from "@/lib/acesso/dono";
 import { buscarArquivos, type ArquivoBuscavel } from "./busca";
+import { resolverDestinoDeObra } from "./obraOuProjeto";
 import { AJUDA_DE_CORRECAO, lerCorrecao } from "./comandos";
 import { legendaPedeGuardar, nomeDoArquivoSugere, pareceBuscaDeArquivo, pareceConsultaDeVencimentos } from "./gate";
 import { extensaoDoArquivo, nomeSeguro } from "./nomes";
@@ -37,8 +38,14 @@ async function carregarObras(): Promise<{ id: string; nome: string }[]> {
   return data ?? [];
 }
 
+/** Pastas de projeto ja criadas (obras citadas em arquivos que nao existem no financeiro). */
+async function carregarProjetosSemObra(): Promise<string[]> {
+  const { data } = await createAdminClient().from("arquivos").select("pasta").eq("area", "obra").is("obra_id", null).not("pasta", "is", null);
+  return [...new Set((data ?? []).map((r) => r.pasta as string).filter(Boolean))];
+}
+
 function pastaDe(a: ArquivoComObra): string | null {
-  return a.area === "obra" ? (a.obras?.nome ?? null) : a.pasta;
+  return a.area === "obra" ? (a.obras?.nome ?? a.pasta) : a.pasta;
 }
 
 function caminhoDe(a: ArquivoComObra): string {
@@ -59,16 +66,17 @@ function linhaDeValidade(a: ArquivoRow, hoje: string): string {
   return `Validade: ${marca}${formatarDataBR(a.validade)} (${textoDaValidade(a.validade, hoje)})`;
 }
 
-function textoResumo(a: ArquivoComObra, titulo: string): string {
+function textoResumo(a: ArquivoComObra, titulo: string, extra?: string): string {
   const hoje = hojeNoBrasil();
   const partes = [`${titulo} *${a.nome}*`, `📂 ${caminhoDe(a)}`, linhaDeValidade(a, hoje)];
-  if (a.area === "obra" && !a.obras?.nome) partes.push('❓ Não identifiquei a obra. Toque em *Corrigir* e diga, por exemplo, "obra Aurora".');
+  if (extra) partes.push(extra);
+  if (a.area === "obra" && !a.obras?.nome && !a.pasta) partes.push('❓ Não identifiquei a obra. Toque em *Corrigir* e diga, por exemplo, "obra Aurora".');
   if (a.descricao) partes.push(`📝 ${a.descricao}`);
   return partes.join("\n");
 }
 
-async function enviarResumoComBotoes(from: string, a: ArquivoComObra, titulo = "📁 Guardei:") {
-  await sendButtons(from, textoResumo(a, titulo), [
+async function enviarResumoComBotoes(from: string, a: ArquivoComObra, titulo = "📁 Guardei:", extra?: string) {
+  await sendButtons(from, textoResumo(a, titulo, extra), [
     { id: `arq:ok:${a.id}`, title: "✅ Está certo" },
     { id: `arq:mudar:${a.id}`, title: "✏️ Corrigir" },
     { id: `arq:del:${a.id}`, title: "🗑️ Excluir" },
@@ -100,13 +108,23 @@ async function guardar(from: string, e: EntradaGuardar): Promise<void> {
   const obras = await carregarObras();
   const leitura = e.leitura;
 
+  // Obra citada: usa a cadastrada, reaproveita uma pasta de projeto ou cria a pasta (sem mexer nas obras do financeiro).
   let obraId: string | null = null;
-  if (leitura?.obraNome) {
-    const achadas = candidatosPorPista(obras, leitura.obraNome);
-    if (achadas.length === 1) obraId = achadas[0].id;
+  let pasta: string | null = null;
+  let area: AreaArquivo = leitura?.area ?? "obra";
+  let avisoDePasta: string | undefined;
+  const nomeDaObraCitada = leitura?.obraNome ?? null;
+  if (nomeDaObraCitada && area === "obra") {
+    const destino = resolverDestinoDeObra(nomeDaObraCitada, obras, await carregarProjetosSemObra());
+    area = "obra";
+    if (destino.tipo === "obra") obraId = destino.obraId;
+    else if (destino.tipo === "projeto") {
+      pasta = destino.pasta;
+      if (destino.nova) avisoDePasta = `🆕 Criei a pasta de projeto *${destino.pasta}* (ela não entra no financeiro das obras).`;
+    }
+  } else if (area !== "obra") {
+    pasta = leitura?.pasta ?? null;
   }
-  const area: AreaArquivo = obraId ? "obra" : (leitura?.area ?? "obra");
-  const pasta = area === "obra" ? null : (leitura?.pasta ?? null);
   const nome =
     leitura?.nome ??
     tituloDaLegenda(e.legenda) ??
@@ -142,6 +160,7 @@ async function guardar(from: string, e: EntradaGuardar): Promise<void> {
       tipo: normalizarTipo(leitura?.tipo ?? TIPO_PADRAO),
       nome: normalizarNomeTitulo(nome),
       descricao: leitura?.resumo ?? null,
+      texto_busca: leitura?.textoBusca ?? null,
       nome_arquivo: e.nomeArquivo ?? null,
       storage_bucket: bucket,
       storage_path: path,
@@ -160,7 +179,7 @@ async function guardar(from: string, e: EntradaGuardar): Promise<void> {
     return;
   }
   await resetSession(from);
-  await enviarResumoComBotoes(from, data as ArquivoComObra);
+  await enviarResumoComBotoes(from, data as ArquivoComObra, "📁 Guardei:", avisoDePasta);
 }
 
 function normalizarNomeTitulo(nome: string): string {
@@ -410,20 +429,14 @@ export async function aplicarCorrecao(from: string, texto: string, dados: Record
       ]);
       return;
     case "obra": {
-      const obras = await carregarObras();
-      const achadas = candidatosPorPista(obras, correcao.valor);
-      if (achadas.length === 0) {
-        const nomes = obras.slice(0, 8).map((o) => `• ${o.nome}`).join("\n");
-        await sendText(from, `🤔 Não achei a obra "${correcao.valor}".${nomes ? `\n\nSuas obras:\n${nomes}` : ""}\n\nTenta de novo, ou digite *menu* pra sair.`);
-        return;
-      }
-      if (achadas.length > 1) {
-        await sendText(from, `🤔 Achei mais de uma:\n${achadas.slice(0, 6).map((o) => `• ${o.nome}`).join("\n")}\n\nDigite o nome com mais detalhe.`);
+      const destino = resolverDestinoDeObra(correcao.valor, await carregarObras(), await carregarProjetosSemObra());
+      if (destino.tipo === "ambiguo") {
+        await sendText(from, `🤔 Achei mais de uma:\n${destino.opcoes.slice(0, 6).map((n) => `• ${n}`).join("\n")}\n\nDigite o nome com mais detalhe.`);
         return;
       }
       mudancas.area = "obra";
-      mudancas.obra_id = achadas[0].id;
-      mudancas.pasta = null;
+      mudancas.obra_id = destino.tipo === "obra" ? destino.obraId : null;
+      mudancas.pasta = destino.tipo === "projeto" ? destino.pasta : null;
       break;
     }
     case "licitacao":
@@ -490,7 +503,7 @@ async function carregarTodos(): Promise<ArquivoComObra[]> {
 }
 
 function paraBuscavel(a: ArquivoComObra): ArquivoBuscavel {
-  return { id: a.id, nome: a.nome, tipo: a.tipo, area: a.area, pastaNome: pastaDe(a), descricao: a.descricao, nomeArquivo: a.nome_arquivo };
+  return { id: a.id, nome: a.nome, tipo: a.tipo, area: a.area, pastaNome: pastaDe(a), descricao: a.descricao, nomeArquivo: a.nome_arquivo, textoBusca: a.texto_busca };
 }
 
 async function enviarEscolha(from: string, titulo: string, itens: ArquivoComObra[]) {
@@ -517,11 +530,11 @@ async function responderBusca(from: string, pedido: string) {
     return;
   }
   const porId = new Map(todos.map((a) => [a.id, a]));
-  const { exatos, parecidos } = buscarArquivos(todos.map(paraBuscavel), pedido);
+  const { exatos, melhor, parecidos } = buscarArquivos(todos.map(paraBuscavel), pedido);
   const pegar = (lista: ArquivoBuscavel[]) => lista.map((b) => porId.get(b.id)).filter((x): x is ArquivoComObra => Boolean(x));
 
-  if (exatos.length === 1) {
-    await enviarArquivo(from, pegar(exatos)[0]);
+  if (exatos.length === 1 || melhor) {
+    await enviarArquivo(from, pegar([melhor ?? exatos[0]])[0]);
     return;
   }
   if (exatos.length > 1) {

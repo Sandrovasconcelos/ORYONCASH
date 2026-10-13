@@ -6,13 +6,19 @@ export type ArquivoBuscavel = {
   pastaNome: string | null;
   descricao: string | null;
   nomeArquivo: string | null;
+  /** Texto lido do conteudo do arquivo. */
+  textoBusca?: string | null;
 };
+
+// "74.912" e "74912" sao o mesmo numero: tira o ponto de milhar.
+const PONTO_DE_MILHAR = /(\d)\.(?=\d{3}(?!\d))/g;
 
 function normalizar(texto: string): string {
   return texto
     .normalize("NFD")
     .replace(/[̀-ͯ]/g, "")
-    .toLowerCase();
+    .toLowerCase()
+    .replace(PONTO_DE_MILHAR, "$1");
 }
 
 // Palavras do pedido que nao ajudam a achar o arquivo.
@@ -40,8 +46,10 @@ function contem(haystack: string, palavra: string): boolean {
 }
 
 export type ResultadoBusca = {
-  /** Arquivos que casam com TODAS as palavras do pedido. */
+  /** Arquivos que casam com TODAS as palavras do pedido (os que casam no titulo/pasta primeiro). */
   exatos: ArquivoBuscavel[];
+  /** Quando um so se destaca (casa tudo no titulo/pasta e os outros nao), ele. */
+  melhor: ArquivoBuscavel | null;
   /** Os que casam com so parte das palavras (melhores primeiro). */
   parecidos: ArquivoBuscavel[];
   palavras: string[];
@@ -49,19 +57,25 @@ export type ResultadoBusca = {
 
 export function buscarArquivos(arquivos: ArquivoBuscavel[], pedido: string): ResultadoBusca {
   const palavras = palavrasDoPedido(pedido);
-  if (palavras.length === 0) return { exatos: [], parecidos: [], palavras };
+  if (palavras.length === 0) return { exatos: [], melhor: null, parecidos: [], palavras };
 
   const pontuados = arquivos
     .map((a) => {
-      const haystack = normalizar([a.nome, a.tipo, a.pastaNome, a.descricao, a.nomeArquivo].filter(Boolean).join(" "));
+      const titulo = normalizar([a.nome, a.tipo, a.pastaNome, a.nomeArquivo].filter(Boolean).join(" "));
+      const haystack = normalizar([titulo, a.descricao, a.textoBusca].filter(Boolean).join(" "));
       const area = normalizar(a.area);
       const pontos = palavras.filter((p) => contem(haystack, p) || contem(area, p)).length;
-      return { a, pontos };
+      const noTitulo = palavras.filter((p) => contem(titulo, p) || contem(area, p)).length;
+      return { a, pontos, noTitulo };
     })
     .filter((x) => x.pontos > 0)
-    .sort((x, y) => y.pontos - x.pontos);
+    .sort((x, y) => y.pontos - x.pontos || y.noTitulo - x.noTitulo);
 
-  const exatos = pontuados.filter((x) => x.pontos === palavras.length).map((x) => x.a);
+  const todosOsExatos = pontuados.filter((x) => x.pontos === palavras.length);
+  const exatos = todosOsExatos.map((x) => x.a);
+  const [primeiro, segundo] = todosOsExatos;
+  const melhor =
+    primeiro && primeiro.noTitulo === palavras.length && (!segundo || segundo.noTitulo < palavras.length) ? primeiro.a : null;
   const parecidos = pontuados.filter((x) => x.pontos < palavras.length).map((x) => x.a);
-  return { exatos, parecidos, palavras };
+  return { exatos, melhor, parecidos, palavras };
 }

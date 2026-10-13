@@ -33,6 +33,7 @@ type Linha = {
   tipo: string;
   nome: string;
   descricao: string | null;
+  texto_busca: string | null;
   nome_arquivo: string | null;
   mime_type: string | null;
   tamanho_bytes: number | null;
@@ -89,7 +90,7 @@ export default async function ArquivosPage({ searchParams }: { searchParams: Pro
   const todos = (consulta.data ?? []) as unknown as Linha[];
   const area = params.area && ehArea(params.area) ? params.area : null;
   const q = (params.q ?? "").trim();
-  const sugestoesDePasta = [...new Set(todos.filter((l) => l.area !== "obra" && l.pasta).map((l) => l.pasta as string))];
+  const sugestoesDePasta = [...new Set(todos.filter((l) => l.pasta).map((l) => l.pasta as string))];
 
   // ---- o que mostrar ----
   const migalhas: { rotulo: string; destino: string }[] = [{ rotulo: "Arquivos", destino: href({}) }];
@@ -106,8 +107,9 @@ export default async function ArquivosPage({ searchParams }: { searchParams: Pro
       nome: l.nome,
       tipo: l.tipo,
       area: l.area,
-      pastaNome: l.area === "obra" ? (l.obras?.nome ?? null) : l.pasta,
+      pastaNome: l.area === "obra" ? (l.obras?.nome ?? l.pasta) : l.pasta,
       descricao: l.descricao,
+      textoBusca: l.texto_busca,
       nomeArquivo: l.nome_arquivo,
     }));
     const { exatos, parecidos } = buscarArquivos(buscaveis, q);
@@ -135,7 +137,9 @@ export default async function ArquivosPage({ searchParams }: { searchParams: Pro
       migalhas.push({ rotulo: nomePastaAtual, destino: href({ area, pasta: params.pasta }) });
       novo = {
         area,
-        ...(area === "obra" ? { obraId: params.pasta.startsWith("_") ? "" : params.pasta } : { pasta: params.pasta.startsWith("_") ? "" : params.pasta }),
+        ...(area === "obra" && obras.some((o) => o.id === params.pasta)
+          ? { obraId: params.pasta }
+          : { pasta: params.pasta.startsWith("_") ? "" : params.pasta }),
       };
 
       if (!params.tipo) {
@@ -226,7 +230,7 @@ export default async function ArquivosPage({ searchParams }: { searchParams: Pro
                       {l.nome}
                     </a>
                     <span className="flex items-center gap-2 text-xs text-brand-gray-500">
-                      {caminhoDoArquivo({ area: l.area, pastaNome: l.area === "obra" ? (l.obras?.nome ?? null) : l.pasta, tipo: l.tipo })}
+                      {caminhoDoArquivo({ area: l.area, pastaNome: l.area === "obra" ? (l.obras?.nome ?? l.pasta) : l.pasta, tipo: l.tipo })}
                       <BadgeValidade validade={l.validade} avisar={l.avisar_dias_antes} hoje={hoje} />
                     </span>
                   </li>
@@ -408,7 +412,7 @@ function LinhaDeArquivo({
   obras: { id: string; nome: string }[];
   sugestoesDePasta: string[];
 }) {
-  const caminho = caminhoDoArquivo({ area: l.area, pastaNome: l.area === "obra" ? (l.obras?.nome ?? null) : l.pasta, tipo: l.tipo });
+  const caminho = caminhoDoArquivo({ area: l.area, pastaNome: l.area === "obra" ? (l.obras?.nome ?? l.pasta) : l.pasta, tipo: l.tipo });
   const tamanho = formatarTamanho(l.tamanho_bytes);
   const abre = abreNoNavegador(l.mime_type);
 

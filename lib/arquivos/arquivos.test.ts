@@ -159,3 +159,53 @@ describe("pastas", () => {
     expect(listarTipos(itens.filter((i) => i.obra_id === "o1"), "2026-10-13").map((t) => [t.nome, t.total])).toEqual([["Licenças", 2]]);
   });
 });
+
+import { chaveDeNome, resolverDestinoDeObra } from "./obraOuProjeto";
+
+describe("resolverDestinoDeObra", () => {
+  const obras = [
+    { id: "o1", nome: "01 COSTA AMALFITANA" },
+    { id: "o2", nome: "Oryon Construtora" },
+  ];
+  it("chave ignora acento, caixa e letra dobrada", () => {
+    expect(chaveDeNome("Villa Borghese")).toBe(chaveDeNome("vila  borghese"));
+  });
+  it("usa obra cadastrada, mesmo escrita diferente", () => {
+    expect(resolverDestinoDeObra("costa amalfitana", obras, [])).toEqual({ tipo: "obra", obraId: "o1", nome: "01 COSTA AMALFITANA" });
+  });
+  it("reaproveita pasta de projeto parecida", () => {
+    expect(resolverDestinoDeObra("Vila Borghese", obras, ["Villa Borghese"])).toEqual({ tipo: "projeto", pasta: "Villa Borghese", nova: false });
+  });
+  it("cria pasta de projeto nova quando a obra nao existe", () => {
+    expect(resolverDestinoDeObra("villa borghese", obras, [])).toEqual({ tipo: "projeto", pasta: "Villa Borghese", nova: true });
+  });
+  it("avisa quando ha mais de uma obra parecida", () => {
+    const r = resolverDestinoDeObra("costa", [...obras, { id: "o3", nome: "02 Costa Amalfitana" }], []);
+    expect(r.tipo).toBe("ambiguo");
+  });
+});
+
+describe("busca no conteudo do arquivo", () => {
+  const lista: ArquivoBuscavel[] = [
+    {
+      id: "m",
+      nome: "Matrícula da área remanescente Villa Borghese",
+      tipo: "Terreno e matrícula",
+      area: "obra",
+      pastaNome: "Villa Borghese",
+      descricao: null,
+      nomeArquivo: "REMANESCENTE_MAT.74912.pdf",
+      textoBusca: "Certidão de inteiro teor, matrícula 74.912, Paço do Lumiar, Maranhão, 1º Ofício Extrajudicial, área 228.595,309m²",
+    },
+    { id: "o", nome: "Alvará Aurora", tipo: "Licenças", area: "obra", pastaNome: "Aurora", descricao: null, nomeArquivo: null, textoBusca: "Prefeitura de São Luís" },
+  ];
+  it("acha por informacao que so existe dentro do arquivo", () => {
+    expect(buscarArquivos(lista, "manda o documento de Paço do Lumiar").exatos.map((a) => a.id)).toEqual(["m"]);
+    expect(buscarArquivos(lista, "matrícula 74912").exatos.map((a) => a.id)).toEqual(["m"]);
+    expect(buscarArquivos(lista, "matrícula 74.912").exatos.map((a) => a.id)).toEqual(["m"]);
+    expect(buscarArquivos(lista, "prefeitura de são luís").exatos.map((a) => a.id)).toEqual(["o"]);
+  });
+  it("destaca o melhor quando o titulo bate", () => {
+    expect(buscarArquivos(lista, "villa borghese").melhor?.id).toBe("m");
+  });
+});

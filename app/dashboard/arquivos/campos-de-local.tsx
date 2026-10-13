@@ -22,6 +22,8 @@ export function CamposDeLocal({
   sugestoesDePasta?: string[];
 }) {
   const [area, setArea] = useState<AreaArquivo>(areaInicial);
+  const [obraSel, setObraSel] = useState(obraIdInicial || (areaInicial === "obra" && pastaInicial ? "__projeto" : ""));
+  const mostrarPasta = area !== "obra" || obraSel === "__projeto";
   const idLista = `tipos-${area}`;
   const idPastas = "pastas-sugeridas";
 
@@ -38,26 +40,29 @@ export function CamposDeLocal({
         </select>
       </label>
 
-      {area === "obra" ? (
+      {area === "obra" && (
         <label className={CLASSE_ROTULO}>
           Obra
-          <select name="obra_id" defaultValue={obraIdInicial} className={CLASSE_CAMPO}>
+          <select name="obra_id" value={obraSel} onChange={(e) => setObraSel(e.target.value)} className={CLASSE_CAMPO}>
             <option value="">Sem obra definida</option>
             {obras.map((o) => (
               <option key={o.id} value={o.id}>
                 {o.nome}
               </option>
             ))}
+            <option value="__projeto">Projeto (obra que não está no financeiro)…</option>
           </select>
         </label>
-      ) : (
+      )}
+
+      {mostrarPasta && (
         <label className={CLASSE_ROTULO}>
-          {area === "licitacao" ? "Licitação" : "Pasta (opcional)"}
+          {area === "licitacao" ? "Licitação" : area === "obra" ? "Nome do projeto" : "Pasta (opcional)"}
           <input
             name="pasta"
             defaultValue={pastaInicial}
             list={idPastas}
-            placeholder={area === "licitacao" ? "Ex: Concorrência 04/2026" : "Ex: Geral"}
+            placeholder={area === "licitacao" ? "Ex: Concorrência 04/2026" : area === "obra" ? "Ex: Villa Borghese" : "Ex: Geral"}
             className={CLASSE_CAMPO}
           />
           <datalist id={idPastas}>

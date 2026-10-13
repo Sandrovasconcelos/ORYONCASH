@@ -14,6 +14,8 @@ export type LeituraArquivo = {
   obraNome: string | null;
   /** Nome da licitacao (ex: "Concorrência 04/2026") ou pasta livre. */
   pasta: string | null;
+  /** Tudo que identifica o documento (numeros, nomes, enderecos, datas...), pra busca. */
+  textoBusca: string | null;
   /** Titulo curto do documento. */
   nome: string | null;
   /** AAAA-MM-DD - so quando o documento mostra uma validade/vencimento. */
@@ -32,6 +34,7 @@ const RESPONSE_SCHEMA = {
     nome: { type: "string", nullable: true },
     validade: { type: "string", nullable: true },
     resumo: { type: "string", nullable: true },
+    textoBusca: { type: "string", nullable: true },
   },
   required: ["categoria"],
 };
@@ -54,11 +57,12 @@ Obras cadastradas: ${entrada.obras.length ? entrada.obras.join("; ") : "(nenhuma
  - "area": "obra" (documento de um terreno/obra/empreendimento), "licitacao" (edital, proposta, habilitação ou certidão de uma licitação), "empresa" (documentos da empresa em si: contrato social, certidões da empresa) ou "pessoal" (documentos pessoais).
  - "tipo", preferindo um destes por área:
 ${tipos}
- - "obraNome": se a legenda ou o documento citam uma das obras cadastradas, devolva EXATAMENTE o nome dela; senão null. Nunca invente obra.
+ - "obraNome": o nome da obra/empreendimento/projeto a que o documento pertence, se a legenda ou o documento citarem (ex: "Villa Borghese"). Se for uma das obras cadastradas, devolva EXATAMENTE o nome da lista; se não estiver na lista, devolva o nome como foi citado. Nunca invente.
  - "pasta": só para "licitacao" (ex: "Concorrência 04/2026", "Pregão 12/2026") quando citada; senão null.
  - "nome": título curto e claro, no máximo 8 palavras (ex: "Matrícula do lote 12", "Alvará de construção").
  - "validade": AAAA-MM-DD, SOMENTE se o documento mostra data de validade/vencimento (certidões, alvarás, CNH). Matrícula e escritura NÃO vencem: null. Nunca invente.
  - "resumo": uma frase curta (até 20 palavras) dizendo o que é, sem dados sensíveis (sem CPF/RG completos).
+ - "textoBusca": o MÁXIMO de informações do documento que ajudem a achá-lo depois, numa lista corrida separada por vírgulas ou ponto e vírgula, até 1200 caracteres: tipo do documento, números de identificação (matrícula, processo, protocolo, ART, CNPJ, número do edital), nomes de pessoas e empresas (proprietários, requerentes, responsável técnico, órgão emissor), cartório/prefeitura/comarca, município e estado, endereço, bairro, lote/quadra, áreas e medidas, valores, datas importantes (emissão, validade) e palavras-chave do assunto. NÃO inclua CPF nem RG de pessoas. Escreva só o que está no documento.
 Se for "conta", deixe os demais campos null.
 
 Responda APENAS com o JSON.`;
@@ -103,6 +107,7 @@ export async function classificarArquivo(entrada: {
       nome: bruto.nome?.trim().slice(0, 80) || null,
       validade: bruto.validade && /^\d{4}-\d{2}-\d{2}$/.test(bruto.validade) ? bruto.validade : null,
       resumo: bruto.resumo?.trim().slice(0, 200) || null,
+      textoBusca: bruto.textoBusca?.trim().slice(0, 2000) || null,
     };
   } catch (error) {
     console.error("Erro ao classificar arquivo:", error);
