@@ -1,7 +1,6 @@
 import Link from "next/link";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { hojeNoBrasil } from "@/lib/conversation/queries";
-import { formatDataBrasil } from "@/lib/format-date";
 import { AREAS, caminhoDoArquivo, ehArea, rotuloDaArea, type AreaArquivo } from "@/lib/arquivos/tipos";
 import {
   chaveDaPasta,
@@ -12,7 +11,7 @@ import {
   type ArquivoDePasta,
   type Pasta,
 } from "@/lib/arquivos/pastas";
-import { abreNoNavegador, formatarTamanho } from "@/lib/arquivos/nomes";
+import { abreNoNavegador, formatarArquivadoEm, formatarTamanho } from "@/lib/arquivos/nomes";
 import { formatarDataBR, situacaoDaValidade, textoDaValidade } from "@/lib/arquivos/validade";
 import { buscarArquivos } from "@/lib/arquivos/busca";
 import { CadastroModal } from "../cadastro-modal";
@@ -481,7 +480,7 @@ function LinhaDeArquivo({
         </a>
         <p className="truncate text-xs text-brand-gray-500">
           {mostrarCaminho ? `${caminho} · ` : ""}
-          {formatDataBrasil(l.created_at)}
+          Arquivado em {formatarArquivadoEm(l.created_at)}
           {tamanho ? ` · ${tamanho}` : ""}
           {l.descricao ? ` · ${l.descricao}` : ""}
         </p>

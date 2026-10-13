@@ -238,3 +238,14 @@ describe("legenda com pedido explicito de arquivar", () => {
     expect(legendaPedeGuardar("salva essa nota")).toBe(false);
   });
 });
+
+import { formatarArquivadoEm } from "./nomes";
+
+describe("formatarArquivadoEm", () => {
+  it("mostra data e hora de Brasilia", () => {
+    expect(formatarArquivadoEm("2026-10-13T20:56:32.000Z")).toBe("13/10/2026 às 17:56");
+  });
+  it("passa da meia-noite UTC pro dia anterior no Brasil", () => {
+    expect(formatarArquivadoEm("2026-10-14T01:30:00.000Z")).toBe("13/10/2026 às 22:30");
+  });
+});

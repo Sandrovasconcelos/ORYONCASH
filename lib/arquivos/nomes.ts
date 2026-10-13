@@ -63,3 +63,13 @@ export function nomeParaDownload(a: { nome: string; nome_arquivo: string | null;
   if (original) return original;
   return `${nomeSeguro(a.nome)}.${extensaoDoArquivo(a.mime_type, a.nome_arquivo)}`;
 }
+
+const FUSO_BRASIL = "America/Fortaleza";
+
+/** "13/10/2026 às 17:56" (horario de Brasilia) - quando o arquivo foi guardado. */
+export function formatarArquivadoEm(iso: string): string {
+  const d = new Date(iso);
+  const data = d.toLocaleDateString("pt-BR", { timeZone: FUSO_BRASIL });
+  const hora = d.toLocaleTimeString("pt-BR", { timeZone: FUSO_BRASIL, hour: "2-digit", minute: "2-digit", hour12: false });
+  return `${data} às ${hora}`;
+}
