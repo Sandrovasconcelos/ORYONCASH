@@ -13,6 +13,8 @@ import { avisoPagamentosSemLancamento } from "@/lib/conciliacao/avisos";
 import { aceitarVinculoPorValor, buscarVinculosPorValor } from "@/lib/conciliacao/vinculosPorValor";
 import { enviarNotificacao, numeroNotificacao } from "@/lib/alertas/notificar";
 import { createAdminClient } from "@/lib/supabase/admin";
+import { classificacoesDoTipo, ehClassificacao } from "@/lib/caixa/tipos";
+import { atualizarStatusDaVenda } from "@/lib/vendas/queries";
 
 const TAMANHO_MAXIMO_ARQUIVO_BYTES = 15 * 1024 * 1024;
 const MIME_TYPES_EXTRATO = new Set(["application/pdf", "image/jpeg", "image/png", "image/webp"]);
@@ -172,13 +174,115 @@ export async function desvincularTransacaoAction(formData: FormData) {
   if (!transacaoId) return;
 
   const supabase = await createClient();
+  // Entrada ligada a uma parcela: a parcela volta a ficar em aberto (ou some, se foi criada so pra este pagamento).
+  const { data: antes } = await supabase.from("extrato_transacoes").select("parcela_id").eq("id", transacaoId).maybeSingle();
+  if (antes?.parcela_id) {
+    const { data: parcela } = await supabase.from("parcelas_venda").select("id, venda_id, tipo").eq("id", antes.parcela_id).maybeSingle();
+    if (parcela?.tipo === "outra") {
+      await supabase.from("parcelas_venda").delete().eq("id", parcela.id);
+    } else if (parcela) {
+      await supabase
+        .from("parcelas_venda")
+        .update({ status: "a_receber", recebido_em: null, valor_recebido: null, conta_bancaria_id: null })
+        .eq("id", parcela.id);
+    }
+    if (parcela) await atualizarStatusDaVenda(parcela.venda_id);
+  }
+
   await supabase
     .from("extrato_transacoes")
-    .update({ despesa_id: null, status: "pendente" })
+    .update({ despesa_id: null, status: "pendente", classificacao: null, parcela_id: null, observacao: null })
     .eq("id", transacaoId);
 
   await atualizarTotaisExtrato(extratoId);
   revalidatePath(`/dashboard/conciliacao/${extratoId}`);
+  revalidatePath("/dashboard/vendas");
+}
+
+/**
+ * Classifica uma transacao do extrato que ainda nao tinha destino: entrada de
+ * venda (ligando a uma parcela, a um pagamento avulso de uma venda ou criando
+ * a venda na hora), aporte, rendimento, resgate, aplicacao ou outras.
+ */
+export async function classificarTransacaoAction(formData: FormData) {
+  const transacaoId = String(formData.get("transacao_id") ?? "");
+  const extratoId = String(formData.get("extrato_id") ?? "");
+  const classificacao = String(formData.get("classificacao") ?? "");
+  const observacao = String(formData.get("observacao") ?? "").trim().slice(0, 300) || null;
+  if (!transacaoId || !ehClassificacao(classificacao)) return;
+
+  const supabase = await createClient();
+  const { data: t } = await supabase
+    .from("extrato_transacoes")
+    .select("id, data, valor, tipo, extratos_bancarios(conta_bancaria_id)")
+    .eq("id", transacaoId)
+    .maybeSingle();
+  if (!t) return;
+  const direcaoOk = classificacoesDoTipo(t.tipo).some((c) => c.id === classificacao);
+  if (!direcaoOk) return;
+  const contaId = (t as { extratos_bancarios?: { conta_bancaria_id: string | null } | null }).extratos_bancarios?.conta_bancaria_id ?? null;
+
+  let parcelaId: string | null = null;
+  let vendaAfetada: string | null = null;
+
+  if (classificacao === "venda") {
+    const modo = String(formData.get("modo") ?? "parcela");
+    const recebimento = { status: "recebida" as const, recebido_em: t.data, valor_recebido: t.valor, conta_bancaria_id: contaId };
+
+    if (modo === "parcela") {
+      const id = String(formData.get("parcela_id") ?? "");
+      if (!id) return;
+      // Aceita parcela em aberto ou ja marcada como recebida na mao (desde que nenhum extrato a use).
+      const { count: jaUsada } = await supabase.from("extrato_transacoes").select("id", { count: "exact", head: true }).eq("parcela_id", id);
+      if ((jaUsada ?? 0) > 0) return;
+      const { data: parcela, error } = await supabase.from("parcelas_venda").update(recebimento).eq("id", id).in("status", ["a_receber", "recebida"]).select("id, venda_id").maybeSingle();
+      if (error || !parcela) return;
+      parcelaId = parcela.id;
+      vendaAfetada = parcela.venda_id;
+    } else {
+      let vendaId = String(formData.get("venda_id") ?? "");
+      if (modo === "nova_venda") {
+        const cliente = String(formData.get("novo_cliente") ?? "").trim();
+        const valorTotal = parseValorBR(String(formData.get("novo_valor_total") ?? "0")) ?? 0;
+        if (!cliente || valorTotal <= 0) return;
+        const { data: nova, error } = await supabase
+          .from("vendas")
+          .insert({
+            cliente_nome: cliente.slice(0, 120),
+            unidade: String(formData.get("nova_unidade") ?? "").trim().slice(0, 80) || null,
+            obra_id: String(formData.get("nova_obra_id") ?? "") || null,
+            valor_total: valorTotal,
+            data_contrato: t.data,
+            created_by: await getAutorNomeDashboard(),
+          })
+          .select("id")
+          .single();
+        if (error || !nova) return;
+        vendaId = nova.id;
+      }
+      if (!vendaId) return;
+      const { data: ultima } = await supabase.from("parcelas_venda").select("numero").eq("venda_id", vendaId).order("numero", { ascending: false }).limit(1);
+      const { data: avulsa, error } = await supabase
+        .from("parcelas_venda")
+        .insert({ venda_id: vendaId, numero: (ultima?.[0]?.numero ?? 0) + 1, tipo: "outra", vencimento: t.data, valor: t.valor, ...recebimento })
+        .select("id")
+        .single();
+      if (error || !avulsa) return;
+      parcelaId = avulsa.id;
+      vendaAfetada = vendaId;
+    }
+  }
+
+  await supabase
+    .from("extrato_transacoes")
+    .update({ classificacao, status: "conciliado", parcela_id: parcelaId, observacao, despesa_id: null })
+    .eq("id", transacaoId);
+
+  if (vendaAfetada) await atualizarStatusDaVenda(vendaAfetada);
+  await atualizarTotaisExtrato(extratoId);
+  revalidatePath(`/dashboard/conciliacao/${extratoId}`);
+  revalidatePath("/dashboard/conciliacao");
+  revalidatePath("/dashboard/vendas");
 }
 
 export async function ignorarTransacaoAction(formData: FormData) {

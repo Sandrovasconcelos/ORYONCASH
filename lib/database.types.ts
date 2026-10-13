@@ -318,6 +318,8 @@ export interface Database {
           titular: string | null;
           documento: string | null;
           saldo_inicial: number;
+          tipo: "corrente" | "investimento";
+          data_saldo_inicial: string | null;
           created_at: string;
           deleted_at: string | null;
           deleted_by: string | null;
@@ -332,6 +334,8 @@ export interface Database {
           titular?: string | null;
           documento?: string | null;
           saldo_inicial?: number;
+          tipo?: "corrente" | "investimento";
+          data_saldo_inicial?: string | null;
           created_at?: string;
           deleted_at?: string | null;
           deleted_by?: string | null;
@@ -511,6 +515,121 @@ export interface Database {
         };
         Update: Partial<Database["public"]["Tables"]["google_conexao"]["Insert"]>;
         Relationships: [];
+      };
+      vendas: {
+        Row: {
+          id: string;
+          obra_id: string | null;
+          cliente_nome: string;
+          cliente_telefone: string | null;
+          cliente_documento: string | null;
+          unidade: string | null;
+          valor_total: number;
+          data_contrato: string | null;
+          observacao: string | null;
+          status: "ativa" | "quitada" | "cancelada";
+          created_at: string;
+          created_by: string | null;
+        };
+        Insert: {
+          id?: string;
+          obra_id?: string | null;
+          cliente_nome: string;
+          cliente_telefone?: string | null;
+          cliente_documento?: string | null;
+          unidade?: string | null;
+          valor_total: number;
+          data_contrato?: string | null;
+          observacao?: string | null;
+          status?: "ativa" | "quitada" | "cancelada";
+          created_at?: string;
+          created_by?: string | null;
+        };
+        Update: Partial<Database["public"]["Tables"]["vendas"]["Insert"]>;
+        Relationships: [
+          {
+            foreignKeyName: "vendas_obra_id_fkey";
+            columns: ["obra_id"];
+            isOneToOne: false;
+            referencedRelation: "obras";
+            referencedColumns: ["id"];
+          },
+        ];
+      };
+      parcelas_venda: {
+        Row: {
+          id: string;
+          venda_id: string;
+          numero: number;
+          tipo: "entrada" | "parcela" | "intermediaria" | "chaves" | "outra";
+          vencimento: string;
+          valor: number;
+          status: "a_receber" | "recebida" | "cancelada";
+          recebido_em: string | null;
+          valor_recebido: number | null;
+          conta_bancaria_id: string | null;
+          aviso_enviado_em: string | null;
+          created_at: string;
+        };
+        Insert: {
+          id?: string;
+          venda_id: string;
+          numero?: number;
+          tipo?: "entrada" | "parcela" | "intermediaria" | "chaves" | "outra";
+          vencimento: string;
+          valor: number;
+          status?: "a_receber" | "recebida" | "cancelada";
+          recebido_em?: string | null;
+          valor_recebido?: number | null;
+          conta_bancaria_id?: string | null;
+          aviso_enviado_em?: string | null;
+          created_at?: string;
+        };
+        Update: Partial<Database["public"]["Tables"]["parcelas_venda"]["Insert"]>;
+        Relationships: [
+          {
+            foreignKeyName: "parcelas_venda_venda_id_fkey";
+            columns: ["venda_id"];
+            isOneToOne: false;
+            referencedRelation: "vendas";
+            referencedColumns: ["id"];
+          },
+          {
+            foreignKeyName: "parcelas_venda_conta_bancaria_id_fkey";
+            columns: ["conta_bancaria_id"];
+            isOneToOne: false;
+            referencedRelation: "contas_bancarias";
+            referencedColumns: ["id"];
+          },
+        ];
+      };
+      saldos_conta: {
+        Row: {
+          id: string;
+          conta_bancaria_id: string;
+          data: string;
+          valor: number;
+          observacao: string | null;
+          created_at: string;
+        };
+        Insert: {
+          id?: string;
+          conta_bancaria_id: string;
+          data: string;
+          valor: number;
+          observacao?: string | null;
+          created_at?: string;
+        };
+        Update: Partial<Database["public"]["Tables"]["saldos_conta"]["Insert"]>;
+        Relationships: [
+          {
+            foreignKeyName: "saldos_conta_conta_bancaria_id_fkey";
+            columns: ["conta_bancaria_id"];
+            isOneToOne: false;
+            referencedRelation: "contas_bancarias";
+            referencedColumns: ["id"];
+          },
+        ];
       };
       arquivos: {
         Row: {
@@ -1449,6 +1568,9 @@ export interface Database {
           tipo: "debito" | "credito";
           despesa_id: string | null;
           status: "pendente" | "conciliado" | "ignorado";
+          classificacao: "venda" | "aporte" | "rendimento" | "outra_entrada" | "resgate" | "aplicacao" | "outra_saida" | null;
+          parcela_id: string | null;
+          observacao: string | null;
           created_at: string;
         };
         Insert: {
@@ -1460,6 +1582,9 @@ export interface Database {
           tipo: "debito" | "credito";
           despesa_id?: string | null;
           status?: "pendente" | "conciliado" | "ignorado";
+          classificacao?: "venda" | "aporte" | "rendimento" | "outra_entrada" | "resgate" | "aplicacao" | "outra_saida" | null;
+          parcela_id?: string | null;
+          observacao?: string | null;
           created_at?: string;
         };
         Update: Partial<Database["public"]["Tables"]["extrato_transacoes"]["Insert"]>;
@@ -1476,6 +1601,13 @@ export interface Database {
             columns: ["despesa_id"];
             isOneToOne: false;
             referencedRelation: "despesas";
+            referencedColumns: ["id"];
+          },
+          {
+            foreignKeyName: "extrato_transacoes_parcela_id_fkey";
+            columns: ["parcela_id"];
+            isOneToOne: false;
+            referencedRelation: "parcelas_venda";
             referencedColumns: ["id"];
           },
         ];

@@ -30,6 +30,8 @@ const NAV_GROUPS = [
       { href: "/dashboard/contas", label: "Contas bancárias", icon: "wallet" },
       { href: "/dashboard/contas-a-pagar", label: "Contas a pagar", icon: "calendar" },
       { href: "/dashboard/conciliacao", label: "Conciliação bancária", icon: "scale" },
+      { href: "/dashboard/vendas", label: "Vendas e recebimentos", icon: "wallet" },
+      { href: "/dashboard/fechamento", label: "Fechamento de caixa", icon: "receipt" },
     ],
   },
   {

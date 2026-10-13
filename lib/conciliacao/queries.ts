@@ -2,6 +2,7 @@ import { createAdminClient } from "@/lib/supabase/admin";
 import { extractBankStatement } from "@/lib/gemini/extractBankStatement";
 import { casarTransacoes } from "@/lib/conciliacao/matching";
 import { ehMovimentoFinanceiro } from "@/lib/conciliacao/classificar";
+import { classificarAutomaticamente } from "@/lib/caixa/auto";
 import { aplicarRegrasDeIgnorar } from "@/lib/conciliacao/regras";
 import { colapsarNotas, expandirParaNota } from "@/lib/despesas/notas";
 
@@ -105,18 +106,28 @@ export async function processarExtrato(extratoId: string): Promise<void> {
     const { data: transacoesInseridas, error: erroInsert } = await supabase
       .from("extrato_transacoes")
       .insert(
-        transacoesExtraidas.map((t) => ({
-          extrato_id: extratoId,
-          data: t.data,
-          descricao: t.descricao,
-          valor: t.valor,
-          tipo: t.tipo,
-          // Credito e aplicacao/resgate nao sao despesa de obra.
-          status:
-            t.tipo === "credito" || ehMovimentoFinanceiro(t.descricao)
-              ? ("ignorado" as const)
-              : ("pendente" as const),
-        }))
+        transacoesExtraidas.map((t) => {
+          // Resgate, rendimento e aplicacao se reconhecem pelo texto. O resto das
+          // entradas (venda, aporte...) fica pendente ate o dono classificar.
+          const auto = classificarAutomaticamente(t.descricao, t.tipo);
+          const financeiro = t.tipo === "debito" && ehMovimentoFinanceiro(t.descricao);
+          return {
+            extrato_id: extratoId,
+            data: t.data,
+            descricao: t.descricao,
+            valor: t.valor,
+            tipo: t.tipo,
+            classificacao: auto,
+            status:
+              t.tipo === "credito"
+                ? auto
+                  ? ("conciliado" as const)
+                  : ("pendente" as const)
+                : auto || financeiro
+                  ? ("ignorado" as const)
+                  : ("pendente" as const),
+          };
+        })
       )
       .select("id, data, valor, tipo");
 

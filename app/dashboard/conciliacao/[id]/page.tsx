@@ -10,6 +10,10 @@ import { SubmitButton } from "../../submit-button";
 import { RevisaoTransacaoModal } from "./revisao-transacao-modal";
 import { sugerirLancamentos } from "@/lib/conciliacao/sugestoes";
 import { IconeNome } from "../../icone-svg";
+import { ClassificarEntradaModal } from "./classificar-entrada-modal";
+import { carregarVendasParaConciliacao } from "@/lib/vendas/queries";
+import { sugerirParcelas } from "@/lib/vendas/parcelas";
+import { ehClassificacao, rotuloCurto } from "@/lib/caixa/tipos";
 
 export const dynamic = "force-dynamic";
 
@@ -38,14 +42,17 @@ export default async function ConciliacaoDetalhePage({
 
   if (!extrato) notFound();
 
-  const [{ data: transacoes }, { data: obras }, { data: categorias }] = await Promise.all([
+  const [{ data: transacoes }, { data: obras }, { data: categorias }, vendasEParcelas] = await Promise.all([
     supabase
       .from("extrato_transacoes")
-      .select("id, data, descricao, valor, tipo, status, despesa_id, despesas(id, descricao, valor, data, obras(nome), categorias(nome))")
+      .select(
+        "id, data, descricao, valor, tipo, status, despesa_id, classificacao, observacao, parcela_id, despesas(id, descricao, valor, data, obras(nome), categorias(nome)), parcelas_venda(numero, tipo, vendas(cliente_nome, unidade))"
+      )
       .eq("extrato_id", id)
       .order("data"),
     supabase.from("obras").select("id, nome").is("deleted_at", null).order("nome"),
     supabase.from("categorias").select("id, nome").is("deleted_at", null).order("nome"),
+    carregarVendasParaConciliacao(),
   ]);
 
   const conta = (extrato as { contas_bancarias?: { id: string; nome: string } | null }).contas_bancarias;
@@ -73,9 +80,11 @@ export default async function ConciliacaoDetalhePage({
 
   const pendentes = (transacoes ?? []).filter((t) => t.status === "pendente" && t.tipo === "debito");
   const totalPendente = pendentes.reduce((soma, t) => soma + t.valor, 0);
+  const entradasPendentes = (transacoes ?? []).filter((t) => t.status === "pendente" && t.tipo === "credito");
+  const totalEntradasPendentes = entradasPendentes.reduce((soma, t) => soma + t.valor, 0);
   const sugestoes = await sugerirLancamentos(pendentes).catch(() => new Map());
   const vinculosPorValor = await buscarVinculosPorValor(pendentes).catch(() => new Map());
-  const transacoesVisiveis = filtro === "pendente" ? pendentes : (transacoes ?? []);
+  const transacoesVisiveis = filtro === "pendente" ? [...pendentes, ...entradasPendentes].sort((a, b) => a.data.localeCompare(b.data)) : (transacoes ?? []);
 
   const idsLigados = (transacoes ?? []).map((t) => t.despesa_id).filter((id): id is string => Boolean(id));
   // Nota com varios itens = um pagamento so no banco: o vinculo vale pra nota toda.
@@ -133,6 +142,22 @@ export default async function ConciliacaoDetalhePage({
         <div className="rounded-card border border-status-warning/30 bg-status-warning/10 p-5 text-sm text-brand-gray-700 shadow-card">
           Ainda processando — se ficar muito tempo assim, o processamento pode ter caído (extrato
           muito grande). Exclua e tente enviar de novo em partes menores.
+        </div>
+      )}
+
+      {entradasPendentes.length > 0 && (
+        <div className="flex flex-wrap items-center justify-between gap-3 rounded-card border border-status-danger/30 bg-status-danger/10 p-4 text-sm text-brand-gray-700 shadow-card">
+          <p>
+            <strong className="text-brand-black">{entradasPendentes.length} entrada(s) sem classificação</strong>, somando{" "}
+            <strong className="text-brand-black">{formatBRL(totalEntradasPendentes)}</strong>. Toque em <strong>Classificar</strong> para dizer se é
+            venda (de qual cliente e casa), aporte de sócio, rendimento ou outra.
+          </p>
+          <Link
+            href={filtro === "pendente" ? `/dashboard/conciliacao/${extrato.id}` : `/dashboard/conciliacao/${extrato.id}?filtro=pendente`}
+            className="text-xs font-bold text-brand-red hover:underline"
+          >
+            {filtro === "pendente" ? "Ver todas as transações" : "Ver só o que falta classificar"}
+          </Link>
         </div>
       )}
 
@@ -202,6 +227,16 @@ export default async function ConciliacaoDetalhePage({
                     } | null;
                   }
                 ).despesas;
+                const classe = ehClassificacao(t.classificacao) ? t.classificacao : null;
+                const parcela = (
+                  t as {
+                    parcelas_venda?: { numero: number; tipo: string; vendas?: { cliente_nome: string; unidade: string | null } | null } | null;
+                  }
+                ).parcelas_venda;
+                const parcelasSugeridas =
+                  t.tipo === "credito" && !classe && t.status === "pendente"
+                    ? sugerirParcelas({ valor: t.valor, data: t.data, descricao: t.descricao }, vendasEParcelas.parcelasAbertas).map((p) => p.id)
+                    : [];
 
                 return (
                   <tr
@@ -222,12 +257,34 @@ export default async function ConciliacaoDetalhePage({
                       {t.tipo === "credito" ? "+" : "-"} {formatBRL(t.valor)}
                     </td>
                     <td className="mb-2 block w-full md:mb-0 md:table-cell md:whitespace-nowrap md:px-4 md:py-3">
-                      <span className={`rounded-full px-2.5 py-1 text-[11px] font-bold ${statusInfo.classe}`}>
-                        {statusInfo.texto}
-                      </span>
+                      {classe ? (
+                        <span
+                          className={`rounded-full px-2.5 py-1 text-[11px] font-bold ${
+                            t.tipo === "credito" ? "bg-status-success/15 text-status-success" : "bg-status-info/15 text-status-info"
+                          }`}
+                        >
+                          {rotuloCurto(classe)}
+                        </span>
+                      ) : t.tipo === "credito" && t.status === "pendente" ? (
+                        <span className="rounded-full bg-status-danger/15 px-2.5 py-1 text-[11px] font-bold text-status-danger">Sem classificação</span>
+                      ) : (
+                        <span className={`rounded-full px-2.5 py-1 text-[11px] font-bold ${statusInfo.classe}`}>{statusInfo.texto}</span>
+                      )}
                     </td>
                     <td className="mb-2 block w-full border-t border-black/5 pt-2 text-xs text-brand-gray-600 md:mb-0 md:border-0 md:pt-0 md:table-cell md:px-4 md:py-3">
-                      {despesa ? (
+                      {classe && !despesa ? (
+                        <div className="flex flex-col gap-0.5">
+                          <p className="font-semibold text-brand-black">{rotuloCurto(classe)}</p>
+                          {parcela?.vendas && (
+                            <p>
+                              {parcela.vendas.cliente_nome}
+                              {parcela.vendas.unidade ? ` · ${parcela.vendas.unidade}` : ""} ·{" "}
+                              {parcela.tipo === "outra" ? "pagamento avulso" : parcela.numero === 0 ? "entrada" : `parcela ${parcela.numero}`}
+                            </p>
+                          )}
+                          {t.observacao && <p className="text-brand-gray-500">{t.observacao}</p>}
+                        </div>
+                      ) : despesa ? (
                         <div className="flex items-start gap-2.5">
                           <IconeNome nomes={[despesa.descricao, despesa.categorias?.nome]} tamanho={32} />
                           <div className="min-w-0">
@@ -279,7 +336,33 @@ export default async function ConciliacaoDetalhePage({
                             Desvincular
                           </button>
                         </form>
+                      ) : t.tipo === "credito" ? (
+                        <ClassificarEntradaModal
+                          transacaoId={t.id}
+                          extratoId={extrato.id}
+                          tipo="credito"
+                          valor={t.valor}
+                          data={t.data}
+                          descricao={t.descricao}
+                          vendas={vendasEParcelas.vendas}
+                          parcelasAbertas={vendasEParcelas.parcelasAbertas}
+                          parcelasSugeridas={parcelasSugeridas}
+                          obras={obras ?? []}
+                        />
                       ) : t.tipo === "debito" ? (
+                        <div className="flex items-center justify-end gap-2">
+                        <ClassificarEntradaModal
+                          transacaoId={t.id}
+                          extratoId={extrato.id}
+                          tipo="debito"
+                          valor={t.valor}
+                          data={t.data}
+                          descricao={t.descricao}
+                          vendas={[]}
+                          parcelasAbertas={[]}
+                          parcelasSugeridas={[]}
+                          obras={[]}
+                        />
                         <RevisaoTransacaoModal
                           transacaoId={t.id}
                           extratoId={extrato.id}
@@ -292,6 +375,7 @@ export default async function ConciliacaoDetalhePage({
                           categorias={categorias ?? []}
                           sugestao={sugestoes.get(t.id) ?? null}
                         />
+                        </div>
                       ) : (
                         <span className="text-xs text-brand-gray-400">—</span>
                       )}

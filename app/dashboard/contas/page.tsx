@@ -9,6 +9,8 @@ import { CadastroModal } from "../cadastro-modal";
 import { DeleteCadastroButton } from "../delete-cadastro-button";
 import { ActionIcon } from "../action-icon";
 import { SubmitButton } from "../submit-button";
+import { hojeNoBrasil } from "@/lib/conversation/queries";
+import { ConfigurarConta, type SaldoInformado } from "./configurar-conta";
 
 export const dynamic = "force-dynamic";
 
@@ -17,7 +19,7 @@ export default async function ContasBancariasPage() {
 
   const contasCompleta = await supabase
     .from("contas_bancarias")
-    .select("id, nome, banco, agencia, numero, titular, documento, saldo_inicial")
+    .select("id, nome, banco, agencia, numero, titular, documento, saldo_inicial, tipo, data_saldo_inicial")
     .is("deleted_at", null)
     .order("nome");
   const contasQuery = contasCompleta.error
@@ -43,6 +45,16 @@ export default async function ContasBancariasPage() {
   }
 
   const contas = contasQuery.data ?? [];
+  const hoje = hojeNoBrasil();
+
+  // Saldos informados (tabela nova): vazio enquanto a migration nao foi aplicada.
+  const { data: saldosData } = await supabase.from("saldos_conta").select("id, conta_bancaria_id, data, valor, observacao").order("data", { ascending: false }).limit(2000);
+  const saldosPorConta = new Map<string, SaldoInformado[]>();
+  for (const s of saldosData ?? []) {
+    const lista = saldosPorConta.get(s.conta_bancaria_id) ?? [];
+    lista.push({ id: s.id, data: s.data, valor: s.valor, observacao: s.observacao });
+    saldosPorConta.set(s.conta_bancaria_id, lista);
+  }
 
   const { data: despesasVinculadas } = await supabase
     .from("despesas")
@@ -137,12 +149,19 @@ export default async function ContasBancariasPage() {
                 const contaInfo = conta as unknown as {
                   titular: string | null;
                   documento: string | null;
+                  tipo?: "corrente" | "investimento";
+                  data_saldo_inicial?: string | null;
                 };
                 const pago = gastoPorConta.get(conta.id) ?? 0;
                 const saldoAtual = Number(conta.saldo_inicial) - pago;
                 return (
                   <tr key={conta.id}>
-                    <td data-th="Conta" className="font-semibold text-brand-black">{conta.nome}</td>
+                    <td data-th="Conta" className="font-semibold text-brand-black">
+                      {conta.nome}
+                      {contaInfo.tipo === "investimento" && (
+                        <span className="ml-2 rounded-full bg-status-info/15 px-2 py-0.5 text-[11px] font-bold text-status-info">Investimento</span>
+                      )}
+                    </td>
                     <td data-th="Banco" className="text-brand-gray-700">{conta.banco || "—"}</td>
                     <td data-th="Titular" className="text-brand-gray-700">
                       <p>{contaInfo.titular || "—"}</p>
@@ -214,6 +233,11 @@ export default async function ContasBancariasPage() {
                           </form>
                         </CadastroModal>
 
+                        <ConfigurarConta
+                          conta={{ id: conta.id, nome: conta.nome, tipo: contaInfo.tipo ?? "corrente", data_saldo_inicial: contaInfo.data_saldo_inicial ?? null }}
+                          saldos={saldosPorConta.get(conta.id) ?? []}
+                          hoje={hoje}
+                        />
                         <DeleteCadastroButton
                           id={conta.id}
                           nome={conta.nome}
