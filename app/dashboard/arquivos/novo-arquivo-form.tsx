@@ -42,24 +42,48 @@ export function NovoArquivoForm({
     }
 
     setEtapa("enviando");
-    const preparo = await prepararUploadArquivoAction(arquivo.name, arquivo.type, arquivo.size);
+    const preparo = await prepararUploadArquivoAction(arquivo.name, arquivo.type, arquivo.size, {
+      area: String(dados.get("area") ?? "obra"),
+      obraId: String(dados.get("obra_id") ?? ""),
+      pasta: String(dados.get("pasta") ?? ""),
+      tipo: String(dados.get("tipo") ?? ""),
+    });
     if ("erro" in preparo) {
       setErro(preparo.erro);
       setEtapa("");
       return;
     }
-    const { error } = await createClient()
-      .storage.from("comprovantes")
-      .uploadToSignedUrl(preparo.path, preparo.token, arquivo, { contentType: arquivo.type || "application/octet-stream" });
-    if (error) {
-      setErro("Não consegui enviar o arquivo. Tente de novo.");
-      setEtapa("");
-      return;
+
+    if (preparo.modo === "drive") {
+      // Direto do navegador pro Google Drive (o arquivo nao passa pelo servidor).
+      try {
+        const res = await fetch(preparo.url, {
+          method: "PUT",
+          headers: { "Content-Type": arquivo.type || "application/octet-stream" },
+          body: arquivo,
+        });
+        const corpo = res.ok ? ((await res.json()) as { id?: string }) : null;
+        if (!corpo?.id) throw new Error(`Drive respondeu ${res.status}`);
+        dados.set("drive_file_id", corpo.id);
+      } catch {
+        setErro("Não consegui enviar o arquivo pro Google Drive. Tente de novo.");
+        setEtapa("");
+        return;
+      }
+    } else {
+      const { error } = await createClient()
+        .storage.from("comprovantes")
+        .uploadToSignedUrl(preparo.path, preparo.token, arquivo, { contentType: arquivo.type || "application/octet-stream" });
+      if (error) {
+        setErro("Não consegui enviar o arquivo. Tente de novo.");
+        setEtapa("");
+        return;
+      }
+      dados.set("storage_path", preparo.path);
     }
 
     setEtapa("salvando");
     dados.delete("arquivo");
-    dados.set("storage_path", preparo.path);
     dados.set("nome_arquivo", arquivo.name);
     dados.set("mime_type", arquivo.type);
     dados.set("tamanho_bytes", String(arquivo.size));

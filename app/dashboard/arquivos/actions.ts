@@ -1,11 +1,14 @@
 "use server";
 
 import { revalidatePath } from "next/cache";
+import { headers } from "next/headers";
 import { createClient } from "@/lib/supabase/server";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { ehArea, normalizarTipo, type AreaArquivo } from "@/lib/arquivos/tipos";
 import { extensaoDoArquivo, nomeSeguro } from "@/lib/arquivos/nomes";
 import { lerValidade } from "@/lib/arquivos/validade";
+import { caminhoNoDrive } from "@/lib/arquivos/pastaNoDrive";
+import { apagarNoDrive, BUCKET_DRIVE, driveDisponivel, moverNoDrive, prepararEnvioDoNavegador } from "@/lib/google/drive";
 
 const BUCKET = "comprovantes";
 const TAMANHO_MAXIMO_BYTES = 100 * 1024 * 1024;
@@ -18,24 +21,54 @@ async function usuarioLogado(): Promise<string | null> {
   return user?.email ?? null;
 }
 
+async function nomeDaObra(obraId: string | null): Promise<string | null> {
+  if (!obraId) return null;
+  const { data } = await createAdminClient().from("obras").select("nome").eq("id", obraId).maybeSingle();
+  return data?.nome ?? null;
+}
+
+export type DestinoDoEnvio = { area: string; obraId: string; pasta: string; tipo: string };
+
 /**
- * Passo 1 do envio pelo painel: gera um endereco de upload direto pro
- * Storage (o arquivo nao passa pelo servidor - assim PDFs e projetos grandes
- * nao esbarram no limite de corpo da Vercel).
+ * Passo 1 do envio pelo painel: prepara o upload DIRETO do navegador (o arquivo
+ * nao passa pelo servidor - PDFs e projetos grandes nao esbarram no limite da
+ * Vercel). Com o Google Drive conectado vai pro Drive (pasta ja organizada);
+ * senao, pro Storage do Supabase.
  */
 export async function prepararUploadArquivoAction(
   nomeArquivo: string,
   mimeType: string,
-  tamanho: number
-): Promise<{ path: string; token: string } | { erro: string }> {
+  tamanho: number,
+  destino: DestinoDoEnvio
+): Promise<{ modo: "drive"; url: string } | { modo: "supabase"; path: string; token: string } | { erro: string }> {
   if (!(await usuarioLogado())) return { erro: "Sessão expirada. Entre de novo." };
   if (tamanho > TAMANHO_MAXIMO_BYTES) return { erro: "O arquivo passa de 100 MB." };
 
+  if (await driveDisponivel()) {
+    try {
+      const area: AreaArquivo = ehArea(destino.area) ? destino.area : "obra";
+      const obraId = area === "obra" && destino.obraId && destino.obraId !== "__projeto" ? destino.obraId : null;
+      const pastaNome = obraId ? await nomeDaObra(obraId) : destino.pasta.trim() || null;
+      const origem = (await headers()).get("origin") ?? process.env.APP_BASE_URL ?? "https://oryoncash.vercel.app";
+      const url = await prepararEnvioDoNavegador({
+        nome: nomeArquivo,
+        mimeType: mimeType || "application/octet-stream",
+        tamanho,
+        caminho: caminhoNoDrive({ area, pastaNome, tipo: normalizarTipo(destino.tipo) }),
+        origem,
+      });
+      return { modo: "drive", url };
+    } catch (error) {
+      console.error("Drive indisponivel no painel, usando o Supabase:", error);
+    }
+  }
+
+  if (tamanho > 50 * 1024 * 1024) return { erro: "Sem o Google Drive conectado, o limite por arquivo é 50 MB." };
   const ano = new Date().getFullYear();
   const path = `arquivos/${ano}/${Date.now()}-${crypto.randomUUID().slice(0, 8)}-${nomeSeguro(nomeArquivo, 40)}.${extensaoDoArquivo(mimeType, nomeArquivo)}`;
   const { data, error } = await createAdminClient().storage.from(BUCKET).createSignedUploadUrl(path);
   if (error || !data) return { erro: "Não consegui preparar o envio. Tente de novo." };
-  return { path, token: data.token };
+  return { modo: "supabase", path, token: data.token };
 }
 
 type CamposDoArquivo = {
@@ -79,22 +112,24 @@ function lerCampos(formData: FormData): CamposDoArquivo | null {
   };
 }
 
-/** Passo 2 do envio: o arquivo ja esta no Storage; registra na biblioteca. */
+/** Passo 2 do envio: o arquivo ja esta no Drive (ou no Storage); registra na biblioteca. */
 export async function registrarArquivoAction(formData: FormData): Promise<{ ok: true } | { erro: string }> {
   const autor = await usuarioLogado();
   if (!autor) return { erro: "Sessão expirada. Entre de novo." };
 
   const campos = lerCampos(formData);
   if (!campos) return { erro: "Confira o nome e a validade (ex: 14/03/2027)." };
+
+  const driveId = String(formData.get("drive_file_id") ?? "").trim();
   const path = String(formData.get("storage_path") ?? "");
-  if (!path.startsWith("arquivos/")) return { erro: "Arquivo inválido." };
+  if (!driveId && !path.startsWith("arquivos/")) return { erro: "Arquivo inválido." };
 
   const supabase = await createClient();
   const { error } = await supabase.from("arquivos").insert({
     ...campos,
     nome_arquivo: String(formData.get("nome_arquivo") ?? "") || null,
-    storage_bucket: BUCKET,
-    storage_path: path,
+    storage_bucket: driveId ? BUCKET_DRIVE : BUCKET,
+    storage_path: driveId || path,
     mime_type: String(formData.get("mime_type") ?? "") || null,
     tamanho_bytes: Number(formData.get("tamanho_bytes") ?? 0) || null,
     origem: "dashboard",
@@ -115,7 +150,11 @@ export async function atualizarArquivoAction(formData: FormData) {
   if (!id || !campos) return;
 
   const supabase = await createClient();
-  const { data: antes } = await supabase.from("arquivos").select("validade, avisar_dias_antes").eq("id", id).maybeSingle();
+  const { data: antes } = await supabase
+    .from("arquivos")
+    .select("validade, avisar_dias_antes, storage_bucket, storage_path")
+    .eq("id", id)
+    .maybeSingle();
   // Prazo novo = os avisos recomecam.
   const prazoMudou = antes && (antes.validade !== campos.validade || antes.avisar_dias_antes !== campos.avisar_dias_antes);
 
@@ -128,6 +167,14 @@ export async function atualizarArquivoAction(formData: FormData) {
     })
     .eq("id", id);
   if (error) console.error("Erro ao atualizar arquivo:", error.message);
+
+  // No Drive, a pasta acompanha a edicao (area, obra/licitacao, tipo).
+  if (!error && antes?.storage_bucket === BUCKET_DRIVE) {
+    const pastaNome = campos.area === "obra" ? ((await nomeDaObra(campos.obra_id)) ?? campos.pasta) : campos.pasta;
+    await moverNoDrive(antes.storage_path, caminhoNoDrive({ area: campos.area, pastaNome, tipo: campos.tipo })).catch((e) =>
+      console.error("Erro ao mover no Drive:", e)
+    );
+  }
   revalidatePath("/dashboard/arquivos");
 }
 
@@ -139,8 +186,11 @@ export async function excluirArquivoAction(formData: FormData) {
   const supabase = await createClient();
   const { data: arquivo } = await supabase.from("arquivos").select("storage_bucket, storage_path").eq("id", id).maybeSingle();
   await supabase.from("arquivos").delete().eq("id", id);
-  // So apaga do Storage o que a biblioteca criou.
-  if (arquivo?.storage_path.startsWith("arquivos/")) {
+  if (arquivo?.storage_bucket === BUCKET_DRIVE) {
+    // Vai pra lixeira do Drive (recuperavel por 30 dias).
+    await apagarNoDrive(arquivo.storage_path).catch((e) => console.error("Erro ao apagar no Drive:", e));
+  } else if (arquivo?.storage_path.startsWith("arquivos/")) {
+    // So apaga do Storage o que a biblioteca criou.
     await createAdminClient().storage.from(arquivo.storage_bucket).remove([arquivo.storage_path]);
   }
   revalidatePath("/dashboard/arquivos");

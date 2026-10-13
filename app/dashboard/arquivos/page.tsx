@@ -20,10 +20,19 @@ import { ActionIcon } from "../action-icon";
 import { ExcluirArquivoButton } from "./excluir-arquivo-button";
 import { FormularioEdicaoArquivo } from "./formulario-edicao-arquivo";
 import { NovoArquivoForm } from "./novo-arquivo-form";
+import { googleConfigurado } from "@/lib/google/oauth";
+import { lerConexao } from "@/lib/google/drive";
 
 export const dynamic = "force-dynamic";
 
-type Params = { area?: string; pasta?: string; tipo?: string; q?: string };
+type Params = { area?: string; pasta?: string; tipo?: string; q?: string; google?: string };
+
+const AVISO_DO_GOOGLE: Record<string, string> = {
+  ok: "Google Drive conectado! Os próximos arquivos já vão para o seu Drive.",
+  recusado: "A conexão com o Google foi cancelada. Tente de novo quando quiser.",
+  falhou: "Não consegui concluir a conexão com o Google. Tente de novo.",
+  "sem-chaves": "Faltam as chaves do Google na Vercel (GOOGLE_CLIENT_ID e GOOGLE_CLIENT_SECRET).",
+};
 
 type Linha = {
   id: string;
@@ -70,9 +79,10 @@ export default async function ArquivosPage({ searchParams }: { searchParams: Pro
   const supabase = createAdminClient();
   const hoje = hojeNoBrasil();
 
-  const [consulta, { data: obrasData }] = await Promise.all([
+  const [consulta, { data: obrasData }, conexaoGoogle] = await Promise.all([
     supabase.from("arquivos").select("*, obras(nome)").order("created_at", { ascending: false }).limit(2000),
     supabase.from("obras").select("id, nome").is("deleted_at", null).order("nome"),
+    lerConexao(),
   ]);
 
   if (consulta.error) {
@@ -200,6 +210,35 @@ export default async function ArquivosPage({ searchParams }: { searchParams: Pro
           />
         </CadastroModal>
       </div>
+
+      {params.google && AVISO_DO_GOOGLE[params.google] && (
+        <p
+          className={`rounded-card border px-4 py-3 text-sm font-semibold ${
+            params.google === "ok" ? "border-status-success/30 bg-status-success/10 text-status-success" : "border-status-warning/30 bg-status-warning/10 text-status-warning"
+          }`}
+        >
+          {AVISO_DO_GOOGLE[params.google]}
+        </p>
+      )}
+
+      {googleConfigurado() &&
+        (conexaoGoogle ? (
+          <p className="text-xs text-brand-gray-500">
+            ☁️ Google Drive conectado{conexaoGoogle.email ? ` (${conexaoGoogle.email})` : ""}: novos arquivos ficam na pasta <strong>OryonCash</strong> do seu Drive.{" "}
+            <a href="/api/google/conectar" className="underline hover:text-brand-red">
+              Reconectar
+            </a>
+          </p>
+        ) : (
+          <div className="flex flex-wrap items-center justify-between gap-3 rounded-card border border-brand-gray-300/60 bg-white p-4 shadow-card">
+            <p className="text-sm text-brand-gray-700">
+              <strong className="text-brand-black">Guarde os arquivos no seu Google Drive.</strong> Sem espaço limitado, em pastas organizadas.
+            </p>
+            <a href="/api/google/conectar" className="oc-button oc-button-primary text-xs">
+              Conectar Google Drive
+            </a>
+          </div>
+        ))}
 
       <form action="/dashboard/arquivos" className="flex gap-2">
         <input

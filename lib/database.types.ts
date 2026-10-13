@@ -496,6 +496,22 @@ export interface Database {
         Update: Partial<Database["public"]["Tables"]["saude_canais"]["Insert"]>;
         Relationships: [];
       };
+      google_conexao: {
+        Row: {
+          id: boolean;
+          refresh_token: string;
+          email: string | null;
+          conectado_em: string;
+        };
+        Insert: {
+          id?: boolean;
+          refresh_token: string;
+          email?: string | null;
+          conectado_em?: string;
+        };
+        Update: Partial<Database["public"]["Tables"]["google_conexao"]["Insert"]>;
+        Relationships: [];
+      };
       arquivos: {
         Row: {
           id: string;

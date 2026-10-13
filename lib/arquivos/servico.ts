@@ -10,6 +10,9 @@ import { hojeNoBrasil } from "@/lib/conversation/queries";
 import { ehTelegram } from "@/lib/telegram/ids";
 import { classificarArquivo, type LeituraArquivo } from "@/lib/gemini/classificarArquivo";
 import { ehDono } from "@/lib/acesso/dono";
+import { apagarNoDrive, BUCKET_DRIVE, driveDisponivel, enviarAoDrive, moverNoDrive } from "@/lib/google/drive";
+import { linkDeDownload } from "./linkAssinado";
+import { caminhoNoDrive } from "./pastaNoDrive";
 import { buscarArquivos, type ArquivoBuscavel } from "./busca";
 import { resolverDestinoDeObra } from "./obraOuProjeto";
 import { AJUDA_DE_CORRECAO, lerCorrecao } from "./comandos";
@@ -132,22 +135,39 @@ async function guardar(from: string, e: EntradaGuardar): Promise<void> {
     "Arquivo";
   const validade = leitura?.validade && Number(leitura.validade.slice(0, 4)) >= 2000 ? leitura.validade : null;
 
+  const tipo = normalizarTipo(leitura?.tipo ?? TIPO_PADRAO);
+  const pastaNome = area === "obra" ? (obras.find((o) => o.id === obraId)?.nome ?? pasta) : pasta;
+  const nomeDoArquivo = e.nomeArquivo ?? `${nomeSeguro(nome)}.${extensaoDoArquivo(e.mimeType, e.nomeArquivo)}`;
+
   let bucket = BUCKET;
-  let path: string;
+  let path: string | null = null;
   if (e.jaNoStorage) {
     bucket = e.jaNoStorage.bucket;
     path = e.jaNoStorage.path;
   } else {
-    const ano = hojeNoBrasil().slice(0, 4);
-    path = `${PREFIXO_STORAGE}/${ano}/${Date.now()}-${crypto.randomUUID().slice(0, 8)}-${nomeSeguro(nome, 40)}.${extensaoDoArquivo(e.mimeType, e.nomeArquivo)}`;
-    const { error: erroUpload } = await supabase.storage.from(BUCKET).upload(path, e.buffer, {
-      contentType: e.mimeType || "application/octet-stream",
-      upsert: false,
-    });
-    if (erroUpload) {
-      console.error("Erro ao subir arquivo:", erroUpload.message);
-      await sendText(from, "⚠️ Não consegui guardar o arquivo agora. Tenta de novo em instantes.");
-      return;
+    // Google Drive conectado: o arquivo original vai pra la (pastas espelhando a organizacao).
+    // Se o Drive falhar, guarda no Supabase pra nao perder o arquivo.
+    if (await driveDisponivel()) {
+      try {
+        path = await enviarAoDrive({ nome: nomeDoArquivo, mimeType: e.mimeType, buffer: e.buffer, caminho: caminhoNoDrive({ area, pastaNome, tipo }) });
+        bucket = BUCKET_DRIVE;
+      } catch (error) {
+        console.error("Erro ao enviar pro Drive, guardando no Supabase:", error);
+        path = null;
+      }
+    }
+    if (!path) {
+      const ano = hojeNoBrasil().slice(0, 4);
+      path = `${PREFIXO_STORAGE}/${ano}/${Date.now()}-${crypto.randomUUID().slice(0, 8)}-${nomeSeguro(nome, 40)}.${extensaoDoArquivo(e.mimeType, e.nomeArquivo)}`;
+      const { error: erroUpload } = await supabase.storage.from(BUCKET).upload(path, e.buffer, {
+        contentType: e.mimeType || "application/octet-stream",
+        upsert: false,
+      });
+      if (erroUpload) {
+        console.error("Erro ao subir arquivo:", erroUpload.message);
+        await sendText(from, "⚠️ Não consegui guardar o arquivo agora. Tenta de novo em instantes.");
+        return;
+      }
     }
   }
 
@@ -157,7 +177,7 @@ async function guardar(from: string, e: EntradaGuardar): Promise<void> {
       area,
       obra_id: obraId,
       pasta,
-      tipo: normalizarTipo(leitura?.tipo ?? TIPO_PADRAO),
+      tipo,
       nome: normalizarNomeTitulo(nome),
       descricao: leitura?.resumo ?? null,
       texto_busca: leitura?.textoBusca ?? null,
@@ -361,6 +381,10 @@ export async function guardarDaOferta(from: string, dados: Record<string, unknow
 // ---------- botoes e correcao ----------
 
 async function removerDoStorage(a: ArquivoRow) {
+  if (a.storage_bucket === BUCKET_DRIVE) {
+    await apagarNoDrive(a.storage_path).catch((e) => console.error("Erro ao apagar no Drive:", e));
+    return;
+  }
   // So apaga o que a biblioteca criou - arquivos reaproveitados de comprovantes ficam.
   if (a.storage_path.startsWith(`${PREFIXO_STORAGE}/`)) {
     await createAdminClient().storage.from(a.storage_bucket).remove([a.storage_path]);
@@ -470,26 +494,46 @@ export async function aplicarCorrecao(from: string, texto: string, dados: Record
     return;
   }
   const atualizado = await buscarPorId(a.id);
+  // No Drive, a pasta acompanha a correcao (area, obra/licitacao, tipo).
+  if (atualizado?.storage_bucket === BUCKET_DRIVE) {
+    await moverNoDrive(
+      atualizado.storage_path,
+      caminhoNoDrive({ area: atualizado.area, pastaNome: pastaDe(atualizado), tipo: atualizado.tipo })
+    ).catch((e) => console.error("Erro ao mover no Drive:", e));
+  }
   await resetSession(from);
   if (atualizado) await enviarResumoComBotoes(from, atualizado, "✏️ Atualizei:");
 }
 
 // ---------- pedir de volta ----------
 
-export async function enviarArquivo(from: string, a: ArquivoComObra): Promise<void> {
+/** Link temporario pra quem recebe: assinado do Supabase, ou pelo servidor quando o arquivo esta no Drive. */
+async function linkParaEnvio(a: ArquivoRow): Promise<string | null> {
+  if (a.storage_bucket === BUCKET_DRIVE) {
+    return linkDeDownload(process.env.APP_BASE_URL ?? "https://oryoncash.vercel.app", a.id, LINK_VALIDO_SEGUNDOS);
+  }
   const { data, error } = await createAdminClient().storage.from(a.storage_bucket).createSignedUrl(a.storage_path, LINK_VALIDO_SEGUNDOS);
   if (error || !data?.signedUrl) {
     console.error("Erro ao gerar link do arquivo:", error?.message);
+    return null;
+  }
+  return data.signedUrl;
+}
+
+export async function enviarArquivo(from: string, a: ArquivoComObra): Promise<void> {
+  const link = await linkParaEnvio(a);
+  if (!link) {
     await sendText(from, "⚠️ Não consegui abrir esse arquivo agora. Tenta de novo em instantes.");
     return;
   }
   const hoje = hojeNoBrasil();
   const legenda = [`*${a.nome}*`, caminhoDe(a), a.validade ? linhaDeValidade(a, hoje) : null].filter(Boolean).join("\n");
   try {
-    await sendDocument(from, data.signedUrl, nomeParaDownload(a), legenda);
+    await sendDocument(from, link, nomeParaDownload(a), legenda);
   } catch (e) {
+    // Arquivo grande demais pro canal: manda o link de download (vale 24h).
     console.error("Erro ao enviar documento:", e);
-    await sendText(from, `⚠️ Não consegui mandar o arquivo por aqui. Abra no painel (Arquivos): *${a.nome}*.`);
+    await sendText(from, `⚠️ Não consegui anexar o arquivo aqui (talvez seja grande demais). Baixe por este link (vale 24h):\n${link}`);
   }
 }
 
