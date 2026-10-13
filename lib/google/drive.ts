@@ -56,6 +56,12 @@ async function autorizado(init: RequestInit = {}): Promise<RequestInit> {
   return { ...init, headers: { ...(init.headers as Record<string, string> | undefined), Authorization: `Bearer ${token}` } };
 }
 
+/** Erro com o motivo que o Google devolveu (aparece nos logs da Vercel). */
+async function erroDoDrive(acao: string, res: Response): Promise<Error> {
+  const corpo = (await res.text().catch(() => "")).replace(/\s+/g, " ").slice(0, 300);
+  return new Error(`Drive: falha ao ${acao} (${res.status}) ${corpo}`);
+}
+
 function aspas(texto: string): string {
   return texto.replace(/\\/g, "\\\\").replace(/'/g, "\\'");
 }
@@ -67,7 +73,7 @@ async function acharOuCriarPasta(nome: string, paiId: string): Promise<string> {
 
   const q = `name='${aspas(nome)}' and '${paiId}' in parents and mimeType='application/vnd.google-apps.folder' and trashed=false`;
   const lista = await fetch(`${API}/files?${new URLSearchParams({ q, fields: "files(id)", pageSize: "1", spaces: "drive" })}`, await autorizado());
-  if (!lista.ok) throw new Error(`Drive: falha ao listar pastas (${lista.status})`);
+  if (!lista.ok) throw await erroDoDrive("listar pastas", lista);
   const achada = ((await lista.json()) as { files?: { id: string }[] }).files?.[0];
   if (achada) {
     cachePastas.set(chave, achada.id);
@@ -81,7 +87,7 @@ async function acharOuCriarPasta(nome: string, paiId: string): Promise<string> {
       body: JSON.stringify({ name: nome, mimeType: "application/vnd.google-apps.folder", parents: [paiId] }),
     })
   );
-  if (!cria.ok) throw new Error(`Drive: falha ao criar pasta (${cria.status})`);
+  if (!cria.ok) throw await erroDoDrive("criar pasta", cria);
   const id = ((await cria.json()) as { id: string }).id;
   cachePastas.set(chave, id);
   return id;
@@ -112,7 +118,7 @@ async function iniciarUploadRetomavel(
     await autorizado({ method: "POST", headers, body: JSON.stringify({ name: e.nome, parents: [paiId] }) })
   );
   const url = res.headers.get("location");
-  if (!res.ok || !url) throw new Error(`Drive: falha ao iniciar o envio (${res.status})`);
+  if (!res.ok || !url) throw await erroDoDrive("iniciar o envio", res);
   return url;
 }
 
@@ -124,7 +130,7 @@ export async function enviarAoDrive(e: { nome: string; mimeType: string; buffer:
     headers: { "Content-Length": String(e.buffer.length), "Content-Type": e.mimeType || "application/octet-stream" },
     body: new Uint8Array(e.buffer),
   });
-  if (!res.ok) throw new Error(`Drive: falha no envio (${res.status})`);
+  if (!res.ok) throw await erroDoDrive("enviar", res);
   return ((await res.json()) as { id: string }).id;
 }
 
@@ -142,20 +148,20 @@ export async function prepararEnvioDoNavegador(e: {
 /** Resposta do Drive com o conteudo do arquivo (pra repassar em stream). */
 export async function baixarDoDrive(fileId: string): Promise<Response> {
   const res = await fetch(`${API}/files/${encodeURIComponent(fileId)}?alt=media`, await autorizado());
-  if (!res.ok) throw new Error(`Drive: falha ao baixar (${res.status})`);
+  if (!res.ok) throw await erroDoDrive("baixar", res);
   return res;
 }
 
 export async function moverNoDrive(fileId: string, novoCaminho: string[]): Promise<void> {
   const novoPai = await garantirCaminho(novoCaminho);
   const atual = await fetch(`${API}/files/${encodeURIComponent(fileId)}?fields=parents`, await autorizado());
-  if (!atual.ok) throw new Error(`Drive: falha ao ler o arquivo (${atual.status})`);
+  if (!atual.ok) throw await erroDoDrive("ler o arquivo", atual);
   const pais = ((await atual.json()) as { parents?: string[] }).parents ?? [];
   if (pais.length === 1 && pais[0] === novoPai) return;
   const params = new URLSearchParams({ addParents: novoPai, fields: "id" });
   if (pais.length) params.set("removeParents", pais.join(","));
   const res = await fetch(`${API}/files/${encodeURIComponent(fileId)}?${params}`, await autorizado({ method: "PATCH" }));
-  if (!res.ok) throw new Error(`Drive: falha ao mover (${res.status})`);
+  if (!res.ok) throw await erroDoDrive("mover", res);
 }
 
 /** Manda pra lixeira do Drive (recuperavel por 30 dias). */
@@ -164,5 +170,5 @@ export async function apagarNoDrive(fileId: string): Promise<void> {
     `${API}/files/${encodeURIComponent(fileId)}`,
     await autorizado({ method: "PATCH", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ trashed: true }) })
   );
-  if (!res.ok && res.status !== 404) throw new Error(`Drive: falha ao apagar (${res.status})`);
+  if (!res.ok && res.status !== 404) throw await erroDoDrive("apagar", res);
 }

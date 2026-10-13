@@ -37,7 +37,7 @@ function emailDoIdToken(idToken: string | undefined): string | null {
   }
 }
 
-export async function trocarCodigo(code: string): Promise<{ refreshToken: string; email: string | null } | null> {
+export async function trocarCodigo(code: string): Promise<{ refreshToken: string; email: string | null; semPermissao?: boolean } | null> {
   const res = await fetch(TOKEN_URL, {
     method: "POST",
     headers: { "Content-Type": "application/x-www-form-urlencoded" },
@@ -53,8 +53,10 @@ export async function trocarCodigo(code: string): Promise<{ refreshToken: string
     console.error("Google: falha ao trocar o codigo:", res.status, await res.text().catch(() => ""));
     return null;
   }
-  const data = (await res.json()) as { refresh_token?: string; id_token?: string };
+  const data = (await res.json()) as { refresh_token?: string; id_token?: string; scope?: string };
   if (!data.refresh_token) return null;
+  // O Google deixa desmarcar a permissao do Drive na tela de consentimento: sem ela nada funciona.
+  if (!(data.scope ?? "").includes("auth/drive.file")) return { refreshToken: data.refresh_token, email: null, semPermissao: true };
   return { refreshToken: data.refresh_token, email: emailDoIdToken(data.id_token) };
 }
 

@@ -21,6 +21,7 @@ export async function GET(request: NextRequest) {
 
   const tokens = await trocarCodigo(code);
   if (!tokens) return destino("falhou");
+  if (tokens.semPermissao) return destino("sem-permissao");
   if (!(await salvarConexao(tokens.refreshToken, tokens.email))) return destino("falhou");
 
   const resposta = destino("ok");

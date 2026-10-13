@@ -31,6 +31,8 @@ const AVISO_DO_GOOGLE: Record<string, string> = {
   ok: "Google Drive conectado! Os próximos arquivos já vão para o seu Drive.",
   recusado: "A conexão com o Google foi cancelada. Tente de novo quando quiser.",
   falhou: "Não consegui concluir a conexão com o Google. Tente de novo.",
+  "sem-permissao":
+    "Faltou marcar a permissão de acesso aos arquivos do Drive na tela do Google. Clique em Conectar de novo e deixe a caixa de arquivos do Drive MARCADA.",
   "sem-chaves": "Faltam as chaves do Google na Vercel (GOOGLE_CLIENT_ID e GOOGLE_CLIENT_SECRET).",
 };
 
