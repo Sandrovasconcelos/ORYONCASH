@@ -494,6 +494,34 @@ export interface Database {
         Update: Partial<Database["public"]["Tables"]["saude_canais"]["Insert"]>;
         Relationships: [];
       };
+      compromissos: {
+        Row: {
+          id: string;
+          telefone: string;
+          titulo: string;
+          local: string | null;
+          inicio: string;
+          lembrar_min_antes: number;
+          lembrete_enviado_em: string | null;
+          status: "agendado" | "cancelado" | "concluido";
+          origem: string;
+          created_at: string;
+        };
+        Insert: {
+          id?: string;
+          telefone: string;
+          titulo: string;
+          local?: string | null;
+          inicio: string;
+          lembrar_min_antes?: number;
+          lembrete_enviado_em?: string | null;
+          status?: "agendado" | "cancelado" | "concluido";
+          origem?: string;
+          created_at?: string;
+        };
+        Update: Partial<Database["public"]["Tables"]["compromissos"]["Insert"]>;
+        Relationships: [];
+      };
       eventos_meta: {
         Row: {
           id: string;

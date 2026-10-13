@@ -18,6 +18,7 @@ import { ESTADOS, MENU_IDS, CAMPO_IDS, TIPO_REMOVER_IDS, COMANDOS_CANCELAR, RECO
 import { sendMenuPrincipal } from "./menu";
 import { sendListPeriodoRelatorio, gerarEEnviarRelatorio } from "./relatorio";
 import { tentarRelatorioPorPergunta } from "./perguntaRelatorio";
+import { tentarAgenda } from "@/lib/agenda/servico";
 import {
   sendListObras,
   sendListCategorias,
@@ -328,6 +329,12 @@ export async function handleIncomingMessage(message: IncomingMessage) {
   // fluxo em andamento (ex: a pessoa pode perguntar isso no meio de um
   // cadastro). So em texto livre de verdade (sem replyId de botao/lista).
   if (!message.replyId && (await tentarRelatorioPorPergunta(from, message.text))) {
+    return;
+  }
+
+  // Assistente pessoal: marcar/ver/cancelar compromissos. So no menu (sem fluxo
+  // em andamento), pra nao sequestrar uma resposta de outro fluxo.
+  if (!message.replyId && session.estado_atual === ESTADOS.MENU && (await tentarAgenda(from, message.text))) {
     return;
   }
 
@@ -1562,6 +1569,7 @@ export async function processarAudioLido(from: string, extraido: DespesaDeAudio 
     // Nao parece uma despesa (sem valor/descricao) - antes de desistir, ve
     // se a transcricao e uma pergunta de gasto ("quanto ja gastei com X?").
     if (await tentarRelatorioPorPergunta(from, extraido?.transcricao ?? null)) return;
+    if (await tentarAgenda(from, extraido?.transcricao ?? null)) return;
     await iniciarFallbackManual(
       from,
       "Não consegui entender o valor e o que foi essa despesa no áudio. Pode digitar o valor? (ex: 150,00)"

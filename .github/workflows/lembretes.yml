@@ -1,0 +1,19 @@
+name: Lembretes de agenda
+
+# A Vercel Hobby so permite cron diario; o GitHub Actions chama os lembretes
+# a cada 5 min (o horario real pode atrasar alguns minutos - e do GitHub).
+# Precisa do secret CRON_SECRET (mesmo valor da Vercel).
+on:
+  schedule:
+    - cron: "*/5 * * * *"
+  workflow_dispatch:
+
+jobs:
+  lembrar:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Chamar /api/cron/lembretes
+        run: |
+          curl --fail --silent --show-error --max-time 60 \
+            -H "Authorization: Bearer ${{ secrets.CRON_SECRET }}" \
+            https://oryoncash.vercel.app/api/cron/lembretes

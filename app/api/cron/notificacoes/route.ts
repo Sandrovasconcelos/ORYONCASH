@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { enviarNotificacaoDiaria } from "@/lib/alertas/notificar";
 import { retomarLeiturasPendentes } from "@/lib/gemini/leiturasPendentes";
+import { enviarAgendaDoDia } from "@/lib/agenda/lembretes";
 
 export async function GET(request: NextRequest) {
   const auth = request.headers.get("authorization");
@@ -16,5 +17,10 @@ export async function GET(request: NextRequest) {
   });
 
   const resultado = await enviarNotificacaoDiaria();
-  return NextResponse.json({ ...resultado, leiturasRetomadas });
+  // Agenda pessoal do dia (cada pessoa recebe a sua). Nunca derruba o aviso diario.
+  const agenda = await enviarAgendaDoDia().catch((error) => {
+    console.error("Falha ao enviar a agenda do dia:", error);
+    return { pessoas: 0 };
+  });
+  return NextResponse.json({ ...resultado, leiturasRetomadas, agenda });
 }
