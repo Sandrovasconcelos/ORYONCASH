@@ -221,6 +221,14 @@ export default async function ArquivosPage({ searchParams }: { searchParams: Pro
         </p>
       )}
 
+      {!googleConfigurado() && (
+        <p className="rounded-card border border-status-warning/30 bg-status-warning/10 px-4 py-3 text-sm text-brand-gray-700">
+          <strong className="text-brand-black">Google Drive ainda não está ativo.</strong> Faltam as variáveis <code>GOOGLE_CLIENT_ID</code> e{" "}
+          <code>GOOGLE_CLIENT_SECRET</code> na Vercel (ou falta publicar de novo depois de criá-las). Enquanto isso, os arquivos ficam no
+          armazenamento do Supabase.
+        </p>
+      )}
+
       {googleConfigurado() &&
         (conexaoGoogle ? (
           <p className="text-xs text-brand-gray-500">
