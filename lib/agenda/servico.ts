@@ -2,6 +2,7 @@ import { createAdminClient } from "@/lib/supabase/admin";
 import { sendText } from "@/lib/whatsapp/messages";
 import { interpretarAgenda, type PedidoAgenda } from "@/lib/gemini/interpretarAgenda";
 import { ehTelegram } from "@/lib/telegram/ids";
+import { ehDono } from "@/lib/acesso/dono";
 import { hojeNoBrasil } from "@/lib/conversation/queries";
 import { candidatosPorPista } from "@/lib/conversation/agruparPorNome";
 import { dataLocalDe, formatarInstante, limitesDaSemana, limitesDoDia, paraInstante, somarDias } from "./datas";
@@ -147,6 +148,8 @@ export async function tentarAgenda(from: string, texto: string | null): Promise<
   const t = texto?.trim();
   if (!t || !pareceAgenda(t)) return false;
   try {
+    // Agenda e so do Sandro; os demais usuarios seguem so com o financeiro.
+    if (!(await ehDono(from))) return false;
     const pedido = await interpretarAgenda(t, hojeNoBrasil());
     if (!pedido?.ehAgenda || !pedido.acao) return false;
     if (pedido.acao === "criar") await criar(from, pedido);

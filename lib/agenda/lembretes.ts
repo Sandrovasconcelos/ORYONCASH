@@ -1,5 +1,6 @@
 import { createAdminClient } from "@/lib/supabase/admin";
-import { enviarNotificacao, numeroNotificacao } from "@/lib/alertas/notificar";
+import { enviarNotificacao } from "@/lib/alertas/notificar";
+import { ehDono } from "@/lib/acesso/dono";
 import { sendText } from "@/lib/whatsapp/messages";
 import { hojeNoBrasil } from "@/lib/conversation/queries";
 import { limitesDoDia } from "./datas";
@@ -13,8 +14,8 @@ import { textoAgenda, textoLembrete } from "./textos";
  */
 async function entregar(telefone: string, mensagem: string): Promise<boolean> {
   try {
-    const dono = await numeroNotificacao();
-    if (dono && dono === telefone) await enviarNotificacao(telefone, mensagem);
+    // Pro dono, se o WhatsApp falhar (ex: fora da janela de 24h) o aviso segue pro Telegram.
+    if (await ehDono(telefone)) await enviarNotificacao(telefone, mensagem);
     else await sendText(telefone, mensagem);
     return true;
   } catch (error) {

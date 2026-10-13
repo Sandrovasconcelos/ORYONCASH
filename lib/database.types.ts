@@ -421,12 +421,14 @@ export interface Database {
           telefone: string;
           nome: string;
           ativo: boolean;
+          dono: boolean;
           created_at: string;
         };
         Insert: {
           telefone: string;
           nome: string;
           ativo?: boolean;
+          dono?: boolean;
           created_at?: string;
         };
         Update: Partial<

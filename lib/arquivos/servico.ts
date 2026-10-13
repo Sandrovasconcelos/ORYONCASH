@@ -9,7 +9,7 @@ import { hojeNoBrasil } from "@/lib/conversation/queries";
 import { candidatosPorPista } from "@/lib/conversation/agruparPorNome";
 import { ehTelegram } from "@/lib/telegram/ids";
 import { classificarArquivo, type LeituraArquivo } from "@/lib/gemini/classificarArquivo";
-import { ehDonoDosArquivos } from "./dono";
+import { ehDono } from "@/lib/acesso/dono";
 import { buscarArquivos, type ArquivoBuscavel } from "./busca";
 import { AJUDA_DE_CORRECAO, lerCorrecao } from "./comandos";
 import { legendaPedeGuardar, nomeDoArquivoSugere, pareceBuscaDeArquivo, pareceConsultaDeVencimentos } from "./gate";
@@ -206,7 +206,7 @@ async function baixarELer(from: string, media: IncomingMedia, forcado: boolean):
  */
 export async function tentarArquivoRecebido(from: string, media: IncomingMedia): Promise<boolean> {
   try {
-    if (!(await ehDonoDosArquivos(from))) return false;
+    if (!(await ehDono(from))) return false;
     const mime = (media.mimeType ?? "").split(";")[0].trim().toLowerCase();
 
     if (!ehImagemOuPdf(mime) && !ehPlanilha(mime)) {
@@ -274,7 +274,7 @@ export async function oferecerGuardarComprovante(
   from: string,
   comprovante: { bucket: string; path: string; mimeType: string; mediaId?: string | null; nomeArquivo?: string | null }
 ): Promise<boolean> {
-  if (!(await ehDonoDosArquivos(from))) return false;
+  if (!(await ehDono(from))) return false;
   await saveSession(from, ESTADOS.ARQUIVO_OFERTA, {
     // O comprovante inteiro fica guardado: "Lançar à mão" retoma o fluxo de despesa com ele.
     comprovante: comprovante as unknown as Json,
@@ -558,7 +558,7 @@ export async function tentarPedidoDeArquivo(from: string, texto: string | null):
   const pedeVencimentos = pareceConsultaDeVencimentos(t);
   if (!pedeVencimentos && !pareceBuscaDeArquivo(t)) return false;
   try {
-    if (!(await ehDonoDosArquivos(from))) return false;
+    if (!(await ehDono(from))) return false;
     if (pedeVencimentos) await responderVencimentos(from);
     else await responderBusca(from, t);
     return true;
