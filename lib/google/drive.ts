@@ -172,3 +172,18 @@ export async function apagarNoDrive(fileId: string): Promise<void> {
   );
   if (!res.ok && res.status !== 404) throw await erroDoDrive("apagar", res);
 }
+
+/** Copia um arquivo do Drive pra outra pasta (OryonCash / area / pasta / tipo). Devolve o id da copia. */
+export async function copiarNoDrive(fileId: string, caminho: string[], nome?: string): Promise<string> {
+  const paiId = await garantirCaminho(caminho);
+  const res = await fetch(
+    `${API}/files/${encodeURIComponent(fileId)}/copy?fields=id`,
+    await autorizado({
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ parents: [paiId], ...(nome ? { name: nome } : {}) }),
+    })
+  );
+  if (!res.ok) throw await erroDoDrive("copiar", res);
+  return ((await res.json()) as { id: string }).id;
+}
