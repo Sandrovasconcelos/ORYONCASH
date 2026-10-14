@@ -16,6 +16,7 @@ import { caminhoNoDrive } from "./pastaNoDrive";
 import { buscarArquivos, type ArquivoBuscavel } from "./busca";
 import { resolverDestinoDeObra } from "./obraOuProjeto";
 import { AJUDA_DE_CORRECAO, lerCorrecao } from "./comandos";
+import { areaDaLegenda, obraDaLegenda, tipoDaLegenda } from "./legenda";
 import { legendaPedeGuardar, nomeDoArquivoSugere, pareceBuscaDeArquivo, pareceConsultaDeVencimentos } from "./gate";
 import { extensaoDoArquivo, nomeParaDownload, nomeSeguro } from "./nomes";
 import { caminhoDoArquivo, normalizarTipo, TIPO_PADRAO, type AreaArquivo } from "./tipos";
@@ -69,17 +70,17 @@ function linhaDeValidade(a: ArquivoRow, hoje: string): string {
   return `Validade: ${marca}${formatarDataBR(a.validade)} (${textoDaValidade(a.validade, hoje)})`;
 }
 
-function textoResumo(a: ArquivoComObra, titulo: string, extra?: string): string {
+function textoResumo(a: ArquivoComObra, titulo: string, extra?: string, avisarSemObra = true): string {
   const hoje = hojeNoBrasil();
   const partes = [`${titulo} *${a.nome}*`, `📂 ${caminhoDe(a)}`, linhaDeValidade(a, hoje)];
   if (extra) partes.push(extra);
-  if (a.area === "obra" && !a.obras?.nome && !a.pasta) partes.push('❓ Não identifiquei a obra. Toque em *Corrigir* e diga, por exemplo, "obra Aurora".');
+  if (avisarSemObra && a.area === "obra" && !a.obras?.nome && !a.pasta) partes.push('❓ Não identifiquei a obra. Toque em *Corrigir* e diga, por exemplo, "obra Aurora".');
   if (a.descricao) partes.push(`📝 ${a.descricao}`);
   return partes.join("\n");
 }
 
-async function enviarResumoComBotoes(from: string, a: ArquivoComObra, titulo = "📁 Guardei:", extra?: string) {
-  await sendButtons(from, textoResumo(a, titulo, extra), [
+async function enviarResumoComBotoes(from: string, a: ArquivoComObra, titulo = "📁 Guardei:", extra?: string, avisarSemObra = true) {
+  await sendButtons(from, textoResumo(a, titulo, extra, avisarSemObra), [
     { id: `arq:ok:${a.id}`, title: "✅ Está certo" },
     { id: `arq:mudar:${a.id}`, title: "✏️ Corrigir" },
     { id: `arq:del:${a.id}`, title: "🗑️ Excluir" },
@@ -112,15 +113,26 @@ async function guardar(from: string, e: EntradaGuardar): Promise<void> {
   const leitura = e.leitura;
 
   // Obra citada: usa a cadastrada, reaproveita uma pasta de projeto ou cria a pasta (sem mexer nas obras do financeiro).
+  // A legenda manda: o que ela diz (obra, tipo, area) vale mais que a leitura da IA. Assim a
+  // mesma legenda cai sempre no mesmo lugar, mesmo se a IA falhar ou variar de um arquivo pro outro.
+  const legendaObra = obraDaLegenda(e.legenda, obras);
+  const areaLegenda = areaDaLegenda(e.legenda);
+  const tipoLegenda = tipoDaLegenda(e.legenda);
+
   let obraId: string | null = null;
   let pasta: string | null = null;
-  let area: AreaArquivo = leitura?.area ?? "obra";
+  const area: AreaArquivo = areaLegenda ?? (legendaObra ? "obra" : (leitura?.area ?? "obra"));
   let avisoDePasta: string | undefined;
+  let obraAmbigua: { id: string; nome: string }[] | null = null;
   const nomeDaObraCitada = leitura?.obraNome ?? null;
-  if (nomeDaObraCitada && area === "obra") {
+  if (area === "obra" && legendaObra?.tipo === "obra") {
+    obraId = legendaObra.obra.id;
+  } else if (area === "obra" && legendaObra?.tipo === "ambiguo") {
+    obraAmbigua = legendaObra.opcoes;
+  } else if (nomeDaObraCitada && area === "obra") {
     const destino = resolverDestinoDeObra(nomeDaObraCitada, obras, await carregarProjetosSemObra());
-    area = "obra";
     if (destino.tipo === "obra") obraId = destino.obraId;
+    else if (destino.tipo === "ambiguo") obraAmbigua = obras.filter((o) => destino.opcoes.includes(o.nome));
     else if (destino.tipo === "projeto") {
       pasta = destino.pasta;
       if (destino.nova) avisoDePasta = `🆕 Criei a pasta de projeto *${destino.pasta}* (ela não entra no financeiro das obras).`;
@@ -135,7 +147,7 @@ async function guardar(from: string, e: EntradaGuardar): Promise<void> {
     "Arquivo";
   const validade = leitura?.validade && Number(leitura.validade.slice(0, 4)) >= 2000 ? leitura.validade : null;
 
-  const tipo = normalizarTipo(leitura?.tipo ?? TIPO_PADRAO);
+  const tipo = normalizarTipo(tipoLegenda ?? leitura?.tipo ?? TIPO_PADRAO);
   const pastaNome = area === "obra" ? (obras.find((o) => o.id === obraId)?.nome ?? pasta) : pasta;
   const nomeDoArquivo = e.nomeArquivo ?? `${nomeSeguro(nome)}.${extensaoDoArquivo(e.mimeType, e.nomeArquivo)}`;
 
@@ -198,8 +210,16 @@ async function guardar(from: string, e: EntradaGuardar): Promise<void> {
     await sendText(from, "⚠️ Guardei o arquivo, mas não consegui registrar. Tenta enviar de novo.");
     return;
   }
+  const salvo = data as ArquivoComObra;
   await resetSession(from);
-  await enviarResumoComBotoes(from, data as ArquivoComObra, "📁 Guardei:", avisoDePasta);
+  await enviarResumoComBotoes(from, salvo, "📁 Guardei:", avisoDePasta, obraAmbigua === null);
+
+  // A legenda cita uma obra mas bate com mais de uma: pergunta em vez de deixar sem obra.
+  if (obraAmbigua) {
+    await saveSession(from, ESTADOS.ARQUIVO_CORRIGIR, { arquivoId: salvo.id, opcoesObra: obraAmbigua.map((o) => ({ id: o.id, nome: o.nome })) });
+    const lista = obraAmbigua.map((o, i) => `${i + 1}. ${o.nome}`).join("\n");
+    await sendText(from, `❓ Em qual obra é esse arquivo?\n\n${lista}\n\nResponda com o número, ou digite *menu* pra deixar sem obra.`);
+  }
 }
 
 function normalizarNomeTitulo(nome: string): string {
@@ -437,7 +457,11 @@ export async function aplicarCorrecao(from: string, texto: string, dados: Record
     await sendText(from, "🤔 Esse arquivo não existe mais.");
     return;
   }
-  const correcao = lerCorrecao(texto);
+  // Resposta so com o numero ("2") escolhe uma das obras que o bot listou.
+  const opcoesObra = Array.isArray(dados.opcoesObra) ? (dados.opcoesObra as { id: string; nome: string }[]) : [];
+  const escolha = texto.trim().match(/^(\d{1,2})$/);
+  const escolhida = escolha ? opcoesObra[Number(escolha[1]) - 1] : undefined;
+  const correcao = lerCorrecao(escolhida ? `obra ${escolhida.nome}` : texto);
   if (!correcao) {
     await sendText(from, `🤔 Não entendi.\n\n${AJUDA_DE_CORRECAO}\n\nPra sair, digite *menu*.`);
     return;

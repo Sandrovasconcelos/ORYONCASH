@@ -63,6 +63,8 @@ ${tipos}
  - "validade": AAAA-MM-DD, SOMENTE se o documento mostra data de validade/vencimento (certidões, alvarás, CNH). Matrícula e escritura NÃO vencem: null. Nunca invente.
  - "resumo": uma frase curta (até 20 palavras) dizendo o que é, sem dados sensíveis (sem CPF/RG completos).
  - "textoBusca": o MÁXIMO de informações do documento que ajudem a achá-lo depois, numa lista corrida separada por vírgulas ou ponto e vírgula, até 1200 caracteres: tipo do documento, números de identificação (matrícula, processo, protocolo, ART, CNPJ, número do edital), nomes de pessoas e empresas (proprietários, requerentes, responsável técnico, órgão emissor), cartório/prefeitura/comarca, município e estado, endereço, bairro, lote/quadra, áreas e medidas, valores, datas importantes (emissão, validade) e palavras-chave do assunto. NÃO inclua CPF nem RG de pessoas. Escreva só o que está no documento.
+Guias de tributos, taxas, multas e impostos (ISS, IPTU, DAM, DARF) são do tipo "Guias e taxas".
+A legenda escrita pelo dono tem prioridade sobre o que você lê no documento (obra, tipo, área).
 Se a legenda pedir para guardar/salvar/arquivar o arquivo (mesmo sendo um orçamento, nota ou lista de preços), a categoria é "documento": orçamento vai no tipo "Orçamentos".
 Se for "conta", deixe os demais campos null.
 

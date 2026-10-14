@@ -8,9 +8,9 @@ export const AREAS: { id: AreaArquivo; rotulo: string; icone: string; descricao:
 ];
 
 export const TIPOS_SUGERIDOS: Record<AreaArquivo, string[]> = {
-  obra: ["Terreno e matrícula", "Licenças", "Projetos", "Contratos", "Orçamentos", "Certidões", "Fotos", "Outros"],
+  obra: ["Terreno e matrícula", "Licenças", "Projetos", "Contratos", "Orçamentos", "Guias e taxas", "Certidões", "Fotos", "Outros"],
   licitacao: ["Edital", "Proposta", "Habilitação", "Certidões", "Contratos", "Outros"],
-  empresa: ["Certidões", "Contratos", "Licenças", "Orçamentos", "Outros"],
+  empresa: ["Certidões", "Contratos", "Licenças", "Orçamentos", "Guias e taxas", "Outros"],
   pessoal: ["Identificação", "Contratos", "Orçamentos", "Outros"],
 };
 
